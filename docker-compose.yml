@@ -105,10 +105,13 @@ services:
       CASC_PRODUCT: ${CASC_PRODUCT:-wowf}
       CASC_REGION: ${CASC_REGION:-us}
       EXTRACT_MMAPS: ${EXTRACT_MMAPS:-0}
+      SKIP_MAPS: ${SKIP_MAPS:-0}
     volumes:
       - "${WOW_DIR:-./wow-not-set}:/wow:ro"
       - ${DATA_DIR:-./data}:/opt/trinitycore/data
       - casc-cache:/cache
+      # the repo's script, so changes apply without rebuilding the image
+      - ./docker/extract.sh:/usr/local/bin/extract.sh:ro
 
 networks:
   everlake:

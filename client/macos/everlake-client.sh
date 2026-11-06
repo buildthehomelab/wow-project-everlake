@@ -35,17 +35,23 @@ REGION_GROUP="${EVERLAKE_REGION_GROUP:-8}"
 say() { printf '\033[1m[everlake]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[everlake] %s\033[0m\n' "$*" >&2; exit 1; }
 
-# The game folder: the one holding "World of Warcraft.app" (e.g. /Applications/World of Warcraft/_forever_)
+# The game folder: the one holding "World of Warcraft.app" (e.g. /Applications/World of Warcraft/_forever_).
+# Prints it, or a reason on stderr and returns 1. (No exit in here: macOS bash 3.2 ends the whole script when a
+# function in $(...) exits under set -e, whatever follows it.)
 find_game() {
     if [ -n "${1:-}" ]; then
-        [ -d "$1/World of Warcraft.app" ] || die "no 'World of Warcraft.app' in $1"
-        echo "$1"; return
+        if [ ! -d "$1/World of Warcraft.app" ]; then
+            echo "no 'World of Warcraft.app' in $1" >&2; return 1
+        fi
+        echo "$1"; return 0
     fi
     local d found=()
     for d in "/Applications/World of Warcraft"/_*_ "$HOME/Applications/World of Warcraft"/_*_; do
-        [ -d "$d/World of Warcraft.app" ] && found+=("$d")
+        if [ -d "$d/World of Warcraft.app" ]; then found+=("$d"); fi
     done
-    [ "${#found[@]}" -eq 1 ] || die "found ${#found[@]} game folders (${found[*]:-none}); pass the folder holding 'World of Warcraft.app'"
+    if [ "${#found[@]}" -ne 1 ]; then
+        echo "found ${#found[@]} game folders; pass the folder holding 'World of Warcraft.app'" >&2; return 1
+    fi
     echo "${found[0]}"
 }
 
@@ -132,7 +138,7 @@ cmd="${1:-}"; shift || true
 case "$cmd" in
     setup)
         [ $# -ge 2 ] || die "usage: $0 setup <server address> <forever_root_ca.crt> [game folder]"
-        GAME="$(find_game "${3:-}")"
+        GAME="$(find_game "${3:-}")" || die "game folder not found"
         say "game folder: $GAME (build $(game_build "$GAME"))"
         setup_hosts "$1"
         setup_ca "$2"
@@ -142,7 +148,7 @@ case "$cmd" in
         say "done. Start with: $0 play"
         ;;
     play)
-        GAME="$(find_game "${1:-}")"
+        GAME="$(find_game "${1:-}")" || die "game folder not found"
         [ -d "$GAME/$COPY_NAME" ] || die "no game copy: run setup first"
         [ -f "$DYLIB" ] || die "no keypatch.dylib: run setup first"
         LOG="$SUPPORT/keypatch.log"; : > "$LOG"
@@ -157,7 +163,7 @@ case "$cmd" in
         ;;
     check)
         # Everything that has to be right before the game can reach the server; paste the output when asking for help.
-        GAME="$(find_game "${1:-}" 2>/dev/null || true)"
+        GAME="$(find_game "${1:-}" 2>/dev/null)" || GAME=""
         say "game folder: ${GAME:-NOT FOUND} (build $( [ -n "$GAME" ] && game_build "$GAME" || echo -))"
         say "game copy: $( [ -n "$GAME" ] && [ -d "$GAME/$COPY_NAME" ] && echo present || echo MISSING)"
         say "keypatch.dylib: $( [ -f "$DYLIB" ] && echo present || echo MISSING)"
@@ -181,7 +187,7 @@ case "$cmd" in
         if grep -q "$MARK" /etc/hosts; then sudo sed -i '' "/$MARK/d" /etc/hosts; say "hosts entry removed"; fi
         security delete-certificate -c "$CA_NAME" "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null \
             && say "CA removed" || true
-        GAME="$(find_game "${1:-}" 2>/dev/null || true)"
+        GAME="$(find_game "${1:-}" 2>/dev/null)" || GAME=""
         if [ -n "$GAME" ]; then
             rm -rf "${GAME:?}/$COPY_NAME" "${GAME:?}/WTF/$WTF_NAME"
             say "game copy removed"
