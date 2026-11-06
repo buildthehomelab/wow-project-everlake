@@ -5,6 +5,17 @@ Forever 1.60.1.70790 install manifest. Not tried against this server yet.
 
 A player's computer needs three things before the stock client will log in here instead of at Blizzard.
 
+## 0. macOS: Local Network permission
+
+Since macOS 15, an app needs the *Local Network* permission to connect to other machines on the LAN. The
+re-signed game copy is blocked without a prompt, even with "World of Warcraft" switched on under Privacy &
+Security: its `Connection.log` shows `ERROR_NETWORK_MODULE_SOCKET_CLOSED (1016)` 15 ms after
+`Battle.net logon requested`, and nothing reaches the server. Terminal has the permission, and 127.0.0.1 needs
+none, so `client/macos/forward.py` (started by `everlake-client.sh play`) listens on 127.0.0.1:1119/8081/8085 and
+passes the bytes to the server. TLS stays end to end. For that, the hosts entry points at 127.0.0.1 and the
+server's realm address (`PUBLIC_ADDRESS` / `REALM_LOCAL_ADDRESS`) is 127.0.0.1 too. A server reached over the
+internet (not the LAN) shouldn't need any of this.
+
 ## 1. Hosts entry
 
 The client logs in at `*.actual.battle.net`. A hosts entry points the login name at this server:

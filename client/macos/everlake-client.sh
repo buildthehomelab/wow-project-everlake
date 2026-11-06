@@ -7,17 +7,19 @@
 #   ./everlake-client.sh undo  [game folder]
 #
 # setup (asks for your password once, for the hosts file):
-#   1. hosts entry: trinity.actual.battle.net -> the server
+#   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
+#      forward.py, which passes 127.0.0.1:1119/8081/8085 on to the server: since macOS 15 the re-signed game
+#      copy isn't allowed onto the local network, but Terminal is, and 127.0.0.1 needs no permission.
 #   2. trusts the server's root CA (macOS asks to confirm; the CA only covers *.actual.battle.net)
 #   3. builds keypatch.dylib (needs Apple's command-line tools: xcode-select --install)
 #   4. makes "World of Warcraft Everlake.app", an ad-hoc signed copy of the game that can load keypatch.dylib.
 #      The original app is never changed. Run setup again after Battle.net updates the game.
 #   5. writes WTF/Everlake.wtf (your Config.wtf + the Everlake portal)
-# play: asks for your Everlake password, logs in to the server and hands the game a login ticket (login.py, the
-#       way Battle.net does it), then starts the copy with the server key patch.
+# play: starts the forwarder, asks for your Everlake password, logs in to the server and hands the game a login
+#       ticket (login.py, the way Battle.net does it), then starts the copy with the server key patch.
 # check: prints everything that has to be right for the game to reach the server, and sends the report to the
 #        server (report-drop service, port 8099) so nobody has to copy it by hand.
-# undo: removes the hosts entry, the CA trust and the copy.
+# undo: stops the forwarder, removes the hosts entry, the CA trust and the copy.
 #
 # Based on jibay442/forever_docker's macOS launcher (GPL-2.0), see docs/client-connection.md.
 set -euo pipefail
@@ -33,6 +35,9 @@ CA_NAME="Forever Private Root CA"
 # TrinityCore's stock EnterEncryptedMode key (public half) and the region group the server uses
 SERVER_KEY="${EVERLAKE_SERVER_KEY:-02596F0D0C061A8B30745988FD72C59E29EC367FB0F341F28E0F08D037BAFC69}"
 REGION_GROUP="${EVERLAKE_REGION_GROUP:-8}"
+SERVER_FILE="$SUPPORT/server.txt"
+FORWARD_PID="$SUPPORT/forward.pid"
+FORWARD_LOG="$SUPPORT/forward.log"
 
 say() { printf '\033[1m[everlake]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[everlake] %s\033[0m\n' "$*" >&2; exit 1; }
@@ -63,12 +68,37 @@ game_build() {
 
 setup_hosts() {
     local addr="$1"
+    mkdir -p "$SUPPORT"
+    echo "$addr" > "$SERVER_FILE"
     if grep -q "$MARK" /etc/hosts; then
         sudo sed -i '' "/$MARK/d" /etc/hosts
     fi
-    printf '%s\t%s\t%s\n' "$addr" "$PORTAL" "$MARK" | sudo tee -a /etc/hosts >/dev/null
+    printf '%s\t%s\t%s\n' 127.0.0.1 "$PORTAL" "$MARK" | sudo tee -a /etc/hosts >/dev/null
     sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder 2>/dev/null || true
-    say "hosts: $PORTAL -> $addr"
+    say "hosts: $PORTAL -> 127.0.0.1 (forwarded to the server at $addr)"
+}
+
+server_addr() { cat "$SERVER_FILE" 2>/dev/null || true; }
+
+stop_forward() {
+    if [ -f "$FORWARD_PID" ] && kill -0 "$(cat "$FORWARD_PID")" 2>/dev/null; then
+        kill "$(cat "$FORWARD_PID")" 2>/dev/null || true
+        sleep 0.5
+    fi
+    rm -f "$FORWARD_PID"
+}
+
+start_forward() {
+    local addr="$1"
+    stop_forward
+    nohup python3 "$HERE/forward.py" "$addr" > "$FORWARD_LOG" 2>&1 &
+    echo $! > "$FORWARD_PID"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        nc -z -G 1 127.0.0.1 8081 2>/dev/null && { say "forwarder running (log: $FORWARD_LOG)"; return 0; }
+        sleep 0.5
+    done
+    cat "$FORWARD_LOG" >&2
+    die "the forwarder did not start"
 }
 
 setup_ca() {
@@ -147,10 +177,18 @@ do_check() {
     say "keypatch.dylib: $( [ -f "$DYLIB" ] && echo present || echo MISSING)"
     say "hosts entry: $(grep "$MARK" /etc/hosts || echo MISSING)"
     say "resolves to: $(dscacheutil -q host -a name "$PORTAL" | awk '/ip_address/{print $2}' | tr '\n' ' ')"
-    addr="$(awk -v m="$MARK" 'index($0, m) {print $1}' /etc/hosts | head -1)"
+    addr="$(server_addr)"
+    say "server address: ${addr:-NOT SAVED (run setup again)}"
     for port in 1119 8081 8085; do
-        if nc -z -G 3 "${addr:-$PORTAL}" "$port" 2>/dev/null; then say "port $port: open"; else say "port $port: NOT REACHABLE"; fi
+        if [ -n "$addr" ] && nc -z -G 3 "$addr" "$port" 2>/dev/null; then say "server port $port: open"; else say "server port $port: NOT REACHABLE"; fi
     done
+    if [ -f "$FORWARD_PID" ] && kill -0 "$(cat "$FORWARD_PID")" 2>/dev/null; then
+        say "forwarder: running"
+    else
+        say "forwarder: not running (play starts it)"
+    fi
+    say "forward.log (last lines):"
+    tail -n 15 "$FORWARD_LOG" 2>/dev/null | sed 's/^/    /' || true
     say "CA trusted: $(security find-certificate -c "$CA_NAME" "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 && echo yes || echo NO)"
     if [ -n "$GAME" ]; then
         say "WTF/$WTF_NAME portal: $(grep -h '^SET portal' "$GAME/WTF/$WTF_NAME" 2>/dev/null || echo MISSING)"
@@ -192,6 +230,9 @@ case "$cmd" in
         [ -d "$GAME/$COPY_NAME" ] || die "no game copy: run setup first"
         [ -f "$DYLIB" ] || die "no keypatch.dylib: run setup first"
         [ -f "$SUPPORT/forever_root_ca.crt" ] || die "no copy of the CA certificate: run setup again"
+        ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup again"
+        grep "$MARK" /etc/hosts | grep -q '^127\.0\.0\.1' || die "hosts entry is not 127.0.0.1: run setup again"
+        start_forward "$ADDR"
         python3 "$HERE/login.py" "$1" || die "login failed"
         LOG="$SUPPORT/keypatch.log"; : > "$LOG"
         say "starting the game (key patch log: $LOG)"
@@ -207,7 +248,7 @@ case "$cmd" in
         # Prints everything that has to be right, saves it and sends it to the server's report drop (port 8099).
         REPORT="$SUPPORT/check.txt"; mkdir -p "$SUPPORT"
         do_check "$@" 2>&1 | tee "$REPORT"
-        addr="$(awk -v m="$MARK" 'index($0, m) {print $1}' /etc/hosts | head -1)"
+        addr="$(server_addr)"
         if [ -n "$addr" ] && curl -s -m 5 -T "$REPORT" "http://$addr:8099/check-$(hostname -s)" >/dev/null; then
             say "report sent to the server"
         else
@@ -215,6 +256,7 @@ case "$cmd" in
         fi
         ;;
     undo)
+        stop_forward
         if grep -q "$MARK" /etc/hosts; then sudo sed -i '' "/$MARK/d" /etc/hosts; say "hosts entry removed"; fi
         security delete-certificate -c "$CA_NAME" "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null \
             && say "CA removed" || true
