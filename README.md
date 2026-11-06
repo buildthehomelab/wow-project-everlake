@@ -68,7 +68,7 @@ Battle.net (and Battle.net quit, so it can't update the game) and Apple's comman
 
 ```sh
 ./client/macos/everlake-client.sh setup <server address> forever_root_ca.crt   # once, and after game updates
-./client/macos/everlake-client.sh play
+./client/macos/everlake-client.sh play <account email>                        # asks for the password
 ./client/macos/everlake-client.sh undo                                         # removes everything again
 ```
 

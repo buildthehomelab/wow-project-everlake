@@ -2,7 +2,7 @@
 # Sets up a Mac to play the Forever client on an Everlake server, and starts it.
 #
 #   ./everlake-client.sh setup <server address> <path to forever_root_ca.crt> [game folder]
-#   ./everlake-client.sh play  [game folder]
+#   ./everlake-client.sh play  <account email> [game folder]
 #   ./everlake-client.sh check [game folder]
 #   ./everlake-client.sh undo  [game folder]
 #
@@ -13,7 +13,8 @@
 #   4. makes "World of Warcraft Everlake.app", an ad-hoc signed copy of the game that can load keypatch.dylib.
 #      The original app is never changed. Run setup again after Battle.net updates the game.
 #   5. writes WTF/Everlake.wtf (your Config.wtf + the Everlake portal)
-# play: starts the copy with the server key patch; log in with your Everlake account in the game.
+# play: asks for your Everlake password, logs in to the server and hands the game a login ticket (login.py, the
+#       way Battle.net does it), then starts the copy with the server key patch.
 # check: prints everything that has to be right for the game to reach the server (paste it when asking for help).
 # undo: removes the hosts entry, the CA trust and the copy.
 #
@@ -76,6 +77,8 @@ setup_ca() {
     openssl x509 -in "$crt" -noout -text | grep -A2 "Name Constraints" | grep -q "DNS:actual.battle.net" \
         || die "$crt is not limited to actual.battle.net: not an Everlake CA"
     security add-trusted-cert -r trustRoot -k "$HOME/Library/Keychains/login.keychain-db" "$crt"
+    mkdir -p "$SUPPORT"
+    cp "$crt" "$SUPPORT/forever_root_ca.crt"   # login.py checks the login server against it
     say "CA trusted (login keychain)"
 }
 
@@ -145,12 +148,15 @@ case "$cmd" in
         build_dylib
         make_copy "$GAME"
         write_wtf "$GAME"
-        say "done. Start with: $0 play"
+        say "done. Start with: $0 play <account email>"
         ;;
     play)
-        GAME="$(find_game "${1:-}")" || die "game folder not found"
+        [ $# -ge 1 ] || die "usage: $0 play <account email> [game folder]"
+        GAME="$(find_game "${2:-}")" || die "game folder not found"
         [ -d "$GAME/$COPY_NAME" ] || die "no game copy: run setup first"
         [ -f "$DYLIB" ] || die "no keypatch.dylib: run setup first"
+        [ -f "$SUPPORT/forever_root_ca.crt" ] || die "no copy of the CA certificate: run setup again"
+        python3 "$HERE/login.py" "$1" || die "login failed"
         LOG="$SUPPORT/keypatch.log"; : > "$LOG"
         say "starting the game (key patch log: $LOG)"
         open -n -a "$GAME/$COPY_NAME" \
@@ -158,7 +164,7 @@ case "$cmd" in
             --env "FOREVER_SERVER_KEY=$SERVER_KEY" \
             --env "FOREVER_REGION_GROUP=$REGION_GROUP" \
             --env "FOREVER_PATCH_LOG=$LOG" \
-            --args -config "$WTF_NAME"
+            --args -launcherlogin -config "$WTF_NAME"
         say "first realm login can fail with 'server identity check failed': click Reconnect"
         ;;
     check)
