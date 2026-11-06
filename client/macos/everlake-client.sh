@@ -3,6 +3,7 @@
 #
 #   ./everlake-client.sh setup <server address> <path to forever_root_ca.crt> [game folder]
 #   ./everlake-client.sh play  [game folder]
+#   ./everlake-client.sh check [game folder]
 #   ./everlake-client.sh undo  [game folder]
 #
 # setup (asks for your password once, for the hosts file):
@@ -13,6 +14,7 @@
 #      The original app is never changed. Run setup again after Battle.net updates the game.
 #   5. writes WTF/Everlake.wtf (your Config.wtf + the Everlake portal)
 # play: starts the copy with the server key patch; log in with your Everlake account in the game.
+# check: prints everything that has to be right for the game to reach the server (paste it when asking for help).
 # undo: removes the hosts entry, the CA trust and the copy.
 #
 # Based on jibay442/forever_docker's macOS launcher (GPL-2.0), see docs/client-connection.md.
@@ -153,6 +155,28 @@ case "$cmd" in
             --args -config "$WTF_NAME"
         say "first realm login can fail with 'server identity check failed': click Reconnect"
         ;;
+    check)
+        # Everything that has to be right before the game can reach the server; paste the output when asking for help.
+        GAME="$(find_game "${1:-}" 2>/dev/null || true)"
+        say "game folder: ${GAME:-NOT FOUND} (build $( [ -n "$GAME" ] && game_build "$GAME" || echo -))"
+        say "game copy: $( [ -n "$GAME" ] && [ -d "$GAME/$COPY_NAME" ] && echo present || echo MISSING)"
+        say "keypatch.dylib: $( [ -f "$DYLIB" ] && echo present || echo MISSING)"
+        say "hosts entry: $(grep "$MARK" /etc/hosts || echo MISSING)"
+        say "resolves to: $(dscacheutil -q host -a name "$PORTAL" | awk '/ip_address/{print $2}' | tr '\n' ' ')"
+        addr="$(awk -v m="$MARK" 'index($0, m) {print $1}' /etc/hosts | head -1)"
+        for port in 1119 8081 8085; do
+            if nc -z -G 3 "${addr:-$PORTAL}" "$port" 2>/dev/null; then say "port $port: open"; else say "port $port: NOT REACHABLE"; fi
+        done
+        say "CA trusted: $(security find-certificate -c "$CA_NAME" "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 && echo yes || echo NO)"
+        if [ -n "$GAME" ]; then
+            say "WTF/$WTF_NAME portal: $(grep -h '^SET portal' "$GAME/WTF/$WTF_NAME" 2>/dev/null || echo MISSING)"
+            say "WTF/Config.wtf portal: $(grep -h '^SET portal' "$GAME/WTF/Config.wtf" 2>/dev/null || echo none)"
+            latest="$(ls -t "$GAME/Logs" 2>/dev/null | head -3 | tr '\n' ' ')"
+            say "newest game logs: ${latest:-none}"
+        fi
+        say "keypatch.log:"
+        cat "$SUPPORT/keypatch.log" 2>/dev/null || echo "  (none)"
+        ;;
     undo)
         if grep -q "$MARK" /etc/hosts; then sudo sed -i '' "/$MARK/d" /etc/hosts; say "hosts entry removed"; fi
         security delete-certificate -c "$CA_NAME" "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null \
@@ -165,6 +189,6 @@ case "$cmd" in
         rm -rf "${SUPPORT:?}"
         ;;
     *)
-        sed -n '2,17p' "$0"; exit 1
+        sed -n '2,19p' "$0"; exit 1
         ;;
 esac
