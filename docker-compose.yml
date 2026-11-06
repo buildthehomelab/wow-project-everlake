@@ -113,6 +113,18 @@ services:
       # the repo's script, so changes apply without rebuilding the image
       - ./docker/extract.sh:/usr/local/bin/extract.sh:ro
 
+  # Receives "everlake-client.sh check" reports from player machines on the LAN: docker compose --profile tools up -d report-drop
+  report-drop:
+    image: python:3.12-alpine
+    profiles: ["tools"]
+    restart: unless-stopped
+    command: ["python", "/app/report-drop.py"]
+    ports:
+      - "8099:8099"
+    volumes:
+      - ./scripts/report-drop.py:/app/report-drop.py:ro
+      - ./reports:/reports
+
 networks:
   everlake:
 

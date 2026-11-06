@@ -15,7 +15,8 @@
 #   5. writes WTF/Everlake.wtf (your Config.wtf + the Everlake portal)
 # play: asks for your Everlake password, logs in to the server and hands the game a login ticket (login.py, the
 #       way Battle.net does it), then starts the copy with the server key patch.
-# check: prints everything that has to be right for the game to reach the server (paste it when asking for help).
+# check: prints everything that has to be right for the game to reach the server, and sends the report to the
+#        server (report-drop service, port 8099) so nobody has to copy it by hand.
 # undo: removes the hosts entry, the CA trust and the copy.
 #
 # Based on jibay442/forever_docker's macOS launcher (GPL-2.0), see docs/client-connection.md.
@@ -137,6 +138,41 @@ write_wtf() {
     say "wrote $out"
 }
 
+do_check() {
+    # Everything that has to be right before the game can reach the server.
+    local GAME addr exe f port
+    GAME="$(find_game "${1:-}" 2>/dev/null)" || GAME=""
+    say "game folder: ${GAME:-NOT FOUND} (build $( [ -n "$GAME" ] && game_build "$GAME" || echo -))"
+    say "game copy: $( [ -n "$GAME" ] && [ -d "$GAME/$COPY_NAME" ] && echo present || echo MISSING)"
+    say "keypatch.dylib: $( [ -f "$DYLIB" ] && echo present || echo MISSING)"
+    say "hosts entry: $(grep "$MARK" /etc/hosts || echo MISSING)"
+    say "resolves to: $(dscacheutil -q host -a name "$PORTAL" | awk '/ip_address/{print $2}' | tr '\n' ' ')"
+    addr="$(awk -v m="$MARK" 'index($0, m) {print $1}' /etc/hosts | head -1)"
+    for port in 1119 8081 8085; do
+        if nc -z -G 3 "${addr:-$PORTAL}" "$port" 2>/dev/null; then say "port $port: open"; else say "port $port: NOT REACHABLE"; fi
+    done
+    say "CA trusted: $(security find-certificate -c "$CA_NAME" "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 && echo yes || echo NO)"
+    if [ -n "$GAME" ]; then
+        say "WTF/$WTF_NAME portal: $(grep -h '^SET portal' "$GAME/WTF/$WTF_NAME" 2>/dev/null || echo MISSING)"
+        say "WTF/Config.wtf portal: $(grep -h '^SET portal' "$GAME/WTF/Config.wtf" 2>/dev/null || echo none)"
+        exe="$(plutil -extract CFBundleExecutable raw -o - "$GAME/World of Warcraft.app/Contents/Info.plist" 2>/dev/null || true)"
+        say "launch setting names in the game binary ($exe):"
+        strings -a "$GAME/World of Warcraft.app/Contents/MacOS/$exe" 2>/dev/null \
+            | grep -i -E "launch options|launcherlogin|WEB_TOKEN|CONNECTION_STRING|GAME_ACCOUNT|net\.battle" \
+            | sort -u | head -25 | sed 's/^/    /'
+        say "newest game logs (last lines):"
+        for f in $(ls -t "$GAME/Logs" 2>/dev/null | head -3); do
+            echo "  -- $f"
+            tail -n 12 "$GAME/Logs/$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /'
+        done
+    fi
+    say "net.battle launch options (values hidden except the connection):"
+    defaults read net.battle 2>/dev/null | grep -E "Launch Options|CONNECTION_STRING|GAME_ACCOUNT|WEB_TOKEN" \
+        | sed -E 's/(WEB_TOKEN[^=]*=).*/\1 <hidden>;/' | sed 's/^/    /'
+    say "keypatch.log:"
+    cat "$SUPPORT/keypatch.log" 2>/dev/null || echo "  (none)"
+}
+
 cmd="${1:-}"; shift || true
 case "$cmd" in
     setup)
@@ -168,37 +204,15 @@ case "$cmd" in
         say "first realm login can fail with 'server identity check failed': click Reconnect"
         ;;
     check)
-        # Everything that has to be right before the game can reach the server; paste the output when asking for help.
-        GAME="$(find_game "${1:-}" 2>/dev/null)" || GAME=""
-        say "game folder: ${GAME:-NOT FOUND} (build $( [ -n "$GAME" ] && game_build "$GAME" || echo -))"
-        say "game copy: $( [ -n "$GAME" ] && [ -d "$GAME/$COPY_NAME" ] && echo present || echo MISSING)"
-        say "keypatch.dylib: $( [ -f "$DYLIB" ] && echo present || echo MISSING)"
-        say "hosts entry: $(grep "$MARK" /etc/hosts || echo MISSING)"
-        say "resolves to: $(dscacheutil -q host -a name "$PORTAL" | awk '/ip_address/{print $2}' | tr '\n' ' ')"
+        # Prints everything that has to be right, saves it and sends it to the server's report drop (port 8099).
+        REPORT="$SUPPORT/check.txt"; mkdir -p "$SUPPORT"
+        do_check "$@" 2>&1 | tee "$REPORT"
         addr="$(awk -v m="$MARK" 'index($0, m) {print $1}' /etc/hosts | head -1)"
-        for port in 1119 8081 8085; do
-            if nc -z -G 3 "${addr:-$PORTAL}" "$port" 2>/dev/null; then say "port $port: open"; else say "port $port: NOT REACHABLE"; fi
-        done
-        say "CA trusted: $(security find-certificate -c "$CA_NAME" "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 && echo yes || echo NO)"
-        if [ -n "$GAME" ]; then
-            say "WTF/$WTF_NAME portal: $(grep -h '^SET portal' "$GAME/WTF/$WTF_NAME" 2>/dev/null || echo MISSING)"
-            say "WTF/Config.wtf portal: $(grep -h '^SET portal' "$GAME/WTF/Config.wtf" 2>/dev/null || echo none)"
-            exe="$(plutil -extract CFBundleExecutable raw -o - "$GAME/World of Warcraft.app/Contents/Info.plist" 2>/dev/null || true)"
-            say "launch setting names in the game binary ($exe):"
-            strings -a "$GAME/World of Warcraft.app/Contents/MacOS/$exe" 2>/dev/null \
-                | grep -i -E "launch options|launcherlogin|WEB_TOKEN|CONNECTION_STRING|GAME_ACCOUNT|net\.battle" \
-                | sort -u | head -25 | sed 's/^/    /'
-            say "newest game logs (last lines):"
-            for f in $(ls -t "$GAME/Logs" 2>/dev/null | head -3); do
-                echo "  -- $f"
-                tail -n 12 "$GAME/Logs/$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /'
-            done
+        if [ -n "$addr" ] && curl -s -m 5 -T "$REPORT" "http://$addr:8099/check-$(hostname -s)" >/dev/null; then
+            say "report sent to the server"
+        else
+            say "report NOT sent (saved in $REPORT)"
         fi
-        say "net.battle launch options (values hidden except the connection):"
-        defaults read net.battle 2>/dev/null | grep -E "Launch Options|CONNECTION_STRING|GAME_ACCOUNT|WEB_TOKEN" \
-            | sed -E 's/(WEB_TOKEN[^=]*=).*/\1 <hidden>;/' | sed 's/^/    /'
-        say "keypatch.log:"
-        cat "$SUPPORT/keypatch.log" 2>/dev/null || echo "  (none)"
         ;;
     undo)
         if grep -q "$MARK" /etc/hosts; then sudo sed -i '' "/$MARK/d" /etc/hosts; say "hosts entry removed"; fi
@@ -212,6 +226,6 @@ case "$cmd" in
         rm -rf "${SUPPORT:?}"
         ;;
     *)
-        sed -n '2,19p' "$0"; exit 1
+        sed -n '2,22p' "$0"; exit 1
         ;;
 esac
