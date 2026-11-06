@@ -183,9 +183,20 @@ case "$cmd" in
         if [ -n "$GAME" ]; then
             say "WTF/$WTF_NAME portal: $(grep -h '^SET portal' "$GAME/WTF/$WTF_NAME" 2>/dev/null || echo MISSING)"
             say "WTF/Config.wtf portal: $(grep -h '^SET portal' "$GAME/WTF/Config.wtf" 2>/dev/null || echo none)"
-            latest="$(ls -t "$GAME/Logs" 2>/dev/null | head -3 | tr '\n' ' ')"
-            say "newest game logs: ${latest:-none}"
+            exe="$(plutil -extract CFBundleExecutable raw -o - "$GAME/World of Warcraft.app/Contents/Info.plist" 2>/dev/null || true)"
+            say "launch setting names in the game binary ($exe):"
+            strings -a "$GAME/World of Warcraft.app/Contents/MacOS/$exe" 2>/dev/null \
+                | grep -i -E "launch options|launcherlogin|WEB_TOKEN|CONNECTION_STRING|GAME_ACCOUNT|net\.battle" \
+                | sort -u | head -25 | sed 's/^/    /'
+            say "newest game logs (last lines):"
+            for f in $(ls -t "$GAME/Logs" 2>/dev/null | head -3); do
+                echo "  -- $f"
+                tail -n 12 "$GAME/Logs/$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /'
+            done
         fi
+        say "net.battle launch options (values hidden except the connection):"
+        defaults read net.battle 2>/dev/null | grep -E "Launch Options|CONNECTION_STRING|GAME_ACCOUNT|WEB_TOKEN" \
+            | sed -E 's/(WEB_TOKEN[^=]*=).*/\1 <hidden>;/' | sed 's/^/    /'
         say "keypatch.log:"
         cat "$SUPPORT/keypatch.log" 2>/dev/null || echo "  (none)"
         ;;
