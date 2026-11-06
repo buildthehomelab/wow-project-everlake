@@ -1,0 +1,119 @@
+name: everlake
+
+x-trinity-env: &trinity-env
+  TZ: ${TZ:-UTC}
+  DB_HOST: mysql
+  DB_PORT: 3306
+  DB_USER: ${DB_USER:-trinity}
+  DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+
+services:
+  mysql:
+    image: mysql:8.0
+    networks: [everlake]
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-UTC}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      DB_USER: ${DB_USER:-trinity}
+      DB_PASSWORD: ${DB_PASSWORD}
+    command:
+      - --max-allowed-packet=1G
+      - --skip-log-bin
+      - --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-512M}
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    # MySQL is only reachable from the other containers. Uncomment for a local admin tool (never expose it publicly).
+    # ports:
+    #   - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  worldserver:
+    build:
+      context: .
+      args:
+        TC_COMMIT: ${TC_COMMIT:-6ac7bece2e7a6b3f75599f20d62235985ea78a7d}
+        BUILD_JOBS: ${BUILD_JOBS:-4}
+    image: everlake-trinitycore:latest
+    command: ["worldserver"]
+    networks: [everlake]
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      <<: *trinity-env
+      MMAP_PATHFINDING: ${MMAP_PATHFINDING:-0}
+      CLIENT_BUILD: ${CLIENT_BUILD:-}
+      PACKET_LOG: ${PACKET_LOG:-0}   # 1 = packet log (diagnostics, holds chat)
+    # interactive console: docker compose attach worldserver  (leave with Ctrl+P, Ctrl+Q)
+    stdin_open: true
+    tty: true
+    stop_grace_period: 2m
+    ports:
+      - "8085:8085"
+    volumes:
+      - ${DATA_DIR:-./data}:/opt/trinitycore/data:ro
+      - ./overrides:/opt/trinitycore/overrides:ro
+      - logs:/opt/trinitycore/logs
+
+  bnetserver:
+    image: everlake-trinitycore:latest
+    pull_policy: never   # local image, built by the worldserver service
+    command: ["bnetserver"]
+    networks: [everlake]
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      worldserver:
+        condition: service_started
+    environment:
+      <<: *trinity-env
+      PUBLIC_ADDRESS: ${PUBLIC_ADDRESS:-127.0.0.1}
+      REALM_LOCAL_ADDRESS: ${REALM_LOCAL_ADDRESS:-127.0.0.1}
+      REALM_LOCAL_SUBNET_MASK: ${REALM_LOCAL_SUBNET_MASK:-255.255.255.0}
+      REALM_NAME: ${REALM_NAME:-Everlake}
+    # bnetserver refuses to start if it cannot resolve the LoginREST hostname itself
+    extra_hosts:
+      - "trinity.actual.battle.net:${PUBLIC_ADDRESS:-127.0.0.1}"
+    ports:
+      - "1119:1119"
+      - "8081:8081"
+    volumes:
+      - ${CERTS_DIR:-./certs}:/opt/trinitycore/certs:ro
+      - ./overrides:/opt/trinitycore/overrides:ro
+      - logs:/opt/trinitycore/logs
+
+  # Game data extraction (Blizzard CDN by default, see docker/extract.sh): docker compose run --rm extractor
+  extractor:
+    image: everlake-trinitycore:latest
+    pull_policy: never   # local image: run "docker compose build" first
+    profiles: ["tools"]
+    entrypoint: ["/usr/local/bin/extract.sh"]
+    user: "${HOST_UID:-0}:${HOST_GID:-0}"
+    environment:
+      CASC_REMOTE: ${CASC_REMOTE:-1}
+      CASC_PRODUCT: ${CASC_PRODUCT:-wowf}
+      CASC_REGION: ${CASC_REGION:-us}
+      EXTRACT_MMAPS: ${EXTRACT_MMAPS:-0}
+    volumes:
+      - "${WOW_DIR:-./wow-not-set}:/wow:ro"
+      - ${DATA_DIR:-./data}:/opt/trinitycore/data
+      - casc-cache:/cache
+
+networks:
+  everlake:
+
+volumes:
+  mysql-data:
+  logs:
+  casc-cache:

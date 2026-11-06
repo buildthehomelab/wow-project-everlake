@@ -1,0 +1,15 @@
+diff --git a/src/server/game/Server/Packets/SocialPackets.cpp b/src/server/game/Server/Packets/SocialPackets.cpp
+index beda98d3..0f1a3d44 100644
+--- a/src/server/game/Server/Packets/SocialPackets.cpp
++++ b/src/server/game/Server/Packets/SocialPackets.cpp
+@@ -22,6 +22,10 @@ namespace WorldPackets::Social
+ {
+ void SendContactList::Read()
+ {
++    // Classic 1.60 puts one more byte (seen 0) before the flags: 00 15 00 00 00 / 00 11 00 00 00
++    if (_worldPacket.size() > sizeof(uint32))
++        _worldPacket.read_skip<uint8>();
++
+     _worldPacket >> Flags;
+ }
+ 

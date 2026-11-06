@@ -1,0 +1,10 @@
+.env
+data/*
+!data/.gitkeep
+certs/*
+!certs/.gitkeep
+overrides/*.conf
+!overrides/*.example
+__pycache__/
+*.pyc
+.DS_Store
