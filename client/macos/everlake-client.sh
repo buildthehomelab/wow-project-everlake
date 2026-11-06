@@ -64,7 +64,9 @@ setup_hosts() {
 setup_ca() {
     local crt="$1"
     [ -f "$crt" ] || die "CA certificate not found: $crt"
-    openssl x509 -in "$crt" -noout -text | grep -q "permitted" || die "$crt has no name constraint: not an Everlake CA"
+    # macOS (LibreSSL) and OpenSSL 3 both print "Permitted:" under "X509v3 Name Constraints"
+    openssl x509 -in "$crt" -noout -text | grep -A2 "Name Constraints" | grep -q "DNS:actual.battle.net" \
+        || die "$crt is not limited to actual.battle.net: not an Everlake CA"
     security add-trusted-cert -r trustRoot -k "$HOME/Library/Keychains/login.keychain-db" "$crt"
     say "CA trusted (login keychain)"
 }
