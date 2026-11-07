@@ -28,6 +28,8 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 | `docker/extract.sh` | Extracts server data straight from Blizzard's CDN (no installed client needed) or from a client folder |
 | `docker/entrypoint.sh` | Writes the server configs from the environment on every start |
 | `docker/patches/` | Fixes on top of the core that aren't merged upstream yet |
+| `scripts/extract-extra-map.sh` | Server terrain (maps, vmaps, mmaps) for a map the client only gets by hotfix, such as 530 ([notes](docs/custom-files.md#server-terrain-for-map-530-2026-11-07)) |
+| `tools/mapcheck/map_height.py` | Ground height and area id from the extracted `.map` files, the way the server reads them |
 | `scripts/gen-certs.sh` | Your own root CA (limited to `*.actual.battle.net`) and the login server certificate |
 | `tools/tact/` | Gate 2: `patch.py` makes a build that is Blizzard's plus our files, `cdn.py` serves it ([notes](docs/custom-files.md)) |
 | `client/macos/everlake-client.sh` | Sets up a Mac to play here (hosts entry, CA, key patch, game copy) and starts the game |

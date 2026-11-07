@@ -1,0 +1,348 @@
+diff --git a/src/tools/extractor_common/CascHandles.cpp b/src/tools/extractor_common/CascHandles.cpp
+index 5903bc28..ce256c33 100644
+--- a/src/tools/extractor_common/CascHandles.cpp
++++ b/src/tools/extractor_common/CascHandles.cpp
+@@ -26,8 +26,14 @@
+ #include <boost/asio/write.hpp>
+ #include <boost/asio/ssl/stream.hpp>
+ #include <boost/filesystem/operations.hpp>
++#include <cstdlib>
+ #include <string>
+ 
++#ifdef _WIN32
++#define fseeko _fseeki64
++#define ftello _ftelli64
++#endif
++
+ char const* CASC::HumanReadableCASCError(uint32 error)
+ {
+     switch (error)
+@@ -294,6 +300,18 @@ File* Storage::OpenFile(char const* fileName, uint32 localeMask, bool printError
+ 
+ File* Storage::OpenFile(uint32 fileDataId, uint32 localeMask, bool printErrors /*= false*/, bool zerofillEncryptedParts /*= false*/) const
+ {
++    // Everlake: EXTRACTOR_LOOSE_FILES=<dir> - a file named <dir>/<FileDataID> is read instead of the storage's copy.
++    // For files the client has but the build lacks (e.g. the WDT and ADTs of a map the client gets by hotfix).
++    if (char const* looseDir = std::getenv("EXTRACTOR_LOOSE_FILES"); looseDir && *looseDir)
++    {
++        std::string loosePath = std::string(looseDir) + "/" + std::to_string(fileDataId);
++        if (std::FILE* looseFile = std::fopen(loosePath.c_str(), "rb"))
++        {
++            printf("Loose file %s used for FileDataId %u\n", loosePath.c_str(), fileDataId);
++            return new File(looseFile, fileDataId);
++        }
++    }
++
+     DWORD openFlags = CASC_OPEN_BY_FILEID;
+     if (zerofillEncryptedParts)
+         openFlags |= CASC_OVERCOME_ENCRYPTED;
+@@ -317,13 +335,26 @@ File::File(HANDLE handle) : _handle(handle)
+ {
+ }
+ 
++File::File(std::FILE* looseFile, uint32 fileDataId) : _handle(nullptr), _looseFile(looseFile), _looseFileDataId(fileDataId)
++{
++}
++
+ File::~File()
+ {
++    if (_looseFile)
++    {
++        std::fclose(_looseFile);
++        return;
++    }
++
+     ::CascCloseFile(_handle);
+ }
+ 
+ uint32 File::GetId() const
+ {
++    if (_looseFile)
++        return _looseFileDataId;
++
+     CASC_FILE_FULL_INFO info;
+     if (!::CascGetFileInfo(_handle, CascFileFullInfo, &info, sizeof(info), nullptr))
+         return CASC_INVALID_ID;
+@@ -333,6 +364,17 @@ uint32 File::GetId() const
+ 
+ int64 File::GetSize() const
+ {
++    if (_looseFile)
++    {
++        int64 position = ftello(_looseFile);
++        if (fseeko(_looseFile, 0, SEEK_END) != 0)
++            return -1;
++
++        int64 size = ftello(_looseFile);
++        fseeko(_looseFile, position, SEEK_SET);
++        return size;
++    }
++
+     ULONGLONG size;
+     if (!::CascGetFileSize64(_handle, &size))
+         return -1;
+@@ -342,6 +384,9 @@ int64 File::GetSize() const
+ 
+ int64 File::GetPointer() const
+ {
++    if (_looseFile)
++        return ftello(_looseFile);
++
+     ULONGLONG position;
+     if (!::CascSetFilePointer64(_handle, 0, &position, FILE_CURRENT))
+         return -1;
+@@ -351,6 +396,9 @@ int64 File::GetPointer() const
+ 
+ bool File::SetPointer(int64 position)
+ {
++    if (_looseFile)
++        return fseeko(_looseFile, position, SEEK_SET) == 0;
++
+     LONG parts[2];
+     memcpy(parts, &position, sizeof(parts));
+     return ::CascSetFilePointer64(_handle, position, nullptr, FILE_BEGIN);
+@@ -358,6 +406,15 @@ bool File::SetPointer(int64 position)
+ 
+ bool File::ReadFile(void* buffer, uint32 bytes, uint32* bytesRead)
+ {
++    if (_looseFile)
++    {
++        std::size_t read = std::fread(buffer, 1, bytes, _looseFile);
++        if (bytesRead)
++            *bytesRead = uint32(read);
++
++        return !std::ferror(_looseFile);
++    }
++
+     DWORD bytesReadDWORD;
+     if (!::CascReadFile(_handle, buffer, bytes, &bytesReadDWORD))
+         return false;
+diff --git a/src/tools/extractor_common/CascHandles.h b/src/tools/extractor_common/CascHandles.h
+index aefdfc62..f58dd381 100644
+--- a/src/tools/extractor_common/CascHandles.h
++++ b/src/tools/extractor_common/CascHandles.h
+@@ -20,6 +20,7 @@
+ 
+ #include "Define.h"
+ #include <CascPort.h>
++#include <cstdio>
+ 
+ namespace boost
+ {
+@@ -79,8 +80,12 @@ namespace CASC
+ 
+     private:
+         File(HANDLE handle);
++        File(std::FILE* looseFile, uint32 fileDataId);
+ 
+         HANDLE _handle;
++        // Everlake: a file from EXTRACTOR_LOOSE_FILES instead of the CASC storage (see Storage::OpenFile)
++        std::FILE* _looseFile = nullptr;
++        uint32 _looseFileDataId = 0;
+     };
+ }
+ 
+diff --git a/src/tools/extractor_common/ExtraMaps.h b/src/tools/extractor_common/ExtraMaps.h
+new file mode 100644
+index 00000000..4a5202ba
+--- /dev/null
++++ b/src/tools/extractor_common/ExtraMaps.h
+@@ -0,0 +1,98 @@
++/*
++ * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by the
++ * Free Software Foundation; either version 2 of the License, or (at your
++ * option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
++ * more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program. If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#ifndef ExtraMaps_h__
++#define ExtraMaps_h__
++
++// Maps that are not in the build's Map.db2 (the client gets them by hotfix), and a filter to extract only some maps.
++//
++//   EXTRACTOR_EXTRA_MAPS="530:828395:Expansion01[:parentMapId],..."  id, WDT FileDataID, directory, optional parent
++//   EXTRACTOR_ONLY_MAPS="530,..."                                   extract only these maps (empty: all maps)
++//
++// The WDT and ADTs of such a map usually are not in the build either: see EXTRACTOR_LOOSE_FILES in CascHandles.cpp.
++
++#include "Define.h"
++#include <cstdio>
++#include <cstdlib>
++#include <sstream>
++#include <string>
++#include <unordered_set>
++#include <vector>
++
++struct ExtraMapEntry
++{
++    uint32 Id = 0;
++    int32 WdtFileDataId = 0;
++    int16 ParentMapID = -1;
++    std::string Directory;
++};
++
++inline std::vector<ExtraMapEntry> GetExtraMapsFromEnv()
++{
++    std::vector<ExtraMapEntry> maps;
++    char const* env = std::getenv("EXTRACTOR_EXTRA_MAPS");
++    if (!env || !*env)
++        return maps;
++
++    std::stringstream list(env);
++    std::string item;
++    while (std::getline(list, item, ','))
++    {
++        if (item.empty())
++            continue;
++
++        std::vector<std::string> parts;
++        std::stringstream fields(item);
++        std::string field;
++        while (std::getline(fields, field, ':'))
++            parts.push_back(field);
++
++        if (parts.size() < 3 || parts.size() > 4)
++        {
++            printf("EXTRACTOR_EXTRA_MAPS: ignoring '%s' (want id:wdtFileDataID:Directory[:parentMapId])\n", item.c_str());
++            continue;
++        }
++
++        ExtraMapEntry& map = maps.emplace_back();
++        map.Id = uint32(std::strtoul(parts[0].c_str(), nullptr, 10));
++        map.WdtFileDataId = int32(std::strtol(parts[1].c_str(), nullptr, 10));
++        map.Directory = parts[2];
++        if (parts.size() == 4)
++            map.ParentMapID = int16(std::strtol(parts[3].c_str(), nullptr, 10));
++    }
++
++    return maps;
++}
++
++// empty when every map should be extracted
++inline std::unordered_set<uint32> GetOnlyMapsFromEnv()
++{
++    std::unordered_set<uint32> ids;
++    char const* env = std::getenv("EXTRACTOR_ONLY_MAPS");
++    if (!env || !*env)
++        return ids;
++
++    std::stringstream list(env);
++    std::string item;
++    while (std::getline(list, item, ','))
++        if (!item.empty())
++            ids.insert(uint32(std::strtoul(item.c_str(), nullptr, 10)));
++
++    return ids;
++}
++
++#endif // ExtraMaps_h__
+diff --git a/src/tools/map_extractor/System.cpp b/src/tools/map_extractor/System.cpp
+index 2eb852f5..7c97df65 100644
+--- a/src/tools/map_extractor/System.cpp
++++ b/src/tools/map_extractor/System.cpp
+@@ -30,6 +30,7 @@
+ #include "MapUtils.h"
+ #include "Memory.h"
+ #include "RoadFileWriter.h"
++#include "ExtraMaps.h"
+ #include "StringFormat.h"
+ #include "Util.h"
+ #include "adt.h"
+@@ -334,7 +335,21 @@ void ReadMapDBC()
+         }
+     }
+ 
+-    std::erase_if(map_ids, [](MapEntry const& map) { return !map.WdtFileDataId; });
++    // Everlake: maps the build's Map.db2 lacks (EXTRACTOR_EXTRA_MAPS), and EXTRACTOR_ONLY_MAPS
++    for (ExtraMapEntry const& extra : GetExtraMapsFromEnv())
++    {
++        auto itr = idToIndex.find(extra.Id);
++        MapEntry& map = itr != idToIndex.end() ? map_ids[itr->second] : map_ids.emplace_back();
++        map.Id = extra.Id;
++        map.WdtFileDataId = extra.WdtFileDataId;
++        if (map.Name.empty())
++            map.Name = extra.Directory;
++        map.Directory = extra.Directory;
++        printf("Extra map %u (%s): WDT FileDataID %d from EXTRACTOR_EXTRA_MAPS\n", map.Id, map.Directory.c_str(), map.WdtFileDataId);
++    }
++
++    std::unordered_set<uint32> onlyMaps = GetOnlyMapsFromEnv();
++    std::erase_if(map_ids, [&](MapEntry const& map) { return !map.WdtFileDataId || (!onlyMaps.empty() && !onlyMaps.contains(map.Id)); });
+ 
+     printf("Done! (" SZFMTD " maps loaded)\n", map_ids.size());
+ }
+diff --git a/src/tools/vmap4_extractor/vmapexport.cpp b/src/tools/vmap4_extractor/vmapexport.cpp
+index 374fea20..96ad86d0 100644
+--- a/src/tools/vmap4_extractor/vmapexport.cpp
++++ b/src/tools/vmap4_extractor/vmapexport.cpp
+@@ -21,6 +21,7 @@
+ #include "Common.h"
+ #include "DB2CascFileSource.h"
+ #include "ExtractorDB2LoadInfo.h"
++#include "ExtraMaps.h"
+ #include "ListfileMap.h"
+ #include "Locales.h"
+ #include "MapDefines.h"
+@@ -501,6 +502,26 @@ void ReadMapTable()
+         }
+     }
+ 
++    // Everlake: maps the build's Map.db2 lacks (EXTRACTOR_EXTRA_MAPS)
++    for (ExtraMapEntry const& extra : GetExtraMapsFromEnv())
++    {
++        auto itr = idToIndex.find(extra.Id);
++        if (itr == idToIndex.end())
++        {
++            map_ids.emplace_back();
++            itr = idToIndex.emplace(extra.Id, map_ids.size() - 1).first;
++        }
++
++        MapEntry& map = map_ids[itr->second];
++        map.Id = extra.Id;
++        map.WdtFileDataId = extra.WdtFileDataId;
++        map.ParentMapID = extra.ParentMapID;
++        if (map.Name.empty())
++            map.Name = extra.Directory;
++        map.Directory = extra.Directory;
++        printf("Extra map %u (%s): WDT FileDataID %d from EXTRACTOR_EXTRA_MAPS\n", map.Id, map.Directory.c_str(), map.WdtFileDataId);
++    }
++
+     // force parent maps to be extracted first
+     for (MapEntry& map : map_ids)
+     {
+@@ -516,6 +537,25 @@ void ReadMapTable()
+         }
+     }
+ 
++    // Everlake: EXTRACTOR_ONLY_MAPS keeps the listed maps and their parents (a child map reads its parent's WDT)
++    std::unordered_set<uint32> onlyMaps = GetOnlyMapsFromEnv();
++    if (!onlyMaps.empty())
++    {
++        std::unordered_set<uint32> keep;
++        for (uint32 id : onlyMaps)
++        {
++            auto itr = idToIndex.find(id);
++            if (itr == idToIndex.end())
++                continue;
++
++            keep.insert(id);
++            for (int16 parentMapId = map_ids[itr->second].ParentMapID; parentMapId >= 0; parentMapId = map_ids[idToIndex[parentMapId]].ParentMapID)
++                keep.insert(uint32(parentMapId));
++        }
++
++        std::erase_if(map_ids, [&](MapEntry const& map) { return !keep.contains(map.Id); });
++    }
++
+     std::erase_if(map_ids, [](MapEntry const& map) { return !map.WdtFileDataId; });
+ 
+     printf("Done! (" SZFMTD " maps loaded)\n", map_ids.size());
