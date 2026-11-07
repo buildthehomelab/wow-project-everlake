@@ -171,7 +171,7 @@ def inspect(data_root):
         [(n, os.path.getsize(os.path.join(folder, n))) for n in archives[-3:]]))
     for extra in sorted(n for n in os.listdir(folder) if not n.startswith("data.") and not n.endswith(".idx")):
         p = os.path.join(folder, extra)
-        head = open(p, "rb").read(64)
+        head = open(p, "rb").read(512 if extra == "shmem" else 64)
         print("other file %s, %d bytes, starts %s" % (extra, os.path.getsize(p), head.hex()))
     idx = newest_indexes(folder)
     print("index files: %d buckets" % len(idx))
@@ -185,6 +185,11 @@ def inspect(data_root):
                   ix.offset_bytes, ix.size_bytes, ix.segment_bits, ix.max_offset, ix.layout, len(ix.entries), ix.bad,
                   (", empty %d" % ix.empty) if ix.layout == "paged" else "", keys == sorted(keys),
                   all(bucket_of(k) == bucket for k in keys)))
+        shift = {}
+        for k in keys[:2000]:
+            d = (bucket_of(k) - bucket) % 16
+            shift[d] = shift.get(d, 0) + 1
+        print("    bucket formula off by (count of 2000 keys): %s" % shift)
         if bucket in (0, 7) and ix.entries:
             print("    bytes 0x18..0x40: %s" % ix.data[0x18:0x40].hex())
             print("    first page head: %s" % ix.data[0x1000:0x1040].hex())
@@ -207,6 +212,7 @@ def inspect(data_root):
         ok_c += c
         print("  data.%03d @%d: key matches %s, size %d (index %d), flags %s, jenkins %s, checksum %s, then %r" % (
             archive, offset, ekey_rev[::-1][:9] == key, hsize, size, head[20:22].hex(), j, c, head[30:34]))
+        print("    raw %d %d %s" % (archive, offset, head[:30].hex()))
     print("headers: jenkins right %d, checksum right %d, of %d" % (ok_j, ok_c, min(len(samples), 24)))
 
 
