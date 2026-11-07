@@ -361,9 +361,15 @@ case "$cmd" in
         [ -f "$SUPPORT/forever_root_ca.crt" ] || die "no copy of the CA certificate: run setup again"
         ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup again"
         grep "$MARK" /etc/hosts | grep -q '^127\.0\.0\.1' || die "hosts entry is not 127.0.0.1: run setup again"
+        # a newer keypatch.c (git pull) is built before it's used
+        [ "$HERE/keypatch.c" -nt "$DYLIB" ] && build_dylib
+        BLOCK=""
         if [ -f "$(dirname "$GAME")/.everlake-gate2" ]; then
             say "gate2 test folder: the game's CDN is the server's port 80"
             start_forward "$ADDR" 80
+            # pin our build: the game must not learn about a newer live build from Blizzard's version service
+            BLOCK="patch.battle.net,version.battle.net"
+            say "gate2: Blizzard's version service blocked for the game ($BLOCK)"
         else
             start_forward "$ADDR"
         fi
@@ -375,6 +381,7 @@ case "$cmd" in
             --env "FOREVER_SERVER_KEY=$SERVER_KEY" \
             --env "FOREVER_REGION_GROUP=$REGION_GROUP" \
             --env "FOREVER_PATCH_LOG=$LOG" \
+            --env "FOREVER_BLOCK_HOSTS=$BLOCK" \
             --args -launcherlogin -config "$WTF_NAME"
         say "first realm login can fail with 'server identity check failed': click Reconnect"
         ;;
