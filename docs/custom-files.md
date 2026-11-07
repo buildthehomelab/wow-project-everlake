@@ -121,6 +121,20 @@ From the Forever 1.60.1.70790 build on Blizzard's CDN, read with the TACT tool i
 - **The file table oddity:** its TVFS entry lists a size 1,024 bytes larger than the stored file, while every
   sub-manifest's entry lists the exact size. The tool keeps that same offset.
 
+**First run on the mini (2026-11-06): the client accepted our build, and the icon was green.**
+- **Accepted:** through our CDN, the client downloaded our build and CDN configs, the loose-file index, vfs-root,
+  the whole encoding file and the root. Neither the version check nor the keys objected.
+- **Green, not found:** the Hearthstone showed green (texture missing). The client never asked for the icon file.
+  Its `Tact.log` said `Unable to lookup file with path '000173F600000000:00020D0E8748070A…'. Error(6): not found`.
+- **Why:** the client finds a game file by a **TVFS path**, not through the encoding file. The path is the root
+  block's locale and content flags, then the FileDataID and content key in hex. vfs-root has one sub-manifest per
+  locale+flags (here `vfs-575`, 91 MB, 1,092,450 paths), and that path has to be listed there.
+- **The fix:** `tools/tact/tvfs.py` reads and writes TVFS manifests. vfs-root and three sub-manifests come back
+  byte for byte. The path tree branches one hex character per level, so a new path splits the leaf it shares a
+  character with into a one-character folder, as Blizzard's own tree does. Container entries end in a
+  patch-record count byte. The patched `vfs-575` keeps all 1,092,450 of Blizzard's paths unchanged and adds ours.
+  `patch.py` now verifies the whole lookup the client does: root → vfs-root → sub-manifest → span → file.
+
 **To run it:**
 
 On the server Mac:

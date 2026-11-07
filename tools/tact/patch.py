@@ -9,19 +9,24 @@
 A FileDataID the build already has gets our bytes instead of Blizzard's; a new FileDataID is added. The client
 finds a file through this chain, so these are rewritten and everything else is Blizzard's, untouched:
 
-  build config   names vfs-root, vfs-1 and encoding                      -> new build config
-  vfs-root/vfs-1 the TVFS manifest; its ".root" entry names the root      -> its .root entry repointed
-  root           FileDataID -> content key                                -> our files' content keys
-  encoding       content key -> encoded key, encoded key -> encoding spec -> entries for every new file
-  CDN config     names the loose-file index                               -> new CDN config
-  file-index     encoded key -> size, for files stored on their own       -> entries for every new file
+  build config   names vfs-root, vfs-1, the sub-manifests and encoding     -> changed lines
+  vfs-root/vfs-1 TVFS manifest: ".root" and one sub-manifest per locale+flags -> entries repointed
+  root           FileDataID -> content key                                 -> our files' content keys
+  sub-manifest   TVFS path "<FileDataID><content key>" -> encoded key        -> a path per new file
+  encoding       content key -> encoded key, encoded key -> encoding spec  -> entries for every new file
+  CDN config     names the loose-file index                                -> new CDN config
+  file-index     encoded key -> size, for files stored on their own        -> entries for every new file
+
+The sub-manifest step is what the first run on the client was missing: the client looked our file up by its
+TVFS path, "000173F600000000:00020D0E<content key>", and reported "not found".
 
 Every new file is stored on its own (not in an archive), BLTE-encoded and named by its encoded key, exactly as
 Blizzard's CDN stores its loose files. <out> is laid out like the CDN (<cdn path>/config, <cdn path>/data), so
 tools/tact/cdn.py can serve it with everything else passed through to Blizzard.
 
---selftest rebuilds the encoding file, the loose-file index, the root and the TVFS manifest from Blizzard's own
-copies with nothing added and checks the result is byte for byte the same, then round-trips the BLTE encoder.
+--selftest rebuilds the encoding file, the loose-file index, the root, vfs-root and three sub-manifests from
+Blizzard's own copies with nothing added and checks the result is byte for byte the same, then round-trips the
+BLTE encoder.
 """
 import argparse
 import hashlib
@@ -34,8 +39,9 @@ import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import tact  # noqa: E402
+import tvfs  # noqa: E402
 
-GAME_ESPEC = "b:256K*=z"  # how our game files are encoded (Blizzard uses it for small files, e.g. vfs-root)
+GAME_ESPEC = "b:{256K*=z}"  # how our game files are encoded; Blizzard uses it too, and the sub-manifests list it
 
 
 def md5(data):
@@ -113,11 +119,15 @@ def blte_encode(data, spec):
 # --- root (FileDataID -> content key), version 2 --------------------------------------------------
 
 def root_set(data, files):
-    """The root with `files` ({FileDataID: content key}) set: existing ids changed in place, new ids added."""
+    """The root with `files` ({FileDataID: content key}) set: existing ids changed in place, new ids added.
+
+    Returns (root, new ids, {id: {(locale, content flags)}}): a file's TVFS path starts with its block's locale
+    and content flags, which pick the sub-manifest it has to be listed in."""
     magic, hsize, version, total, named = struct.unpack_from("<4sIIII", data, 0)
     if magic != b"TSFM" or hsize != 24 or version != 2:
         raise ValueError("root layout not supported (%r, header %d, version %d)" % (magic, hsize, version))
     out, seen, template, at = bytearray(data), set(), None, hsize
+    where = {}
     while at < len(data):
         count, locale, f1, f2, f3 = struct.unpack_from("<IIIIB", data, at)
         flags, body = f1 | f2 | (f3 << 17), at + 17
@@ -131,6 +141,7 @@ def root_set(data, files):
                 o = body + count * 4 + i * 16
                 out[o:o + 16] = files[fdid]
                 seen.add(fdid)
+                where.setdefault(fdid, set()).add((locale, f1))
         at = body + count * 20 + (0 if (total != named and flags & tact.NO_NAME_HASH) else count * 8)
     new = sorted(set(files) - seen)
     if new:
@@ -143,28 +154,9 @@ def root_set(data, files):
         out += struct.pack("<IIIIB", len(new), *template)
         out += struct.pack("<%di" % len(new), *deltas) + b"".join(files[f] for f in new)
         struct.pack_into("<I", out, 12, total + len(new))
-    return bytes(out), new
-
-
-# --- TVFS manifest -------------------------------------------------------------------------------
-
-def tvfs_repoint(data, old_ekey, old_ckey, ekey, esize, csize, ckey):
-    """The manifest with the container entry of (old_ekey, old_ckey) changed to the new file."""
-    (magic, _ver, _hsize, ekey_size, _pkey_size, flags, _pto, _pts, _vto, _vts, cft_off, cft_size,
-     _depth) = struct.unpack_from(">4sBBBBIIIIIIIH", data, 0)
-    if magic != b"TVFS" or ekey_size != 9 or flags != 7:
-        raise ValueError("TVFS layout not supported")
-    at = data.find(old_ekey[:9], cft_off, cft_off + cft_size)
-    if at < 0 or data.find(old_ekey[:9], at + 1, cft_off + cft_size) >= 0:
-        raise ValueError("the entry is missing or not unique in the manifest")
-    if data[at + 18:at + 34] != old_ckey:
-        raise ValueError("the entry's layout is not ekey, esize, spec, csize, ckey")
-    out = bytearray(data)
-    out[at:at + 9] = ekey[:9]
-    struct.pack_into(">I", out, at + 9, esize)
-    struct.pack_into(">I", out, at + 14, csize)
-    out[at + 18:at + 34] = ckey
-    return bytes(out), struct.unpack_from(">I", data, at + 9)[0]
+        for fdid in new:
+            where[fdid] = {(template[0], template[1])}
+    return bytes(out), new, where
 
 
 # --- encoding ------------------------------------------------------------------------------------
@@ -200,6 +192,12 @@ class Encoding:
         self.trailer = data[at + ek_pages * page:]
         self.ckeys = {e[6:22] for e in self.ce}
         self.ekeys = {e[:16] for e in self.ek}
+
+    def spec_of(self, ekey):
+        for e in self.ek:
+            if e[:16] == ekey:
+                return self.specs[struct.unpack_from(">I", e, 16)[0]].decode()
+        raise KeyError("no encoding spec for %s" % ekey.hex())
 
     def spec_index(self, spec):
         spec = spec.encode()
@@ -313,13 +311,24 @@ class Build:
             raise RuntimeError("vfs-root doesn't match, or vfs-1 is not the same manifest")
         self.file_index = self.stored("data", self.cdn["file-index"][0], ".index")
 
+
+    def sub_manifest(self, top, mount):
+        """(config line name, encoded key, bytes) of the sub-manifest vfs-root mounts at `mount`."""
+        mounts = dict(top.files())
+        if mount not in mounts:
+            raise RuntimeError("vfs-root has no sub-manifest %s" % mount.decode())
+        ekey9 = top.container(top.spans(mounts[mount])[0][2])[0].hex()
+        key = next(k for k in self.build if re.fullmatch(r"vfs-\d+", k) and k != "vfs-1"
+                   and self.build[k][1].startswith(ekey9))
+        return key, bytes.fromhex(self.build[key][1]), tact.blte(self.loose(self.build[key][1]))
+
     def selftest(self):
         self.load()
         ok = True
 
         def check(name, good):
             nonlocal ok
-            self.log("%-44s %s" % (name, "same" if good else "DIFFERENT"))
+            self.log("%-48s %s" % (name, "same" if good else "DIFFERENT"))
             ok = ok and good
 
         enc = Encoding(self.encoding)
@@ -328,13 +337,13 @@ class Build:
         data, name = index_build(entries)
         check("loose-file index rebuilt", data == self.file_index and name == self.cdn["file-index"][0])
         check("root with nothing set", root_set(self.root, {})[0] == self.root)
-        same, _ = tvfs_repoint(self.vfs, self.root_ekey, bytes.fromhex(self.build["root"][0]), self.root_ekey,
-                               struct.unpack_from(">I", self.vfs, self.vfs.find(self.root_ekey[:9], 46) + 9)[0],
-                               len(self.root), bytes.fromhex(self.build["root"][0]))
-        check("TVFS .root entry rewritten with its own values", same == self.vfs)
+        check("vfs-root rebuilt", tvfs.Manifest(self.vfs).build() == self.vfs)
+        for key in ("vfs-2", "vfs-100", "vfs-300"):
+            sub = tact.blte(self.loose(self.build[key][1]))
+            check("%s rebuilt" % key, tvfs.Manifest(sub).build() == sub)
         for spec, sample in (("b:256K*=z", self.vfs), ("b:{256K*=z}", self.root[:700000]), ("z", b"x" * 1000),
                              ("b:{22=n,100=z,*=z}", self.encoding[:5000])):
-            blob, ekey = blte_encode(sample, spec)
+            blob, _ekey = blte_encode(sample, spec)
             check("BLTE %s decodes back" % spec, tact.blte(blob) == sample)
         return ok
 
@@ -343,13 +352,14 @@ class Build:
         self.load()
         b, cdn_root = self.build, os.path.join(out, self.path)
         enc = Encoding(self.encoding)
-        written = {}
+        data_files = {}
 
         def put(kind, name, data, suffix=""):
             path = os.path.join(cdn_root, kind, name[:2], name[2:4], name + suffix)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             open(path, "wb").write(data)
-            written[name + suffix] = len(data)
+            if kind == "data" and not suffix:
+                data_files[name] = len(data)
 
         def store(content, spec):
             blob, ekey = blte_encode(content, spec)
@@ -359,27 +369,57 @@ class Build:
             enc.add(md5(content), ekey, len(content), len(blob), spec)
             return blob, ekey
 
-        ours = {}
+        stored, ours = {}, {}
         for fdid, content in sorted(files.items()):
-            _blob, ekey = store(content, GAME_ESPEC)
+            blob, ekey = store(content, GAME_ESPEC)
+            stored[fdid] = (md5(content), ekey, len(blob), len(content))
             ours[fdid] = {"ckey": md5(content).hex(), "ekey": ekey.hex(), "size": len(content)}
-        root, added = root_set(self.root, {f: bytes.fromhex(v["ckey"]) for f, v in ours.items()})
+        root, added, where = root_set(self.root, {f: v[0] for f, v in stored.items()})
+
+        # TVFS: list every file under its path in the sub-manifest of its root block, then point vfs-root at the
+        # new sub-manifests and the new root
+        top = tvfs.Manifest(self.vfs)
+        groups, lines = {}, {}
+        for fdid, places in where.items():
+            for locale, flags in places:
+                groups.setdefault(b"%08X%08X" % (locale, flags), []).append(fdid)
+        for mount, fdids in sorted(groups.items()):
+            key, old_ekey, data = self.sub_manifest(top, mount)
+            self.log("listing %d file(s) in sub-manifest %s (%s, %d MB)" % (len(fdids), mount.decode(), key,
+                                                                            len(data) >> 20))
+            sub = tvfs.Manifest(data)
+            for fdid in sorted(fdids):
+                ckey, ekey, esize, csize = stored[fdid]
+                sub.add_file(b"%08X%s" % (fdid, ckey.hex().upper().encode()), ekey, esize, csize, ckey, GAME_ESPEC)
+            content = sub.build()
+            blob, ekey = store(content, enc.spec_of(old_ekey))
+            top.repoint(old_ekey, ekey, len(blob), len(content), md5(content))
+            lines[key] = "%s %s" % (md5(content).hex(), ekey.hex())
+            lines[key + "-size"] = "%d %d" % (len(content), len(blob))
         root_blob, root_ekey = store(root, "b:{256K*=z}")
-        old_tvfs_esize = struct.unpack_from(">I", self.vfs, self.vfs.find(self.root_ekey[:9], 46) + 9)[0]
-        vfs, _ = tvfs_repoint(self.vfs, self.root_ekey, bytes.fromhex(b["root"][0]), root_ekey,
-                              len(root_blob) + (old_tvfs_esize - len(self.root_blte)), len(root), md5(root))
+        # vfs-root lists the root 1,024 bytes larger than it is stored (every other entry is exact); keep that
+        old_esize = top.container(top.spans(dict(top.files())[b".root"])[0][2])[1]
+        top.repoint(self.root_ekey, root_ekey, len(root_blob) + (old_esize - len(self.root_blte)), len(root),
+                    md5(root))
+        vfs = top.build()
         vfs_blob, vfs_ekey = store(vfs, "b:256K*=z")
+        for key in ("vfs-root", "vfs-1"):
+            lines[key] = "%s %s" % (md5(vfs).hex(), vfs_ekey.hex())
+            lines[key + "-size"] = "%d %d" % (len(vfs), len(vfs_blob))
+
         enc_content = enc.build()
         trailer = enc_content[enc_content.rindex(b"b:{"):].decode()
         enc_blob, enc_ekey = blte_encode(enc_content, trailer)
         if tact.blte(enc_blob) != enc_content:
             raise RuntimeError("encoding round trip failed")
         put("data", enc_ekey.hex(), enc_blob)
+        lines["root"] = md5(root).hex()
+        lines["encoding"] = "%s %s" % (md5(enc_content).hex(), enc_ekey.hex())
+        lines["encoding-size"] = "%d %d" % (len(enc_content), len(enc_blob))
 
         loose = {k: s for k, s, _o in tact.index_entries(self.file_index)}
-        for name, size in written.items():
-            if "." not in name:
-                loose[bytes.fromhex(name)] = size
+        for name, size in data_files.items():
+            loose[bytes.fromhex(name)] = size
         index, index_name = index_build(list(loose.items()))
         put("data", index_name, index, ".index")
 
@@ -390,12 +430,8 @@ class Build:
             return new
 
         text = self.build_text
-        text = replace(text, "root", md5(root).hex())
-        text = replace(text, "encoding", "%s %s" % (md5(enc_content).hex(), enc_ekey.hex()))
-        text = replace(text, "encoding-size", "%d %d" % (len(enc_content), len(enc_blob)))
-        for key in ("vfs-root", "vfs-1"):
-            text = replace(text, key, "%s %s" % (md5(vfs).hex(), vfs_ekey.hex()))
-            text = replace(text, key + "-size", "%d %d" % (len(vfs), len(vfs_blob)))
+        for key, value in lines.items():
+            text = replace(text, key, value)
         build_key = md5(text.encode()).hex()
         put("config", build_key, text.encode())
         cdn_text = replace(self.cdn_text, "file-index", index_name)
@@ -406,52 +442,72 @@ class Build:
         summary = {"blizzard_build_key": self.build_key, "blizzard_cdn_key": self.cdn_key, "version": self.version,
                    "cdn_path": self.path, "blizzard_hosts": self.hosts, "build_key": build_key,
                    "cdn_key": cdn_key, "files": {str(f): v for f, v in ours.items()},
-                   "added_file_data_ids": added, "written": written}
+                   "added_file_data_ids": added, "config_lines": lines, "data_files": data_files}
         json.dump(summary, open(os.path.join(out, "build.json"), "w"), indent=2)
         return summary
 
 
+def root_places(data, fdids):
+    """{FileDataID: [(locale, content flags, content key)]} for the given ids, from a version 2 root."""
+    _magic, hsize, _version, total, named = struct.unpack_from("<4sIIII", data, 0)
+    out, at = {}, hsize
+    while at < len(data):
+        count, locale, f1, f2, f3 = struct.unpack_from("<IIIIB", data, at)
+        flags, body = f1 | f2 | (f3 << 17), at + 17
+        fdid = -1
+        for i, delta in enumerate(struct.unpack_from("<%di" % count, data, body)):
+            fdid += delta + 1
+            if fdid in fdids:
+                o = body + count * 4 + i * 16
+                out.setdefault(fdid, []).append((locale, f1, data[o:o + 16]))
+        at = body + count * 20 + (0 if (total != named and flags & tact.NO_NAME_HASH) else count * 8)
+    return out
+
+
 def verify(out, build, files):
-    """Look our files up through the patched chain, as the client would, and check their bytes."""
+    """Look our files up as the client does (root -> TVFS path -> span -> encoded key) and check their bytes."""
     summary = json.load(open(os.path.join(out, "build.json")))
-    root = os.path.join(out, summary["cdn_path"])
+    base = os.path.join(out, summary["cdn_path"])
 
     def ours(kind, name, suffix=""):
-        return open(os.path.join(root, kind, name[:2], name[2:4], name + suffix), "rb").read()
+        return open(os.path.join(base, kind, name[:2], name[2:4], name + suffix), "rb").read()
 
     conf = tact.config(ours("config", summary["build_key"]).decode())
     cdn = tact.config(ours("config", summary["cdn_key"]).decode())
     enc = tact.blte(ours("data", conf["encoding"][1]))
     assert md5(enc).hex() == conf["encoding"][0], "encoding content key"
-    vfs = tact.blte(ours("data", conf["vfs-root"][1]))
-    assert md5(vfs).hex() == conf["vfs-root"][0], "vfs-root content key"
-    loose = {k: s for k, s, _o in tact.index_entries(ours("data", cdn["file-index"][0], ".index"))}
     ckey_to_ekey = dict(tact.encoding_entries(enc))
+    loose = {k for k, _s, _o in tact.index_entries(ours("data", cdn["file-index"][0], ".index"))}
+    vfs = tact.blte(ours("data", conf["vfs-root"][1]))
+    assert md5(vfs).hex() == conf["vfs-root"][0] and conf["vfs-1"] == conf["vfs-root"], "vfs-root"
+    top = tvfs.Manifest(vfs)
+    mounts = dict(top.files())
     root_ckey = bytes.fromhex(conf["root"][0])
-    root_ekey = ckey_to_ekey[root_ckey]
-    at = vfs.find(root_ekey[:9], 46)
-    assert at > 0 and vfs[at + 18:at + 34] == root_ckey, "vfs-root .root entry"
-    assert root_ekey in loose, "root in the loose-file index"
-    rootdata = tact.blte(ours("data", root_ekey.hex()))
+    assert top.container(top.spans(mounts[b".root"])[0][2])[0] == ckey_to_ekey[root_ckey][:9], "vfs-root .root"
+    rootdata = tact.blte(ours("data", ckey_to_ekey[root_ckey].hex()))
     assert md5(rootdata) == root_ckey, "root content key"
-    found = dict(tact.root_entries(rootdata))
-    shared = []
-    for fdid, content in files.items():
-        ckey = found[fdid]
-        assert ckey == md5(content), "file %d content key in the root" % fdid
-        ekey = ckey_to_ekey[ckey]
-        if ekey not in loose:
-            shared.append(fdid)  # Blizzard already ships these exact bytes; the client fetches their copy
-            continue
-        data = tact.blte(ours("data", ekey.hex()))
-        assert data == content, "file %d bytes" % fdid
+    by_ekey9 = {conf[k][1][:18]: conf[k][1] for k in conf if re.fullmatch(r"vfs-\d+", k)}
+    subs = {}
+    for fdid, places in root_places(rootdata, set(files)).items():
+        for locale, flags, ckey in places:
+            assert ckey == md5(files[fdid]), "file %d content key in the root" % fdid
+            mount = b"%08X%08X" % (locale, flags)
+            ekey9 = top.container(top.spans(mounts[mount])[0][2])[0].hex()
+            if mount not in subs:
+                subs[mount] = tvfs.Manifest(tact.blte(ours("data", by_ekey9[ekey9])))
+            sub = subs[mount]
+            path = b"%08X%s" % (fdid, ckey.hex().upper().encode())
+            spans = sub.spans(dict(sub.files())[path])
+            ekey = ckey_to_ekey[ckey]
+            assert sub.container(spans[0][2])[0] == ekey[:9], "file %d TVFS span" % fdid
+            assert ekey in loose, "file %d in the loose-file index" % fdid
+            assert tact.blte(ours("data", ekey.hex())) == files[fdid], "file %d bytes" % fdid
     original = dict(tact.root_entries(build.root))
+    found = dict(tact.root_entries(rootdata))
     changed = sum(1 for f, c in original.items() if found.get(f) != c and f not in files)
     assert changed == 0, "%d files we didn't touch changed" % changed
-    note = (" (%s: same bytes as a Blizzard file, so Blizzard's copy is used)" % ", ".join(map(str, shared))
-            if shared else "")
-    return "verified: %d files through build %s, every other file still Blizzard's%s" % (
-        len(files), summary["build_key"], note)
+    return "verified: %d file(s) found through root, vfs-root and %d sub-manifest(s) of build %s" % (
+        len(files), len(subs), summary["build_key"])
 
 
 def main():
