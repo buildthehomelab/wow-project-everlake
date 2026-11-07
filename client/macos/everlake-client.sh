@@ -256,11 +256,11 @@ test1_report() {
     say "test1: game folder $game, build $(game_build "$game") (the server takes 1.60.1.70790 only)"
     say "test1: addon EverlakeTest1 $( [ -f "$game/Interface/AddOns/EverlakeTest1/EverlakeTest1.lua" ] && echo installed || echo MISSING: run test1-addon)"
     say "test1: started $(stat -f '%Sm' "$mark" 2>/dev/null || echo '(no mark: run test1-addon first)')"
-    say "test1: hotfixes from our pushes (9540020-9540029 classes and spells, 9540010-9540015 talent tree) per table and result:"
-    grep -a -h -E "[^0-9]95400[0-2][0-9] Table " "$game/Logs/Hotfix.log" 2>/dev/null \
+    say "test1: hotfixes from our pushes (9540020-9540029 classes and spells, 9540010-9540015 talent tree, 9540030+ visuals) per table and result:"
+    grep -a -h -E "[^0-9]95400[0-3][0-9] Table " "$game/Logs/Hotfix.log" 2>/dev/null \
         | awk '{for (i = 1; i <= NF; i++) if ($i == "Table") print $(i + 1), $NF}' | sort | uniq -c | sed 's/^/    /' || true
     say "test1: our hotfix rows the client did NOT accept (first 40):"
-    grep -a -h -E "[^0-9]95400[0-2][0-9] Table " "$game/Logs/Hotfix.log" 2>/dev/null \
+    grep -a -h -E "[^0-9]95400[0-3][0-9] Table " "$game/Logs/Hotfix.log" 2>/dev/null \
         | grep -v "VALIDATION_RESULT_VALID" | head -n 40 | cut -c1-200 | sed 's/^/    /' || true
     say "test1: the addon's record (SavedVariables EverlakeTest1.lua; written at /reload or logout):"
     n=0

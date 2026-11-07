@@ -279,6 +279,11 @@ errors show where.
 - The class kit moved from pushes 9540000-9540004 to 9540020-9540024 (the old pushes are deleted), so the client
   fetches every row again. **After that, the skill tab lists the new weapon and armor skills.** Lesson: rows changed
   inside a push the client already has don't reach it; give changed rows a new push.
+- **Death Coil and Death Strike cast with a plain melee swing:** their visuals aren't in Forever. Stand-ins borrowed
+  from vanilla spells (`sql/everlake/2026_11_07_05_hotfixes_test1_visuals.sql`, kit `test1_visuals.json`, push
+  9540030): Death Coil's bolt gets the Warlock's Death Coil, Death Strike Heroic Strike, Obliterate Mortal Strike,
+  Howling Blast Frost Nova, Anti-Magic Shell Power Word: Shield. The real ones need the retail visual and art files
+  in the client.
 - Not a bug: no XP in Northshire. The Death Knight starts at level 8, where anything level 3 or below is grey.
 - Still open:
   - Health doesn't regenerate out of combat: `Player::OCTRegenHPPerSpirit` has no case for classes 6 and 10 (core).

@@ -1,0 +1,13 @@
+{
+  "comment": "Test 1 (docs/era-data.md): stand-in visuals for the retail Death Knight spells. Their own visuals aren't in the\nForever build, so the kit sent them without any and the client played a plain melee swing. These rows borrow\nvanilla visuals the client ships: Death Coil's bolt (47632, the damage spell, carries the projectile) gets the\nWarlock's Death Coil (64), Death Strike gets Heroic Strike (39), Obliterate gets Mortal Strike (164064), Howling\nBlast gets Frost Nova (17) and Anti-Magic Shell gets Power Word: Shield (784).\nPushes from 9540030 (new pushes, so a client that has the class kit fetches these too).",
+  "target_build": "1.60.1.70790",
+  "first_push": 9540030,
+  "rows": [
+    {"table": "SpellXSpellVisual", "custom": [
+      {"ID": 954201, "DifficultyID": 0, "SpellVisualID": 64,     "Probability": 1, "Priority": 1, "SpellID": 47632},
+      {"ID": 954202, "DifficultyID": 0, "SpellVisualID": 39,     "Probability": 1, "Priority": 1, "SpellID": 49998},
+      {"ID": 954203, "DifficultyID": 0, "SpellVisualID": 164064, "Probability": 1, "Priority": 1, "SpellID": 49020},
+      {"ID": 954204, "DifficultyID": 0, "SpellVisualID": 17,     "Probability": 1, "Priority": 1, "SpellID": 49184},
+      {"ID": 954205, "DifficultyID": 0, "SpellVisualID": 784,    "Probability": 1, "Priority": 1, "SpellID": 48707}]}
+  ]
+}
