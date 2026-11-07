@@ -1,0 +1,85 @@
+# Forever client watch (docs/client-watch.md): every 3 hours, look for WoW Forever client builds newer than the one we
+# run and check them against our server and hotfix data. Keeps ONE open issue labelled client-watch up to date with
+# the report, and closes it when no build is newer than ours. Public data only: no secrets beyond GITHUB_TOKEN.
+# GitHub runs scheduled workflows from the default branch only, so this starts once it is merged to main.
+name: client-watch
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: "Builds to check instead of the newer ones (space separated, e.g. 1.60.1.70862)"
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: client-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # wago.tools CSVs and WoWDBDefs; rolls forward run to run
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/everlake-clientwatch
+          key: clientwatch-${{ github.run_id }}
+          restore-keys: clientwatch-
+
+      - name: Unit tests of the parsers
+        run: python3 -m unittest discover -s tools/clientwatch
+
+      - name: Watch and check
+        id: watch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSIONS: ${{ inputs.versions }}
+        run: |
+          set +e
+          if [ -n "$VERSIONS" ]; then
+            python3 tools/clientwatch/clientwatch.py check $VERSIONS --out out
+          else
+            python3 tools/clientwatch/clientwatch.py run --out out
+          fi
+          code=$?
+          set -e
+          status=$(python3 -c 'import json; print(json.load(open("out/report.json"))["status"])')
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          cat out/report.md >> "$GITHUB_STEP_SUMMARY"
+          # 1 = a check failed: that is news for the issue, not a broken job
+          [ "$code" -le 1 ] || exit "$code"
+
+      - name: Update the client-watch issue
+        if: inputs.versions == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS: ${{ steps.watch.outputs.status }}
+        run: |
+          gh label create client-watch --color 1d76db --description "New WoW Forever client build" --force >/dev/null
+          issue=$(gh issue list --label client-watch --state open --json number --jq '.[0].number // empty')
+          if [ "$STATUS" = NONE ]; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --comment "No client build newer than ours any more: closing."
+            fi
+            exit 0
+          fi
+          newest=$(python3 -c 'import json; r=json.load(open("out/report.json")); print(r["results"][0]["version"])')
+          title="Forever client $newest is out: $STATUS"
+          if [ -z "$issue" ]; then
+            gh issue create --label client-watch --title "$title" --body-file out/report.md
+          else
+            old=$(gh issue view "$issue" --json title --jq .title)
+            gh issue edit "$issue" --title "$title" --body-file out/report.md
+            if [ "$old" != "$title" ]; then
+              gh issue comment "$issue" --body "Was: $old. Now: $title (run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            fi
+          fi

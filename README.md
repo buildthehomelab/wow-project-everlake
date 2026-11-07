@@ -31,6 +31,7 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 | `scripts/gen-certs.sh` | Your own root CA (limited to `*.actual.battle.net`) and the login server certificate |
 | `tools/tact/` | Gate 2: `patch.py` makes a build that is Blizzard's plus our files, `cdn.py` serves it ([notes](docs/custom-files.md)) |
 | `client/macos/everlake-client.sh` | Sets up a Mac to play here (hosts entry, CA, key patch, game copy) and starts the game |
+| `tools/clientwatch/` | Finds new Forever client builds and checks them against our server and hotfix data; runs every 3 hours from `.github/workflows/client-watch.yml` ([notes](docs/client-watch.md)) |
 | `docs/client-connection.md` | What a client needs to connect, and why |
 
 ## Pins
