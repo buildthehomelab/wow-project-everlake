@@ -98,27 +98,53 @@ setup_hosts() {
 
 server_addr() { cat "$SERVER_FILE" 2>/dev/null || true; }
 
+FORWARD_PORTS="1119 8081 8085 8095 80"
+
+# the pid listening on 127.0.0.1:<port>, if any
+port_listener() { lsof -nP -t -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -n 1 || true; }
+
 stop_forward() {
+    local port pid
     if [ -f "$FORWARD_PID" ] && kill -0 "$(cat "$FORWARD_PID")" 2>/dev/null; then
         kill "$(cat "$FORWARD_PID")" 2>/dev/null || true
         sleep 0.5
     fi
     rm -f "$FORWARD_PID"
+    # A forwarder from an earlier run whose pid file was lost still holds the ports; a new one then can't listen and
+    # quits, while the old one keeps serving without the newer ports (2026-11-07: no port 8095, realm 2 unreachable).
+    # Stop whatever holds our ports, but only if it is a forward.py.
+    for port in $FORWARD_PORTS; do
+        pid="$(port_listener "$port")"
+        if [ -n "$pid" ] && ps -o command= -p "$pid" 2>/dev/null | grep -q 'forward\.py'; then
+            say "stopping an old forwarder still running (pid $pid, port $port)"
+            kill "$pid" 2>/dev/null || true
+            sleep 0.5
+        fi
+    done
 }
 
 start_forward() {
-    local addr="$1"; shift
+    local addr="$1" pid port missing
+    shift
     stop_forward
     # extra ports (gate2 adds 80, the CDN) on top of forward.py's default 1119 8081 8085 8095 (8095 = realm 2)
-    if [ $# -gt 0 ]; then set -- 1119 8081 8085 8095 "$@"; fi
+    set -- 1119 8081 8085 8095 "$@"
     nohup python3 "$HERE/forward.py" "$addr" "$@" > "$FORWARD_LOG" 2>&1 &
-    echo $! > "$FORWARD_PID"
+    pid=$!
+    echo "$pid" > "$FORWARD_PID"
     for _ in 1 2 3 4 5 6 7 8 9 10; do
-        nc -z -G 1 127.0.0.1 8081 2>/dev/null && { say "forwarder running (log: $FORWARD_LOG)"; return 0; }
+        missing=""
+        for port in "$@"; do [ "$(port_listener "$port")" = "$pid" ] || missing="$missing $port"; done
+        [ -z "$missing" ] && { say "forwarder running on ports $* (log: $FORWARD_LOG)"; return 0; }
+        kill -0 "$pid" 2>/dev/null || break
         sleep 0.5
     done
     cat "$FORWARD_LOG" >&2
-    die "the forwarder did not start"
+    for port in $missing; do
+        pid="$(port_listener "$port")"
+        [ -n "$pid" ] && say "port $port is taken by: $(ps -o command= -p "$pid" 2>/dev/null | cut -c1-120)"
+    done
+    die "the forwarder did not start on port(s)$missing"
 }
 
 setup_ca() {
