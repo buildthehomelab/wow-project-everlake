@@ -413,6 +413,10 @@ questions, then sends the report, both cache files and the screenshots to the re
 **One Forever client switches cleanly between two realms on one login server, each realm sending its own client
 data, and nothing mixes.** Report `switch-Agents-Mac-mini` (11:29) and 5 screenshots in the report drop.
 
+The printed steps were followed loosely (the user found them confusing and switched in their own order). The
+result doesn't rest on the order: the addon records every login with its realm, and the cache snapshots after each
+run show what the client kept. Next time: fewer, shorter steps, one switch per step.
+
 - **Every login was right.** The `EverlakeSwitch` addon checked 12 logins over the day, 5 of them in the two test
   runs (before, between and after the switches, with a client restart in between): 12 OK, 0 MIXED.
   - Everlake (Pat): "Attack (realm 1)", "Hearthstone (realm 1)", 9 classes, no class 6 or 10, no Death Coil, no
