@@ -104,7 +104,7 @@ FORWARD_PORTS="1119 8081 8085 8095 80"
 port_listener() { lsof -nP -t -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -n 1 || true; }
 
 stop_forward() {
-    local port pid
+    local port pid cmd
     if [ -f "$FORWARD_PID" ] && kill -0 "$(cat "$FORWARD_PID")" 2>/dev/null; then
         kill "$(cat "$FORWARD_PID")" 2>/dev/null || true
         sleep 0.5
@@ -115,29 +115,44 @@ stop_forward() {
     # Stop whatever holds our ports, but only if it is a forward.py.
     for port in $FORWARD_PORTS; do
         pid="$(port_listener "$port")"
-        if [ -n "$pid" ] && ps -o command= -p "$pid" 2>/dev/null | grep -q 'forward\.py'; then
-            say "stopping an old forwarder still running (pid $pid, port $port)"
-            kill "$pid" 2>/dev/null || true
-            sleep 0.5
+        if [ -n "$pid" ]; then
+            if ps -o command= -p "$pid" 2>/dev/null | grep -q 'forward\.py'; then
+                say "stopping an old forwarder still running (pid $pid, port $port)"
+                kill "$pid" 2>/dev/null || true
+                sleep 0.5
+            fi
+        elif nc -z -G 1 127.0.0.1 "$port" 2>/dev/null; then
+            # busy, but not by a process of ours: another user's, e.g. a forwarder started with sudo. Only root can see
+            # (and stop) it, so this step asks for your password.
+            say "port $port is held by a program you can't see (started with sudo?): looking it up as root (asks for your password)"
+            pid="$(sudo lsof -nP -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+            cmd="$( [ -n "$pid" ] && sudo ps -o command= -p "$pid" 2>/dev/null || true)"
+            if printf '%s' "$cmd" | grep -q 'forward\.py'; then
+                say "stopping a forwarder that was started with sudo (pid $pid, port $port)"
+                sudo kill "$pid" 2>/dev/null || true
+                sleep 0.5
+            else
+                say "port $port is held by: ${cmd:-unknown (pid ${pid:-?})}"
+            fi
         fi
     done
 }
 
 start_forward() {
-    local addr="$1" pid port missing
+    local addr="$1" pid="" port missing
     shift
     stop_forward
     # extra ports (gate2 adds 80, the CDN) on top of forward.py's default 1119 8081 8085 8095 (8095 = realm 2)
     set -- 1119 8081 8085 8095 "$@"
-    nohup python3 "$HERE/forward.py" "$addr" "$@" > "$FORWARD_LOG" 2>&1 &
-    pid=$!
-    echo "$pid" > "$FORWARD_PID"
-    for _ in 1 2 3 4 5 6 7 8 9 10; do
+    FORWARD_PID_FILE="$FORWARD_PID" nohup python3 "$HERE/forward.py" "$addr" "$@" > "$FORWARD_LOG" 2>&1 &
+    missing=" $*"
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+        sleep 0.5
+        [ -s "$FORWARD_PID" ] || continue   # forward.py writes its pid once every port listens
+        pid="$(tr -dc '0-9' < "$FORWARD_PID")"
         missing=""
         for port in "$@"; do [ "$(port_listener "$port")" = "$pid" ] || missing="$missing $port"; done
         [ -z "$missing" ] && { say "forwarder running on ports $* (log: $FORWARD_LOG)"; return 0; }
-        kill -0 "$pid" 2>/dev/null || break
-        sleep 0.5
     done
     cat "$FORWARD_LOG" >&2
     for port in $missing; do
