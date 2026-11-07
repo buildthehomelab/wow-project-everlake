@@ -462,8 +462,8 @@ run show what the client kept. Next time: fewer, shorter steps, one switch per s
    fork offers one sub-region per realm (its full address); the client names each after `Cfg_Regions` row 1160
    ("Beta", region 70). The sub-region doesn't route anything: the card does (`Param_ContentSetIDFilter`). Core patch
    `docker/patches/0007-everlake-one-sub-region.patch` makes the login server offer one sub-region (the lowest realm's,
-   `70-1-70`) and list every realm under it, so the dropdown goes away. Written 2026-11-07; the image build that
-   compiles it was still running when the spike was stopped, so it hasn't been seen in game.
+   `70-1-70`) and list every realm under it, so the dropdown goes away. Written 2026-11-07, not
+   compiled yet: the image build was cancelled when the spike was stopped.
 5. **Each realm keeps a stable realm address** (region 70, battlegroup 1, realm id): the client's cache is keyed by
    it, so renumbering a realm makes the client fetch its whole set again.
 
