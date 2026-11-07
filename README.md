@@ -21,6 +21,8 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove four 
 | `docker/entrypoint.sh` | Writes the server configs from the environment on every start |
 | `docker/patches/` | Fixes on top of the core that aren't merged upstream yet |
 | `scripts/gen-certs.sh` | Your own root CA (limited to `*.actual.battle.net`) and the login server certificate |
+| `client/macos/everlake-client.sh` | Sets up a Mac to play here (hosts entry, CA, key patch, game copy) and starts the game |
+| `docs/client-connection.md` | What a client needs to connect, and why |
 
 ## Pins
 
@@ -57,8 +59,20 @@ docker compose attach worldserver   # leave with Ctrl+P, Ctrl+Q
 bnetaccount create mail@example.com Password
 ```
 
-Connecting a client needs three things on the player's computer: a hosts entry for the login server, the CA
-certificate trusted, and the server's key given to the client. That part isn't written yet.
+## Play from a Mac
+
+Connecting needs three things on the player's Mac: a hosts entry for the login server, the CA certificate trusted,
+and the server's key given to the client ([why](docs/client-connection.md)). With the Forever client installed by
+Battle.net (and Battle.net quit, so it can't update the game) and Apple's command-line tools
+(`xcode-select --install`):
+
+```sh
+./client/macos/everlake-client.sh setup <server address> forever_root_ca.crt   # once, and after game updates
+./client/macos/everlake-client.sh play <account email>                        # asks for the password
+./client/macos/everlake-client.sh undo                                         # removes everything again
+```
+
+Not tested yet. Windows: not written yet.
 
 ## Credits
 

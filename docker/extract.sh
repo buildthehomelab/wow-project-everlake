@@ -36,8 +36,12 @@ else
 fi
 
 cd "$OUT"
-echo "[extract] === 1/3 mapextractor (dbc, gt, cameras, maps)"
-"$BIN/mapextractor" -i "$SRC" -o "$OUT" -p "$PRODUCT" "${MAP_ARGS[@]}"
+if [ "${SKIP_MAPS:-0}" = 1 ] && [ -d "$OUT/dbc" ] && [ -d "$OUT/maps" ]; then
+    echo "[extract] === 1/3 skipped (SKIP_MAPS=1, dbc and maps already there)"
+else
+    echo "[extract] === 1/3 mapextractor (dbc, gt, cameras, maps)"
+    "$BIN/mapextractor" -i "$SRC" -o "$OUT" -p "$PRODUCT" "${MAP_ARGS[@]}"
+fi
 # mapextractor exits 0 even when it cannot open the CASC storage
 if [ ! -d "$OUT/dbc" ] || [ ! -d "$OUT/maps" ]; then
     echo "[extract] ERROR: mapextractor produced no dbc/maps, see the messages above."
