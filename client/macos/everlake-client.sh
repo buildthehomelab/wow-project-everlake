@@ -186,27 +186,27 @@ gate2_report() {
     local game="$1" root mark
     root="$(dirname "$game")"; mark="$root/.everlake-gate2"
     say "gate2: .build.info wowf row:"
-    grep -a '|wowf' "$root/.build.info" | cut -c1-300 | sed 's/^/    /'
+    grep -a '|wowf' "$root/.build.info" | cut -c1-300 | sed 's/^/    /' || true
     say "gate2: all game logs (name, size):"
-    ls -l "$game/Logs" 2>/dev/null | awk 'NR>1{print "    " $5 "\t" $9}'
+    ls -l "$game/Logs" 2>/dev/null | awk 'NR>1{print "    " $5 "\t" $9}' || true
     say "gate2: storage, streaming and CDN lines from every log (last 60):"
     grep -a -h -i -E "cas[^a-z]|casc|tact|stream|loose|resident|armadillo|cdn|build key|encoding|root|vfs|repair|missing|not found|failed to (open|read|load)|http|40[34]|5[0-9][0-9] " \
-        "$game/Logs"/*.log 2>/dev/null | grep -v -E "IBN_Resources|title icons|Table TactKey" | tail -n 60 | cut -c1-260 | sed 's/^/    /'
+        "$game/Logs"/*.log 2>/dev/null | grep -v -E "IBN_Resources|title icons|Table TactKey" | tail -n 60 | cut -c1-260 | sed 's/^/    /' || true
     say "gate2: Tact.log (last 40 lines):"
-    tail -n 40 "$game/Logs/Tact.log" 2>/dev/null | cut -c1-260 | sed 's/^/    /'
+    tail -n 40 "$game/Logs/Tact.log" 2>/dev/null | cut -c1-260 | sed 's/^/    /' || true
     say "gate2: hotfixes for our map and zones (Map, MapDifficulty, AreaTable), last 30:"
-    grep -a -h -E "Table (Map|MapDifficulty|AreaTable) " "$game/Logs/Hotfix.log" 2>/dev/null | tail -n 30 | cut -c1-200 | sed 's/^/    /'
+    grep -a -h -E "Table (Map|MapDifficulty|AreaTable) " "$game/Logs/Hotfix.log" 2>/dev/null | tail -n 30 | cut -c1-200 | sed 's/^/    /' || true
     say "gate2: streaming, map and error lines from every log (last 40):"
     grep -a -h -i -E "WOW519|streaming error|stream.*(fail|error)|map ?id|mapid|530|wdt|new world|transfer|worldport|disconnect" \
-        "$game/Logs"/*.log 2>/dev/null | grep -v -E "IBN_Resources|title icons" | tail -n 40 | cut -c1-260 | sed 's/^/    /'
+        "$game/Logs"/*.log 2>/dev/null | grep -v -E "IBN_Resources|title icons" | tail -n 40 | cut -c1-260 | sed 's/^/    /' || true
     say "gate2: crash or error reports in the game folder (newest 3):"
-    ls -t "$game/Errors" 2>/dev/null | head -3 | while read -r f; do
-        echo "  -- $f"; head -n 30 "$game/Errors/$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /'
+    { ls -t "$game/Errors" 2>/dev/null || true; } | head -3 | while read -r f; do
+        echo "  -- $f"; head -n 30 "$game/Errors/$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /' || true
     done
     say "gate2: files in Data written since gate2 ran (newest 40):"
-    find "$root/Data" -type f -newer "$mark" 2>/dev/null | head -400 | while read -r f; do
+    { find "$root/Data" -type f -newer "$mark" 2>/dev/null || true; } | head -400 | while read -r f; do
         printf '    %s\t%s\n' "$(stat -f %z "$f")" "${f#"$root"/}"
-    done | sort -t$'\t' -k2 | tail -n 40
+    done | sort -t$'\t' -k2 | tail -n 40 || true
 }
 
 do_check() {
@@ -296,7 +296,8 @@ case "$cmd" in
     check)
         # Prints everything that has to be right, saves it and sends it to the server's report drop (port 8099).
         REPORT="$SUPPORT/check.txt"; mkdir -p "$SUPPORT"
-        do_check "$@" 2>&1 | tee "$REPORT"
+        # a failing step must not stop the report from being sent
+        { do_check "$@" 2>&1 || echo "[everlake] check stopped early (exit $?)"; } | tee "$REPORT"
         addr="$(server_addr)"
         if [ -n "$addr" ] && curl -s -m 5 -T "$REPORT" "http://$addr:8099/check-$(hostname -s)" >/dev/null; then
             say "report sent to the server"
