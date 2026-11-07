@@ -10,7 +10,8 @@ MDID/MHID), doodads and buildings (obj0/obj1 MDDF/MODF/MLDD/MLMD, or the MMDX/MW
 (M2 SFID/TXID/AFID/BFID/PFID/SKID/RPID/GPID) and buildings (WMO GFID groups, MOMT textures, MODI doodads). A file
 the target build already has is not followed further: the client uses its own copy.
 
-Writes <dir>/<FileDataID> for every file to add and <dir>/files.tsv (FileDataID, kind, path if known), ready for
+--only-tiles trims the WDT to the listed tiles (the others marked absent), so the client doesn't look for tiles
+that aren't shipped. Writes <dir>/<FileDataID> for every file to add and <dir>/files.tsv (FileDataID, kind, path if known), ready for
 `patch.py --files-from <dir>/files.tsv`.
 """
 import argparse
@@ -203,6 +204,23 @@ class Collector:
         return self.wanted
 
 
+def trim_wdt(data, tiles):
+    """The WDT with only `tiles` {(x, y)} left in MAIN and MAID: the others are marked absent and their file ids
+    cleared, so the client doesn't look for tiles we don't ship. Chunk sizes stay the same."""
+    out, at = bytearray(data), 0
+    while at + 8 <= len(out):
+        cid = bytes(out[at:at + 4][::-1]).decode("latin-1")
+        size = struct.unpack_from("<I", out, at + 4)[0]
+        body = at + 8
+        if cid in ("MAIN", "MAID"):
+            step = size // 4096
+            for i in range(4096):
+                if (i % 64, i // 64) not in tiles:
+                    out[body + i * step:body + (i + 1) * step] = bytes(step)
+        at = body + size
+    return bytes(out)
+
+
 def span(text):
     a, _, b = text.partition("-")
     return range(int(a), int(b or a) + 1)
@@ -216,10 +234,17 @@ def main():
     ap.add_argument("--wdt", type=int, required=True)
     ap.add_argument("--tiles", required=True, help="x range,y range, e.g. 42-44,11-13")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--only-tiles", action="store_true",
+                    help="trim the WDT to the listed tiles, so the client doesn't look for the map's other tiles")
     args = ap.parse_args()
     xs, ys = (span(p) for p in args.tiles.split(","))
     col = Collector(args.source, args.target, args.listfile)
     wanted = col.collect(args.wdt, xs, ys, args.out)
+    if args.only_tiles:
+        path = os.path.join(args.out, str(args.wdt))
+        trimmed = trim_wdt(open(path, "rb").read(), {(x, y) for x in xs for y in ys})
+        open(path, "wb").write(trimmed)
+        print("WDT %d trimmed to %d tiles" % (args.wdt, len(xs) * len(ys)))
     kinds = {}
     for k in wanted.values():
         kinds[k] = kinds.get(k, 0) + 1
