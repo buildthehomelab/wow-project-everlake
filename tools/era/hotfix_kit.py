@@ -105,6 +105,19 @@ class Wago:
         return out
 
 
+# Tables the core has no hotfix table for: their rows go to hotfix_blob as the client's own record bytes (a sparse table's
+# record: the fields in order, strings inline and null-terminated, no ID). Spell holds the tooltip text; the client keeps
+# no spell as known without its row.
+BLOB_TABLES = {"Spell": ["NameSubtext_lang", "Description_lang", "AuraDescription_lang"]}
+
+
+def blob(table, row):
+    out = b""
+    for c in BLOB_TABLES[table]:
+        out += (row.get(c) or "").encode("utf-8") + b"\0"
+    return out
+
+
 def table_hash(dbc, table):
     with open(os.path.join(dbc, table + ".db2"), "rb") as f:
         head = f.read(200)
@@ -217,6 +230,11 @@ class Kit:
             if s not in names:
                 raise SystemExit("%s has no spell %d" % (build, s))
             self.add("SpellName", names[s][0], sets.get("SpellName", {}).get(str(s)), build)
+            text = self.wago.by("Spell", build, "ID").get(s)
+            if text:
+                self.add("Spell", text[0], None, build)
+            else:
+                self.notes.append("spell %d: no Spell (text) row in %s" % (s, build))
             for table in SPELL_TABLES:
                 src = self.wago.load(table, build)
                 if not src or not self.wago.load(table, self.target):
@@ -328,6 +346,15 @@ class Kit:
         lines.append("")
         lines.append("DELETE FROM `hotfix_data` WHERE `Id` BETWEEN %d AND %d;" % (pushes[0], pushes[-1]))
         for table, recs in by_table.items():
+            if table in BLOB_TABLES:
+                h = table_hash(self.dbc, table)
+                ids = ", ".join(str(r) for r, _ in recs)
+                lines.append("")
+                lines.append("DELETE FROM `hotfix_blob` WHERE `TableHash` = %d AND `RecordId` IN (%s);" % (h, ids))
+                lines.append("INSERT INTO `hotfix_blob` (`TableHash`, `RecordId`, `locale`, `Blob`, `VerifiedBuild`) VALUES")
+                lines.append(",\n".join("(%d, %d, 'enUS', X'%s', %s)" % (h, r, blob(table, row).hex(), self.target.split(".")[-1])
+                                         for r, row in recs) + ";")
+                continue
             name = snake(table)
             cols = self.schema.get(name)
             if not cols:
