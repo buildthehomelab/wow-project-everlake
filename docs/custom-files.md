@@ -220,6 +220,106 @@ the client doesn't have, sent by our own server and CDN.
   world database keeps using map 0 and 1. Server collision and pathing come from the swapped map. If that doesn't
   hold, the fallback is Forever's map for the Classic ruleset (no clash at all), and retail last.
 
+## Server terrain for map 530 (2026-11-07)
+
+The server now has ground, buildings and a navmesh for the 9 Sunstrider Isle tiles, made from **exactly the files
+the client draws**: the 36 TBC Anniversary 2.5.6.70577 tile files and the WDT trimmed to those 9 tiles (from
+`~/Code/Wow/evermore2-spike/gate2/exp2d-files`). Every building and doodad they place is read from Forever's own
+build.
+
+**How:** TrinityCore's extractors only see maps in the build's `Map.db2`, and Forever's has no 530 (the client gets
+it by hotfix). Three ways were weighed:
+- Point the extractors at our patched build on our CDN: CascLib would need our CDN host, and `Map.db2` still has no
+  530, so a patch is needed anyway.
+- Run them on the TBC Anniversary product: its `Map.db2` has another layout than the one compiled in, the full WDT
+  lists 800 tiles, and the models would be Anniversary's copies, not Forever's.
+- **Chosen:** a small extractor patch, `docker/patches/0010-extractors-loose-files-extra-maps.patch`:
+  - `EXTRACTOR_LOOSE_FILES=<dir>`: a file named `<dir>/<FileDataID>` is read instead of the storage's copy. That is
+    how the trimmed WDT and the ADTs come in.
+  - `EXTRACTOR_EXTRA_MAPS=530:828395:Expansion01` adds the map (id, WDT FileDataID, directory) to mapextractor and
+    vmap4extractor; `EXTRACTOR_ONLY_MAPS=530` extracts only that map.
+  - Everything else (models, liquid tables) still comes from Forever's build on Blizzard's CDN.
+
+`docker/extractors.Dockerfile` builds only the tools at the server's pinned commit with `docker/patches` (about 4
+minutes), so the worldserver image doesn't have to be rebuilt; the next full image build picks the patch up too.
+`scripts/extract-extra-map.sh` runs them and copies the result into `data/`: it **adds** `maps/0530_*`,
+`maps/0530.tilelist`, `vmaps/0530/`, `mmaps/0530*` and vmap models that aren't there yet, never replaces an existing
+model, and moves any existing `0530` file to `data/.backup-<time>/` first (there was none).
+
+```sh
+cd ~/Code/Wow/wow-project-everlake      # the stack's folder (or this branch's checkout, with DATA_DIR set)
+scripts/extract-extra-map.sh ~/Code/Wow/evermore2-spike/gate2/exp2d-files 530:828395:Expansion01
+#   INSTALL=0  only extract (result in data/.extra-map-out)   REBUILD=1  rebuild the extractor image
+docker compose restart worldserver
+```
+
+A run takes about 4.5 minutes and gives 9 `.map` (+ 9 `.road`), 15 vmap tiles, 16 mmap tiles and 131 new vmap
+models. vmap and mmap tiles reach a little past the 9 terrain tiles where buildings hang over the edge. The 38 loose
+reads are the WDT and the 36 tile files (the ADT roots twice). All 20 buildings on the tiles became vmap models; 100
+of the 137 doodads did (the rest have no collision mesh). The 16 "Can't open FILE0002EE..." lines come from the
+GameObject model pass, same as the normal extraction, and none of those files is used on these tiles.
+
+**Checks** (worldserver restarted at 01:34 and 01:43 EST, both under the lock file):
+
+1. **Terrain matches retail.** `tools/mapcheck/map_height.py` reads the ground from the `.map` files the way the
+   server's `GridMap` does (checked on map 0 first: Northshire spawns sit 0.1 to 0.2 above it). Against all 411
+   creature spawns AzerothCore has on these tiles (retail positions): 264 are within 0.5 yd of the ground (mean
+   +0.11), 22 within 1.5, 125 are higher (on buildings, bridges, the Sunspire floors: vmap ground), **none below**.
+   ```sh
+   tools/mapcheck/map_height.py ~/Code/Wow/wow-project-everlake/data 530 10349.6 -6357.29
+   #   10349.60   -6357.29  0530_12_43.map  area  3431  z   33.404     (3431 = Sunstrider Isle)
+   ```
+2. **The worldserver loads the tiles.** A bot logged in on the isle; with `.server set loglevel l mmaps 1` and
+   `.server set loglevel a Server 1` the log shows `MMAP loaded name:Outland, id:530, x:14, y:43` (and 14,44) as it
+   arrived. There is **no** "Could not load MMAP … id:530" for any of the 9 tiles (11-13 × 42-44). Two such lines
+   remain, x:11 y:45 and x:14 y:42: grids next to the isle that the client has no terrain for either (outside the
+   trimmed WDT), plus x:39 y:54 at PlayerbotV2 start-up (a portal anchor elsewhere in Outland).
+3. **The server's height is ours, buildings included.** `.playerbot terrainprofile` (console; needs a bot on the
+   map) runs the server's own `Map::GetHeight` (terrain + vmaps): at the four test spawns it gives 33.38, 34.03,
+   26.39, 31.78, the offline reader 33.380, 34.032, 26.387, 31.782. The bot's own moves log
+   `[ground] Terrainbot move_to z hint=33.5 ground=30.9` for (10329.7, -6355.7), offline 30.941. Inside the Sunspire
+   the bot stood at z 38.5 where the terrain is 37.2: on the building's floor, where retail NPCs stand (38.6).
+4. **Pathing.** The bot made 23 moves on the isle, all `Ok`, none in `[path_fail]`, from the courtyard into the
+   Sunspire and up to z 53 (`.playerbot diag Terrainbot`). Offline, the fork's `mmap_probe` (Detour on our mmaps,
+   in the extractor image) finds a complete path from the arrival point to the west shore across two tiles, 7
+   points, 318 yd, and one into the Sunspire:
+   ```sh
+   docker run --rm --entrypoint /opt/trinitycore/bin/mmap_probe -v "$PWD/data/mmaps:/mmaps:ro" \
+       everlake-extractors:latest /mmaps 530 10349.6 -6357.29 33.4 10080 -6200 14.7     # STATUS: OK
+   ```
+   `.playerbot goto` doesn't work there yet: it routes through PlayerbotV2's travel graph, which has no nodes on 530,
+   so the bot keeps wandering.
+5. **Creatures stand on the ground.** The first test spawns, Sunstrider Isle's own Mana Wyrm and Magistrix Erona,
+   never appeared: `creature_template_model has no valid model for the entry`. TBC creatures' display ids are not
+   in Forever's tables, so the server refuses to create them. Isle creatures need that data first. Instead, four
+   creatures Forever has went in at retail Sunstrider spawn spots and heights (world DB, guids 9530001-9530004,
+   random movement 5 yd): two Cats (6368, which retail also has in the Sunspire courtyard) and two Kobold Vermin (6)
+   on the Mana Wyrm spots. After the restart `.debug objectcount 530` shows `Creatures: 4` (entry 6 ×2, 6368 ×2).
+   The server's ground under them (`terrainprofile`) is 35.50, 35.47, 33.38, 26.39, and they stand at 35.61,
+   35.57, 33.55, 26.50: 0.10 to 0.17 above, the same small offset retail spawns have everywhere. They are left in
+   for the morning check. Remove them with
+   `DELETE FROM world.creature WHERE guid BETWEEN 9530001 AND 9530004;` and a restart.
+
+The bot test, as run from the console (`scripts/console.py "<command>"`):
+```sh
+playerbot create Terrainbot human warrior 0          # makes and logs in a bot (id 298, bot account 30)
+playerbot logout Terrainbot
+#   characters DB: UPDATE characters SET map=530, zone=3430, position_x=10349.6, position_y=-6357.29,
+#                  position_z=33.5 WHERE guid=298 AND online=0;
+playerbot login Terrainbot
+playerbot inspect Terrainbot                          # Position : (10333.6, -6399.1, 38.5) map=530
+playerbot diag Terrainbot                             # the moves it made
+playerbot terrainprofile 10316.1 -6385.99 33.6 10352 -6359.93 34.1 Terrainbot
+```
+
+**Morning check (in game, as Ora):** `.go xyz 10349.6 -6357.29 34 530` should land on the ground beside the
+Sunspire. Use z 34, not 30: `.go xyz` keeps the z it is given, and the ground there is at 33.4, so z 30 puts Ora 3.4
+yd under the isle. `.gps` should then say area 3431 (Sunstrider Isle), and the two cats and two kobolds a few yards
+west and south of the Sunspire should stand on the grass, not float or sink.
+
+**Not done:** creatures and quests for the isle (TBC creatures have no model in Forever's tables, see check 5),
+PlayerbotV2 travel nodes for 530, more tiles.
+
 ## Sources
 
 - wowdev.wiki: [TACT](https://wowdev.wiki/TACT), [CASC](https://wowdev.wiki/CASC), [TVFS](https://wowdev.wiki/TVFS)
