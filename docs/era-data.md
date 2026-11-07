@@ -286,13 +286,12 @@ errors show where.
   in the client. **Checked in game: Death Coil and Death Strike now animate, spend Runic Power and work.** At level 8
   only those two are learned. **After `.levelup` to 14, Howling Blast, Obliterate and Anti-Magic Shell were learned automatically and all five spells work.**
 - **The talent frame opens with the copied tree** (Forever's Warrior tree as TraitTree 954100 on the Death Knight's
-  skill line), and points can be chosen and applied. A tree the client never shipped works: era trees are data. This
+  skill line), and points can be chosen and applied. **They are still spent after logging out and back in.** A tree the client never shipped works: era trees are data. This
   answers gate 5's first unknown (the retail talent frame on the Forever client).
 - Not a bug: no XP in Northshire. The Death Knight starts at level 8, where anything level 3 or below is grey.
 - Still open:
   - Health doesn't regenerate out of combat: `Player::OCTRegenHPPerSpirit` has no case for classes 6 and 10 (core).
-  - Whether spent talent points survive a relog (the server had saved no trait entries yet), tooltip text, and the
-    Monk aren't checked yet.
+  - Tooltip text and the Monk aren't checked yet.
 
 ### Follow-ups found on the way
 
