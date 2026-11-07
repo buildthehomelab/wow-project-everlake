@@ -277,11 +277,10 @@ errors show where.
     no hotfix table for it, so the kit now writes those rows to `hotfix_blob` as the client's record bytes. **After
     that, Death Coil is in the spellbook.** Any spell sent to the client needs its `Spell` row.
 - The class kit moved from pushes 9540000-9540004 to 9540020-9540024 (the old pushes are deleted), so the client
-  fetches every row again.
+  fetches every row again. **After that, the skill tab lists the new weapon and armor skills.** Lesson: rows changed
+  inside a push the client already has don't reach it; give changed rows a new push.
 - Not a bug: no XP in Northshire. The Death Knight starts at level 8, where anything level 3 or below is grey.
 - Still open:
-  - The skill tab doesn't list the new weapon and armor skills, though the server has them and mail equips (a
-    display rule, maybe fixed by the push move).
   - Health doesn't regenerate out of combat: `Player::OCTRegenHPPerSpirit` has no case for classes 6 and 10 (core).
   - Casting, damage, animations and tooltip text, the talent frame, and the Monk aren't checked yet.
 
