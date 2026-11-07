@@ -9,6 +9,7 @@
 // FOREVER_PATCH_LOG (log file, default: stderr).
 
 #include <mach/mach.h>
+#include <netdb.h>
 #include <mach/mach_vm.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -53,13 +54,14 @@ static void say(const char *fmt, ...) {
     time_t t = time(NULL);
     char ts[16];
     strftime(ts, sizeof ts, "%H:%M:%S", localtime(&t));
-    fprintf(log_file, "%s [forever] ", ts);
+    FILE *out = log_file ? log_file : stderr;   // the game can look up a host before the constructor ran
+    fprintf(out, "%s [forever] ", ts);
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(log_file, fmt, ap);
+    vfprintf(out, fmt, ap);
     va_end(ap);
-    fputc('\n', log_file);
-    fflush(log_file);
+    fputc('\n', out);
+    fflush(out);
 }
 
 static int hex32(const char *s, uint8_t out[32]) {
@@ -192,6 +194,37 @@ static void *watch(void *arg) {
     }
     return NULL;
 }
+
+// Everlake (Test 1, docs/era-data.md): every hostname the game looks up goes to the log, and with FOREVER_BLOCK_HOSTS
+// (comma-separated name parts, e.g. "patch.battle.net,version.battle.net") those lookups fail as if offline. The gate2
+// test copy runs our own build of 1.60.1.70790; without this the game asks Blizzard's version service, sees a newer
+// live build and tries to update to it.
+static int blocked_host(const char *name) {
+    const char *list = getenv("FOREVER_BLOCK_HOSTS");
+    if (!name || !list || !*list) return 0;
+    char buf[512];
+    strncpy(buf, list, sizeof buf - 1);
+    buf[sizeof buf - 1] = 0;
+    for (char *tok = strtok(buf, ","); tok; tok = strtok(NULL, ","))
+        if (*tok && strstr(name, tok)) return 1;
+    return 0;
+}
+
+static int everlake_getaddrinfo(const char *node, const char *service, const struct addrinfo *hints,
+                                struct addrinfo **res) {
+    if (blocked_host(node)) {
+        say("dns %s: blocked", node);
+        return EAI_NONAME;
+    }
+    int rc = getaddrinfo(node, service, hints, res);
+    say("dns %s:%s -> %s", node ? node : "-", service ? service : "-", rc == 0 ? "ok" : gai_strerror(rc));
+    return rc;
+}
+
+__attribute__((used)) static struct { const void *replacement; const void *replacee; } everlake_interpose[]
+    __attribute__((section("__DATA,__interpose"))) = {
+    { (const void *)(unsigned long)&everlake_getaddrinfo, (const void *)(unsigned long)&getaddrinfo },
+};
 
 __attribute__((constructor)) static void start(void) {
     const char *path = getenv("FOREVER_PATCH_LOG");

@@ -9,6 +9,10 @@
 #   ./everlake-client.sh gate2-addon               (re-installs the gate2 prefetch addon in the test folder)
 #   ./everlake-client.sh gate2-inspect             (read-only check of the local storage, sent to the server)
 #   ./everlake-client.sh gate2-install             (puts the added files into the test folder's local storage; gate2-uninstall undoes)
+#   ./everlake-client.sh test1-addon [game folder]  (Test 1: installs the EverlakeTest1 addon; then play, then test1)
+#   ./everlake-client.sh test1 [game folder]        (Test 1 report: hotfixes, the addon's record, errors, screenshots)
+#   ./everlake-client.sh test1-ui                   (Test 1 UI: gate2 copy from the server's build, its files, the addon)
+#   ./everlake-client.sh fix-owner                  (gives the Everlake folder back to you after a run with sudo)
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -236,6 +240,11 @@ gate2_report() {
     root="$(dirname "$game")"; mark="$root/.everlake-gate2"
     say "gate2: test folder made $(stat -f '%Sm' "$mark" 2>/dev/null); .build.info wowf row:"
     grep -a '|wowf' "$root/.build.info" | cut -c1-300 | sed 's/^/    /' || true
+    say "gate2: who may write the test copy's storage (you are $(id -un), groups $(id -Gn | tr ' ' ','))"
+    for d in "$root/Data" "$root/Data/data" "$root/Data/config"; do
+        ls -ldeO@ "$d" 2>&1 | sed 's/^/    /'
+    done
+    ls -leO "$root/Data/data" 2>/dev/null | grep -E '\.idx$' | head -4 | sed 's/^/    /'
     gate2_folder_report "test copy" "$game" "$mark"
     real="$(find_game "" 2>/dev/null)" || real=""
     if [ -n "$real" ] && [ "$real" != "$game" ]; then
@@ -246,6 +255,49 @@ gate2_report() {
     say "gate2: any other game log written since gate2 ran:"
     { find "$HOME/Library/Logs" "$HOME/Library/Application Support/Battle.net" -maxdepth 4 -type f -newer "$mark" \
         -iname "*.log" 2>/dev/null || true; } | head -20 | sed 's/^/    /' || true
+}
+
+test1_report() {
+    # Test 1 (docs/era-data.md): what the client did with the Death Knight and Monk rows, read from the game folder.
+    local game="$1" mark="$SUPPORT/test1.mark" f n
+    say "test1: game folder $game, build $(game_build "$game") (the server takes 1.60.1.70790 only)"
+    say "test1: addon EverlakeTest1 $( [ -f "$game/Interface/AddOns/EverlakeTest1/EverlakeTest1.lua" ] && echo installed || echo MISSING: run test1-addon)"
+    say "test1: started $(stat -f '%Sm' "$mark" 2>/dev/null || echo '(no mark: run test1-addon first)')"
+    say "test1: hotfixes from our pushes (9540020-9540029 classes and spells, 9540010-9540015 talent tree, 9540030+ visuals) per table and result:"
+    grep -a -h -E "[^0-9]95400[0-3][0-9] Table " "$game/Logs/Hotfix.log" 2>/dev/null \
+        | awk '{for (i = 1; i <= NF; i++) if ($i == "Table") print $(i + 1), $NF}' | sort | uniq -c | sed 's/^/    /' || true
+    say "test1: our hotfix rows the client did NOT accept (first 40):"
+    grep -a -h -E "[^0-9]95400[0-3][0-9] Table " "$game/Logs/Hotfix.log" 2>/dev/null \
+        | grep -v "VALIDATION_RESULT_VALID" | head -n 40 | cut -c1-200 | sed 's/^/    /' || true
+    say "test1: the addon's record (SavedVariables EverlakeTest1.lua; written at /reload or logout):"
+    n=0
+    for f in "$game"/WTF/Account/*/SavedVariables/EverlakeTest1.lua; do
+        [ -f "$f" ] || continue
+        n=$((n + 1))
+        echo "  -- $f ($(stat -f '%Sm' "$f"))"
+        head -n 1500 "$f" | cut -c1-400 | sed 's/^/    /'
+    done
+    [ "$n" -gt 0 ] || echo "    (none yet)"
+    say "test1: logs written since test1-addon, error and character lines (last 80):"
+    { find "$game/Logs" -maxdepth 1 -type f -newer "$mark" 2>/dev/null || true; } | while read -r f; do
+        grep -a -H -i -E "error|invalid|fail|lua|script|charcreate|character create|class|exception|assert" "$f" 2>/dev/null \
+            | grep -v -E "Table [A-Za-z]+ RecID .* VALIDATION_RESULT_VALID|IBN_Resources" | tail -n 30 || true
+    done | tail -n 80 | cut -c1-260 | sed 's/^/    /'
+    say "test1: crash or error reports since test1-addon:"
+    { find "$game/Errors" -type f -newer "$mark" 2>/dev/null || true; } | head -3 | while read -r f; do
+        echo "  -- $(basename "$f")"; head -n 40 "$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /' || true
+    done
+    say "test1: screenshots since test1-addon, the game's and the Desktop's (each sent to the server as its own file):"
+    test1_shots "$game" | while read -r f; do
+        printf '    %s\t%s\n' "$(basename "$f")" "$(stat -f %z "$f")"
+    done
+}
+
+test1_shots() {
+    # Screenshots taken since test1-addon: the game's own (Screenshots folder) and macOS ones (Cmd+Shift+3 or 4, on
+    # the Desktop), newest 12.
+    { find "$1/Screenshots" "$HOME/Desktop" -maxdepth 1 -type f -newer "$SUPPORT/test1.mark" \
+        \( -iname "*.jpg" -o -iname "*.png" -o -iname "*.tga" \) 2>/dev/null || true; } | sort | tail -n 12
 }
 
 do_check() {
@@ -295,7 +347,19 @@ do_check() {
 }
 
 cmd="${1:-}"; shift || true
+# Run as yourself, never with sudo: the game runs as you and can't write files root made (2026-11-07, the gate2 copy).
+# The steps that need root (hosts file, CA trust, fix-owner) ask for your password themselves.
+if [ "$(id -u)" = 0 ]; then
+    die "don't run this with sudo or as root: run it as yourself (it asks for your password when it needs it). If the
+       gate2 copy was made as root, repair it once with: $0 fix-owner"
+fi
 case "$cmd" in
+    fix-owner)
+        # gives everything under the Everlake support folder back to you (after a run with sudo made files root's)
+        say "making $(id -un) the owner of $SUPPORT (asks for your password)"
+        sudo chown -R "$(id -un):staff" "$SUPPORT" || die "chown failed"
+        say "done. Next: $0 test1-ui, then $0 play <account email> gate2"
+        ;;
     setup)
         [ $# -ge 2 ] || die "usage: $0 setup <server address> <forever_root_ca.crt> [game folder]"
         GAME="$(find_game "${3:-}")" || die "game folder not found"
@@ -315,9 +379,15 @@ case "$cmd" in
         [ -f "$SUPPORT/forever_root_ca.crt" ] || die "no copy of the CA certificate: run setup again"
         ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup again"
         grep "$MARK" /etc/hosts | grep -q '^127\.0\.0\.1' || die "hosts entry is not 127.0.0.1: run setup again"
+        # a newer keypatch.c (git pull) is built before it's used
+        [ "$HERE/keypatch.c" -nt "$DYLIB" ] && build_dylib
+        BLOCK=""
         if [ -f "$(dirname "$GAME")/.everlake-gate2" ]; then
             say "gate2 test folder: the game's CDN is the server's port 80"
             start_forward "$ADDR" 80
+            # pin our build: the game must not learn about a newer live build from Blizzard's version service
+            BLOCK="patch.battle.net,version.battle.net"
+            say "gate2: Blizzard's version service blocked for the game ($BLOCK)"
         else
             start_forward "$ADDR"
         fi
@@ -329,6 +399,7 @@ case "$cmd" in
             --env "FOREVER_SERVER_KEY=$SERVER_KEY" \
             --env "FOREVER_REGION_GROUP=$REGION_GROUP" \
             --env "FOREVER_PATCH_LOG=$LOG" \
+            --env "FOREVER_BLOCK_HOSTS=$BLOCK" \
             --args -launcherlogin -config "$WTF_NAME"
         say "first realm login can fail with 'server identity check failed': click Reconnect"
         ;;
@@ -367,6 +438,13 @@ case "$cmd" in
         rm -rf "$SUPPORT/gate2"; mkdir -p "$TEST"
         say "cloning $ROOT into $TEST (APFS clones: instant, no extra space)..."
         cp -cR "$ROOT/Data" "$TEST/Data" || die "cloning failed: is the disk APFS?"
+        # the clone takes over the real install's ACLs, flags and modes; if Battle.net has locked those (seen
+        # 2026-11-07: the game got "Permission denied" on Data/data/*.idx and Data/config), the game can't use the copy
+        say "real install Data/data: $(ls -ldeO "$ROOT/Data/data" 2>&1 | head -3 | tr '\n' ' ')"
+        chflags -R nouchg,noschg "$TEST/Data" 2>/dev/null || true
+        chmod -RN "$TEST/Data" 2>/dev/null || true
+        chmod -R u+rwX "$TEST/Data" || die "could not make the test copy's Data writable"
+        say "test copy Data/data: $(ls -ldeO "$TEST/Data/data" 2>&1 | head -3 | tr '\n' ' ')"
         cp -cR "$GAME" "$TEST/$FLAVOR"
         for f in "$ROOT"/.[!.]*; do [ -f "$f" ] && cp -c "$f" "$TEST/"; done
         python3 "$HERE/buildinfo.py" "$TEST/.build.info" wowf "$BUILD_KEY" "$CDN_KEY" 127.0.0.1 || die ".build.info not changed"
@@ -429,6 +507,51 @@ case "$cmd" in
         GAME="$(find_game gate2)" || die "no gate2 test folder: run gate2 first"
         ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
         gate2_addon "$GAME" "$ADDR"
+        ;;
+    test1-ui)
+        # Test 1 UI (docs/era-data.md): the server's patched build switches on Blizzard's rune and Chi frames for
+        # Forever. Re-makes the gate2 test copy from that build, installs its files locally, then the test addon.
+        "$0" gate2 || die "gate2 failed"
+        "$0" gate2-install || die "gate2-install failed"
+        "$0" test1-addon gate2 || die "test1-addon failed"
+        say "ready. Next: $0 play <account email> gate2, log in with the Death Knight, then $0 test1 gate2"
+        ;;
+    test1-addon)
+        # Test 1 (docs/era-data.md): installs client/addons/EverlakeTest1 and marks the start of the test, so the
+        # test1 report only shows what happened afterwards. "gate2" as the folder means the gate2 test copy.
+        GAME="$(find_game "${1:-}")" || die "game folder not found"
+        mkdir -p "$SUPPORT" "$GAME/Interface/AddOns/EverlakeTest1"
+        cp "$HERE/../addons/EverlakeTest1/EverlakeTest1.toc" "$HERE/../addons/EverlakeTest1/EverlakeTest1.lua" \
+            "$GAME/Interface/AddOns/EverlakeTest1/"
+        touch "$SUPPORT/test1.mark"
+        say "EverlakeTest1 installed in $GAME (build $(game_build "$GAME")). Next: $0 play <account email> ${1:-}"
+        ;;
+    test1)
+        # Test 1 report, saved and sent to the server's report drop (port 8099) with the screenshots taken since
+        # test1-addon. Run it after logging out (the addon's record is written at logout or /reload).
+        GAME="$(find_game "${1:-}")" || die "game folder not found"
+        REPORT="$SUPPORT/test1.txt"; mkdir -p "$SUPPORT"
+        { test1_report "$GAME" 2>&1 || echo "[everlake] test1 report stopped early (exit $?)"; } | tee "$REPORT"
+        addr="$(server_addr)"
+        if [ -n "$addr" ] && curl -s -m 10 -T "$REPORT" "http://$addr:8099/test1-$(hostname -s)" >/dev/null; then
+            say "report sent to the server"
+            n=0
+            SHOTS="$SUPPORT/test1-shots"; rm -rf "$SHOTS"; mkdir -p "$SHOTS"
+            test1_shots "$GAME" | while read -r f; do
+                    n=$((n + 1))
+                    # macOS screenshots are large PNGs: send a JPEG at most 1600 pixels wide instead
+                    small="$SHOTS/$(basename "${f%.*}").jpg"
+                    sips -s format jpeg -s formatOptions 70 -Z 1600 "$f" --out "$small" >/dev/null 2>&1 && [ -s "$small" ] && f="$small"
+                    if [ "$(stat -f %z "$f")" -lt 2000000 ]; then
+                        curl -s -m 30 -T "$f" "http://$addr:8099/test1-shot-$n-$(basename "$f" | tr -c 'A-Za-z0-9._\n-' _)" >/dev/null \
+                            && say "sent $(basename "$f")" || say "could not send $(basename "$f")"
+                    else
+                        say "$(basename "$f") is over 2 MB, not sent"
+                    fi
+                done
+        else
+            say "report NOT sent (saved in $REPORT)"
+        fi
         ;;
     undo)
         stop_forward

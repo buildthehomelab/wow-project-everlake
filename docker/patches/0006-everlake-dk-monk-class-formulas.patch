@@ -1,0 +1,62 @@
+diff --git a/src/server/game/Entities/Player/Player.cpp b/src/server/game/Entities/Player/Player.cpp
+index a3bbcba..a5de1a9 100644
+--- a/src/server/game/Entities/Player/Player.cpp
++++ b/src/server/game/Entities/Player/Player.cpp
+@@ -5422,12 +5422,14 @@ static float ClassicAgilityRate(Player const* player, bool dodge)
+     float level1, level60;
+     switch (player->GetClass())
+     {
+-        case CLASS_ROGUE:   level1 = dodge ? 1.1f : 2.2f;  level60 = dodge ? 14.5f : 29.0f; break;
++        case CLASS_ROGUE:
++        case CLASS_MONK:    level1 = dodge ? 1.1f : 2.2f;  level60 = dodge ? 14.5f : 29.0f; break;  // Everlake Test 1: Monk as Rogue
+         case CLASS_HUNTER:  level1 = dodge ? 1.8f : 3.5f;  level60 = dodge ? 26.5f : 53.0f; break;
+         case CLASS_MAGE:    level1 = 12.9f; level60 = 20.0f; break;
+         case CLASS_PRIEST:  level1 = 11.0f; level60 = 20.0f; break;
+         case CLASS_WARLOCK: level1 = 8.4f;  level60 = 20.0f; break;
+-        case CLASS_WARRIOR: level1 = 3.9f;  level60 = 20.0f; break;
++        case CLASS_WARRIOR:
++        case CLASS_DEATH_KNIGHT: level1 = 3.9f; level60 = 20.0f; break;  // Everlake Test 1: Death Knight as Warrior
+         default:            level1 = 4.6f;  level60 = 20.0f; break;  // paladin, shaman, druid
+     }
+     float level = float(std::min<uint8>(player->GetLevel(), 60));
+diff --git a/src/server/game/Entities/Unit/StatSystem.cpp b/src/server/game/Entities/Unit/StatSystem.cpp
+index 49377fc..7dd5064 100644
+--- a/src/server/game/Entities/Unit/StatSystem.cpp
++++ b/src/server/game/Entities/Unit/StatSystem.cpp
+@@ -421,10 +421,12 @@ float Player::OCTRegenHPPerSpirit() const
+         case CLASS_HUNTER:  regen = spirit * 0.43f - 5.5f; break;
+         case CLASS_PALADIN: regen = spirit * 0.25f; break;
+         case CLASS_PRIEST:  regen = spirit * 0.15f + 1.4f; break;
+-        case CLASS_ROGUE:   regen = spirit * 0.84f - 13.0f; break;
++        case CLASS_ROGUE:
++        case CLASS_MONK:    regen = spirit * 0.84f - 13.0f; break;   // Everlake Test 1: the Monk regenerates as a Rogue
+         case CLASS_SHAMAN:  regen = spirit * 0.28f - 3.6f; break;
+         case CLASS_WARLOCK: regen = spirit * 0.12f + 1.5f; break;
+-        case CLASS_WARRIOR: regen = spirit * 1.26f - 22.6f; break;
++        case CLASS_WARRIOR:
++        case CLASS_DEATH_KNIGHT: regen = spirit * 1.26f - 22.6f; break;   // Everlake Test 1: the Death Knight as a Warrior
+         default:            regen = 0.0f; break;
+     }
+     return std::max(0.0f, regen);
+@@ -448,10 +450,12 @@ void Player::UpdateAttackPowerAndDamage(bool ranged)
+             {
+                 case CLASS_WARRIOR:
+                 case CLASS_PALADIN:
++                case CLASS_DEATH_KNIGHT:    // Everlake Test 1: the Death Knight as a Warrior
+                     val2 = level * 3.0f + strength * 2.0f - 20.0f;
+                     break;
+                 case CLASS_ROGUE:
+                 case CLASS_HUNTER:
++                case CLASS_MONK:            // Everlake Test 1: the Monk as a Rogue
+                     val2 = level * 2.0f + strength + agility - 20.0f;
+                     break;
+                 case CLASS_SHAMAN:
+@@ -476,6 +480,8 @@ void Player::UpdateAttackPowerAndDamage(bool ranged)
+                     break;
+                 case CLASS_ROGUE:
+                 case CLASS_WARRIOR:
++                case CLASS_DEATH_KNIGHT:    // Everlake Test 1
++                case CLASS_MONK:
+                     val2 = level + agility - 10.0f;
+                     break;
+                 case CLASS_DRUID:
