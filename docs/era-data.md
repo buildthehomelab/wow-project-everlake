@@ -283,11 +283,12 @@ errors show where.
   from vanilla spells (`sql/everlake/2026_11_07_05_hotfixes_test1_visuals.sql`, kit `test1_visuals.json`, push
   9540030): Death Coil's bolt gets the Warlock's Death Coil, Death Strike Heroic Strike, Obliterate Mortal Strike,
   Howling Blast Frost Nova, Anti-Magic Shell Power Word: Shield. The real ones need the retail visual and art files
-  in the client.
+  in the client. **Checked in game: Death Coil and Death Strike now animate, spend Runic Power and work.** At level 8
+  only those two are learned (Howling Blast comes at 10, Obliterate and Anti-Magic Shell at 14).
 - Not a bug: no XP in Northshire. The Death Knight starts at level 8, where anything level 3 or below is grey.
 - Still open:
   - Health doesn't regenerate out of combat: `Player::OCTRegenHPPerSpirit` has no case for classes 6 and 10 (core).
-  - Casting, damage, animations and tooltip text, the talent frame, and the Monk aren't checked yet.
+  - Tooltip text, Obliterate, Howling Blast and Anti-Magic Shell, the talent frame, and the Monk aren't checked yet.
 
 ### Follow-ups found on the way
 
