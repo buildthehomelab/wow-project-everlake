@@ -191,7 +191,9 @@ class Kit:
         for rid in spec["ids"]:
             if rid not in by_id:
                 raise SystemExit("%s %s has no ID %d" % (spec["build"], table, rid))
-            self.add(table, by_id[rid][0], sets.get(str(rid)), spec["build"])
+            over = dict(spec.get("set_all", {}))
+            over.update(sets.get(str(rid), {}))
+            self.add(table, by_id[rid][0], over or None, spec["build"])
 
     def spells(self, spec):
         build = spec["build"]

@@ -28,6 +28,7 @@
     {"table": "SkillLine", "build": "12.1.5.70783", "ids": [796]},
     {"table": "SkillRaceClassInfo", "build": "12.1.5.70783", "ids": [982]},
     {"table": "SkillLineAbility", "build": "12.1.5.70783", "ids": [47335, 51258]},
+    {"table": "SkillRaceClassInfo", "build": "1.60.1.70790", "set_all": {"ClassMask": 2047}, "ids": [4, 5, 6, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 68, 69, 70, 71, 72, 84, 85, 87, 88, 89, 91, 92, 93, 94, 148, 441, 442, 443, 445, 446, 461, 463, 464, 481, 501, 741, 742, 781, 841, 861, 862, 865, 2440, 2525, 2550]},
     {"table": "SkillLineAbility", "custom": [
       {"ID": 954031, "SkillLine": 796, "Spell": 49998, "MinSkillLineRank": 1, "ClassMask": 32, "AcquireMethod": 2, "RaceMasks_0": -1, "RaceMasks_1": -1},
       {"ID": 954032, "SkillLine": 796, "Spell": 49020, "MinSkillLineRank": 1, "ClassMask": 32, "AcquireMethod": 2, "RaceMasks_0": -1, "RaceMasks_1": -1},
