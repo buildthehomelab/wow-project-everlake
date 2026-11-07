@@ -191,7 +191,18 @@ gate2_report() {
     ls -l "$game/Logs" 2>/dev/null | awk 'NR>1{print "    " $5 "\t" $9}'
     say "gate2: storage, streaming and CDN lines from every log (last 60):"
     grep -a -h -i -E "cas[^a-z]|casc|tact|stream|loose|resident|armadillo|cdn|build key|encoding|root|vfs|repair|missing|not found|failed to (open|read|load)|http|40[34]|5[0-9][0-9] " \
-        "$game/Logs"/*.log 2>/dev/null | grep -v -E "IBN_Resources|title icons" | tail -n 60 | cut -c1-260 | sed 's/^/    /'
+        "$game/Logs"/*.log 2>/dev/null | grep -v -E "IBN_Resources|title icons|Table TactKey" | tail -n 60 | cut -c1-260 | sed 's/^/    /'
+    say "gate2: Tact.log (last 40 lines):"
+    tail -n 40 "$game/Logs/Tact.log" 2>/dev/null | cut -c1-260 | sed 's/^/    /'
+    say "gate2: hotfixes for our map and zones (Map, MapDifficulty, AreaTable), last 30:"
+    grep -a -h -E "Table (Map|MapDifficulty|AreaTable) " "$game/Logs/Hotfix.log" 2>/dev/null | tail -n 30 | cut -c1-200 | sed 's/^/    /'
+    say "gate2: streaming, map and error lines from every log (last 40):"
+    grep -a -h -i -E "WOW519|streaming error|stream.*(fail|error)|map ?id|mapid|530|wdt|new world|transfer|worldport|disconnect" \
+        "$game/Logs"/*.log 2>/dev/null | grep -v -E "IBN_Resources|title icons" | tail -n 40 | cut -c1-260 | sed 's/^/    /'
+    say "gate2: crash or error reports in the game folder (newest 3):"
+    ls -t "$game/Errors" 2>/dev/null | head -3 | while read -r f; do
+        echo "  -- $f"; head -n 30 "$game/Errors/$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /'
+    done
     say "gate2: files in Data written since gate2 ran (newest 40):"
     find "$root/Data" -type f -newer "$mark" 2>/dev/null | head -400 | while read -r f; do
         printf '    %s\t%s\n' "$(stat -f %z "$f")" "${f#"$root"/}"
