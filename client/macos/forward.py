@@ -52,7 +52,11 @@ async def main():
         sys.exit(__doc__)
     server = sys.argv[1]
     ports = [int(p) for p in sys.argv[2:]] or PORTS
-    servers = [await asyncio.start_server(handler(server, p), "127.0.0.1", p) for p in ports]
+    # macOS lets a normal user listen on a port below 1024 (80, the gate2 CDN) only on every address, not on
+    # 127.0.0.1 alone ("permission denied" without sudo). Those ports listen on 0.0.0.0: the LAN could then reach this
+    # Mac's port 80, which only leads to the server's CDN, already open to the LAN itself. The others stay local.
+    servers = [await asyncio.start_server(handler(server, p), "0.0.0.0" if p < 1024 else "127.0.0.1", p)
+               for p in ports]
     print(f"[forward] 127.0.0.1:{','.join(map(str, ports))} -> {server}", flush=True)
     # our own pid, once every port listens: macOS's /usr/bin/python3 is a stub that runs the real Python as a child,
     # so the pid the shell saw isn't the one holding the ports
