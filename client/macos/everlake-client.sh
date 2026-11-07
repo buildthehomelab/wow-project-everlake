@@ -334,6 +334,13 @@ case "$cmd" in
         BUILD_KEY="${KEYS% *}"; CDN_KEY="${KEYS#* }"
         say "patched build from the server: build key $BUILD_KEY, CDN key $CDN_KEY"
         TEST="$SUPPORT/gate2/World of Warcraft"
+        # keep the last test run's logs: re-making the folder would otherwise delete the evidence of a failure
+        if [ -d "$TEST/$FLAVOR/Logs" ]; then
+            KEEP="$SUPPORT/gate2-logs/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$KEEP"
+            cp -R "$TEST/$FLAVOR/Logs" "$KEEP/" 2>/dev/null || true
+            [ -d "$TEST/$FLAVOR/Errors" ] && cp -R "$TEST/$FLAVOR/Errors" "$KEEP/" 2>/dev/null || true
+            say "kept the previous test run's logs in $KEEP"
+        fi
         rm -rf "$SUPPORT/gate2"; mkdir -p "$TEST"
         say "cloning $ROOT into $TEST (APFS clones: instant, no extra space)..."
         cp -cR "$ROOT/Data" "$TEST/Data" || die "cloning failed: is the disk APFS?"
