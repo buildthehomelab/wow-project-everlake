@@ -189,10 +189,10 @@ gate2_folder_report() {
     { find "$game/Logs" -maxdepth 1 -type f -newer "$mark" 2>/dev/null || true; } | while read -r f; do
         printf '    %s\t%s\t%s\n' "$(stat -f '%Sm' -t '%H:%M:%S' "$f")" "$(stat -f %z "$f")" "$(basename "$f")"
     done || true
-    say "gate2 [$label] every log written since gate2 ran, last 25 lines each (raw):"
+    say "gate2 [$label] every log written since gate2 ran, last 80 lines each (raw):"
     { find "$game/Logs" -maxdepth 1 -type f -newer "$mark" -size +0 2>/dev/null || true; } | while read -r f; do
         echo "  -- $(basename "$f")"
-        tail -n 25 "$f" 2>/dev/null | grep -v -E "Fully Compacted|Table [A-Za-z]+ RecID" | cut -c1-260 | sed 's/^/    /' || true
+        tail -n 80 "$f" 2>/dev/null | grep -v -E "Fully Compacted|Table [A-Za-z]+ RecID" | cut -c1-260 | sed 's/^/    /' || true
     done || true
     say "gate2 [$label] Tact.log (last 40 lines):"
     tail -n 40 "$game/Logs/Tact.log" 2>/dev/null | cut -c1-260 | sed 's/^/    /' || true
