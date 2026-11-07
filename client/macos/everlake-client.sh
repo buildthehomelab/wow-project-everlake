@@ -239,6 +239,11 @@ gate2_report() {
     root="$(dirname "$game")"; mark="$root/.everlake-gate2"
     say "gate2: test folder made $(stat -f '%Sm' "$mark" 2>/dev/null); .build.info wowf row:"
     grep -a '|wowf' "$root/.build.info" | cut -c1-300 | sed 's/^/    /' || true
+    say "gate2: who may write the test copy's storage (you are $(id -un), groups $(id -Gn | tr ' ' ','))"
+    for d in "$root/Data" "$root/Data/data" "$root/Data/config"; do
+        ls -ldeO@ "$d" 2>&1 | sed 's/^/    /'
+    done
+    ls -leO "$root/Data/data" 2>/dev/null | grep -E '\.idx$' | head -4 | sed 's/^/    /'
     gate2_folder_report "test copy" "$game" "$mark"
     real="$(find_game "" 2>/dev/null)" || real=""
     if [ -n "$real" ] && [ "$real" != "$game" ]; then
@@ -420,6 +425,13 @@ case "$cmd" in
         rm -rf "$SUPPORT/gate2"; mkdir -p "$TEST"
         say "cloning $ROOT into $TEST (APFS clones: instant, no extra space)..."
         cp -cR "$ROOT/Data" "$TEST/Data" || die "cloning failed: is the disk APFS?"
+        # the clone takes over the real install's ACLs, flags and modes; if Battle.net has locked those (seen
+        # 2026-11-07: the game got "Permission denied" on Data/data/*.idx and Data/config), the game can't use the copy
+        say "real install Data/data: $(ls -ldeO "$ROOT/Data/data" 2>&1 | head -3 | tr '\n' ' ')"
+        chflags -R nouchg,noschg "$TEST/Data" 2>/dev/null || true
+        chmod -RN "$TEST/Data" 2>/dev/null || true
+        chmod -R u+rwX "$TEST/Data" || die "could not make the test copy's Data writable"
+        say "test copy Data/data: $(ls -ldeO "$TEST/Data/data" 2>&1 | head -3 | tr '\n' ' ')"
         cp -cR "$GAME" "$TEST/$FLAVOR"
         for f in "$ROOT"/.[!.]*; do [ -f "$f" ] && cp -c "$f" "$TEST/"; done
         python3 "$HERE/buildinfo.py" "$TEST/.build.info" wowf "$BUILD_KEY" "$CDN_KEY" 127.0.0.1 || die ".build.info not changed"
