@@ -1,4 +1,4 @@
-// From jibay442/forever_docker app/macos/keypatch.c (GPL-2.0), unchanged apart from this line.
+// From jibay442/forever_docker app/macos/keypatch.c (GPL-2.0), plus the Everlake additions marked below.
 // Loaded into the re-signed macOS client with DYLD_INSERT_LIBRARIES: writes the server's public key into the
 // client's key store, from inside the process (the official app is hardened, so task_for_pid is refused).
 //
@@ -6,9 +6,11 @@
 // u8 flag, 3 bytes padding) in a heap array; the entry of the region group (8) gets the server's key.
 //
 // Environment: FOREVER_SERVER_KEY (64 hex chars, default: TrinityCore), FOREVER_REGION_GROUP (default 8),
-// FOREVER_PATCH_LOG (log file, default: stderr).
+// FOREVER_PATCH_LOG (log file, default: stderr), FOREVER_ANY_PORTAL (1: accept a login name of our own, see below).
 
 #include <mach/mach.h>
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
 #include <netdb.h>
 #include <mach/mach_vm.h>
 #include <pthread.h>
@@ -226,12 +228,101 @@ __attribute__((used)) static struct { const void *replacement; const void *repla
     { (const void *)(unsigned long)&everlake_getaddrinfo, (const void *)(unsigned long)&getaddrinfo },
 };
 
+// Everlake: a login name of our own (docs/client-connection.md). The client only logs in at names ending in one of
+// Blizzard's domains: a table of {suffix, suffix length, sign-in page} entries, ".actual.battle.net" (18) first. Like
+// Arctium's launcher (src/Patterns/Common.cs, Portal), the ending is blanked, so every name ends with it; its length in
+// the table is set to 0 as well, in case the check compares that many bytes. Read in the Windows Wow.exe of
+// 1.60.1.70790; the Mac build is assumed to hold the same table. Runs in the constructor, before the game reads it.
+static const char PORTAL_SUFFIX[] = ".actual.battle.net";
+
+// Writes into the game's own image: read-only pages get a private writable copy, then their protection back.
+static int write_image(void *at, const void *src, size_t len) {
+    mach_vm_address_t page = (mach_vm_address_t)at & ~((mach_vm_address_t)vm_page_size - 1);
+    mach_vm_size_t span = (((mach_vm_address_t)at + len - page) + vm_page_size - 1) & ~((mach_vm_size_t)vm_page_size - 1);
+    mach_vm_address_t region = page;
+    mach_vm_size_t size = 0;
+    vm_region_basic_info_data_64_t info;
+    mach_msg_type_number_t cnt = VM_REGION_BASIC_INFO_COUNT_64;
+    mach_port_t obj;
+    if (mach_vm_region(mach_task_self(), &region, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &cnt, &obj) !=
+        KERN_SUCCESS)
+        return 0;
+    if (mach_vm_protect(mach_task_self(), page, span, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY) != KERN_SUCCESS)
+        return 0;
+    memcpy(at, src, len);
+    mach_vm_protect(mach_task_self(), page, span, FALSE, info.protection);
+    return 1;
+}
+
+static void any_portal(void) {
+    const struct mach_header_64 *mh = NULL;
+    intptr_t slide = 0;
+    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
+        const struct mach_header *h = _dyld_get_image_header(i);
+        if (h && h->filetype == MH_EXECUTE && h->magic == MH_MAGIC_64) {
+            mh = (const struct mach_header_64 *)h;
+            slide = _dyld_get_image_vmaddr_slide(i);
+            break;
+        }
+    }
+    if (!mh) {
+        say("login name: game image not found, not patched");
+        return;
+    }
+    size_t slen = sizeof PORTAL_SUFFIX - 1;
+    uint8_t *found[8];
+    int nfound = 0, lengths = 0;
+    // 1. the ending, as a string of its own (a NUL before and after), in any data section of the game
+    const struct load_command *lc = (const struct load_command *)(mh + 1);
+    for (uint32_t c = 0; c < mh->ncmds; c++, lc = (const struct load_command *)((const uint8_t *)lc + lc->cmdsize)) {
+        if (lc->cmd != LC_SEGMENT_64) continue;
+        const struct segment_command_64 *seg = (const struct segment_command_64 *)lc;
+        const struct section_64 *sect = (const struct section_64 *)(seg + 1);
+        for (uint32_t s = 0; s < seg->nsects; s++, sect++) {
+            if (sect->flags & (S_ATTR_PURE_INSTRUCTIONS | S_ATTR_SOME_INSTRUCTIONS)) continue;
+            if ((sect->flags & SECTION_TYPE) == S_ZEROFILL) continue;
+            uint8_t *base = (uint8_t *)(sect->addr + slide), *end = base + sect->size;
+            for (uint8_t *p = base; p + slen < end && (p = memmem(p, end - p, PORTAL_SUFFIX, slen + 1)); p++) {
+                if ((p == base || p[-1] == 0) && nfound < 8) found[nfound++] = p;
+            }
+        }
+    }
+    if (!nfound) {
+        say("login name: \"%s\" not found in the game, not patched", PORTAL_SUFFIX);
+        return;
+    }
+    // 2. table entries pointing at it: {char *suffix; size_t length; ...}, length 18 -> 0
+    lc = (const struct load_command *)(mh + 1);
+    for (uint32_t c = 0; c < mh->ncmds; c++, lc = (const struct load_command *)((const uint8_t *)lc + lc->cmdsize)) {
+        if (lc->cmd != LC_SEGMENT_64) continue;
+        const struct segment_command_64 *seg = (const struct segment_command_64 *)lc;
+        if (strncmp(seg->segname, "__DATA", 6) != 0 && strncmp(seg->segname, "__AUTH", 6) != 0) continue;
+        uint64_t *p = (uint64_t *)(seg->vmaddr + slide), *end = (uint64_t *)(seg->vmaddr + slide + seg->filesize);
+        for (; p + 1 < end; p++) {
+            for (int f = 0; f < nfound; f++) {
+                if (p[0] == (uint64_t)(uintptr_t)found[f] && p[1] == slen) {
+                    uint64_t zero = 0;
+                    if (write_image(&p[1], &zero, sizeof zero)) lengths++;
+                }
+            }
+        }
+    }
+    // 3. the ending itself
+    int blanked = 0;
+    uint8_t zeros[sizeof PORTAL_SUFFIX - 1] = {0};
+    for (int f = 0; f < nfound; f++) blanked += write_image(found[f], zeros, slen);
+    say("login name: any name allowed (%d of %d \"%s\" blanked, %d table length(s) zeroed)", blanked, nfound,
+        PORTAL_SUFFIX, lengths);
+}
+
 __attribute__((constructor)) static void start(void) {
     const char *path = getenv("FOREVER_PATCH_LOG");
     log_file = path ? fopen(path, "a") : NULL;
     if (!log_file) log_file = stderr;
     // Child processes (helpers) must not inherit the injection.
     unsetenv("DYLD_INSERT_LIBRARIES");
+    const char *any = getenv("FOREVER_ANY_PORTAL");
+    if (any && strcmp(any, "1") == 0) any_portal();
 
     for (int i = 0; i < COUNT; i++) hex32(KNOWN_KEYS[i], keys[i]);
     const char *key = getenv("FOREVER_SERVER_KEY");

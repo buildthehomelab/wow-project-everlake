@@ -20,6 +20,10 @@ OVERRIDES="$ROOT/overrides"
 : "${REALM_NAME:=Forever}"
 : "${REALM_ID:=70}"
 : "${LOGIN_HOSTNAME:=trinity.actual.battle.net}"
+# The login server's certificate chain and key, in $CERTS: scripts/gen-certs.sh's by default, or a real certificate
+# for LOGIN_HOSTNAME (e.g. Let's Encrypt's fullchain.pem and privkey.pem, see docs/client-connection.md)
+: "${CERT_FILE:=forever.cert.pem}"
+: "${KEY_FILE:=forever.key.pem}"
 
 # setkey <file> <key> <value>: replaces "key = ..." or appends it when the .dist has no such line
 # (awk + ENVIRON, so passwords containing & \ | / are written verbatim)
@@ -130,8 +134,8 @@ configure_bnetserver() {
     setkey "$f" BindIP '"0.0.0.0"'
     setkey "$f" LoginREST.ExternalAddress "$LOGIN_HOSTNAME"
     setkey "$f" LoginREST.LocalAddress "$LOGIN_HOSTNAME"
-    setkey "$f" CertificatesFile "\"$CERTS/forever.cert.pem\""
-    setkey "$f" PrivateKeyFile "\"$CERTS/forever.key.pem\""
+    setkey "$f" CertificatesFile "\"$CERTS/$CERT_FILE\""
+    setkey "$f" PrivateKeyFile "\"$CERTS/$KEY_FILE\""
     setkey "$f" LogsDir "\"$ROOT/logs\""
     setkey "$f" Realm.CfgContentSetID 137
     setkey "$f" Realm.SuperDistrictID 2

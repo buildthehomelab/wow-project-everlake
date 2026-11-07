@@ -82,9 +82,13 @@ services:
       REALM_LOCAL_ADDRESS: ${REALM_LOCAL_ADDRESS:-127.0.0.1}
       REALM_LOCAL_SUBNET_MASK: ${REALM_LOCAL_SUBNET_MASK:-255.255.255.0}
       REALM_NAME: ${REALM_NAME:-Everlake}
-    # bnetserver refuses to start if it cannot resolve the LoginREST hostname itself
+      LOGIN_HOSTNAME: ${LOGIN_HOSTNAME:-trinity.actual.battle.net}
+      CERT_FILE: ${CERT_FILE:-forever.cert.pem}
+      KEY_FILE: ${KEY_FILE:-forever.key.pem}
+    # bnetserver refuses to start if it cannot resolve the LoginREST hostname itself. It only checks that the name
+    # resolves (it hands players the name, not an address), so inside the container it may point at itself.
     extra_hosts:
-      - "trinity.actual.battle.net:${PUBLIC_ADDRESS:-127.0.0.1}"
+      - "${LOGIN_HOSTNAME:-trinity.actual.battle.net}:127.0.0.1"
     ports:
       - "1119:1119"
       - "8081:8081"
