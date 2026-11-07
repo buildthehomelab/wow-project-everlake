@@ -11,6 +11,9 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove four 
 3. **Bots scale**: PlayerbotV2 at 500, 1,000 and 2,500 bots, measuring server CPU and update time.
 4. **Characters move**: one character converted from an AzerothCore 3.3.5 server.
 
+Future idea, not a gate: extra **game modes** next to the rulesets (Plunderstorm, Remix), as more ruleset cards
+([research](docs/game-modes.md)).
+
 ## What's here
 
 | Path | What it is |
