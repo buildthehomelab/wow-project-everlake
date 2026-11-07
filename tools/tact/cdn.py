@@ -7,6 +7,9 @@ Serves the folder patch.py wrote (<cdn path>/config/.., <cdn path>/data/..) with
 does. Any other path is fetched from Blizzard's CDN hosts named in build.json (with the same byte range) and
 streamed back, so the client sees one CDN that has Blizzard's build plus ours. Every request is logged with where
 it was answered from, which is the point of the experiment: it shows what the client asks for.
+
+/everlake/build.json answers with the folder's build.json (the build and CDN keys), which
+`everlake-client.sh gate2` reads so nobody has to type the keys.
 """
 import argparse
 import http.server
@@ -47,6 +50,9 @@ def make_handler(folder, hosts, out):
         def answer(self, head):
             path = self.path.split("?")[0]
             want = self.headers.get("Range")
+            if path == "/everlake/build.json":  # the keys, so the mini's gate2 needs no arguments
+                self.serve_local(os.path.join(folder, "build.json"), None, head, path)
+                return
             local = os.path.normpath(os.path.join(folder, path.lstrip("/")))
             if local.startswith(folder + os.sep) and os.path.isfile(local):
                 self.serve_local(local, want, head, path)

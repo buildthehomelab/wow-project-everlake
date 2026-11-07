@@ -133,8 +133,8 @@ python3 tools/tact/cdn.py --dir <dir> --port 80 --log <dir>/cdn.log
 On the mini:
 
 ```sh
-./client/macos/everlake-client.sh gate2 <build key> <CDN key>
-./client/macos/everlake-client.sh play <account email> "<test folder>/_forever_"
+./client/macos/everlake-client.sh gate2                       # reads the build keys from the server
+./client/macos/everlake-client.sh play <account email> gate2
 ```
 
 Then look at the Hearthstone in your bags.

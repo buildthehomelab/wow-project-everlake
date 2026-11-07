@@ -5,7 +5,7 @@
 #   ./everlake-client.sh play  <account email> [game folder]
 #   ./everlake-client.sh check [game folder]
 #   ./everlake-client.sh undo  [game folder]
-#   ./everlake-client.sh gate2 <build key> <CDN key> [game folder]
+#   ./everlake-client.sh gate2 [game folder]       (then: play <account email> gate2, check gate2)
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -23,8 +23,8 @@
 # undo: stops the forwarder, removes the hosts entry, the CA trust and the copy.
 # gate2 (docs/custom-files.md, experiment 1): makes a test game folder in Application Support from APFS clones
 #       (instant, no extra disk space; the Battle.net install is never changed) whose .build.info points at the
-#       patched build and at the server's CDN (tools/tact/cdn.py on port 80, reached through the forwarder).
-#       It prints the play command for the test folder.
+#       patched build and at the server's CDN (tools/tact/cdn.py on port 80, reached through the forwarder). The
+#       build keys come from the server. Afterwards the word gate2 stands for the test folder: play <email> gate2.
 #
 # Based on jibay442/forever_docker's macOS launcher (GPL-2.0), see docs/client-connection.md.
 set -euo pipefail
@@ -43,6 +43,7 @@ REGION_GROUP="${EVERLAKE_REGION_GROUP:-8}"
 SERVER_FILE="$SUPPORT/server.txt"
 FORWARD_PID="$SUPPORT/forward.pid"
 FORWARD_LOG="$SUPPORT/forward.log"
+GATE2_FILE="$SUPPORT/gate2/game.txt"
 
 say() { printf '\033[1m[everlake]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[everlake] %s\033[0m\n' "$*" >&2; exit 1; }
@@ -51,6 +52,10 @@ die() { printf '\033[1;31m[everlake] %s\033[0m\n' "$*" >&2; exit 1; }
 # Prints it, or a reason on stderr and returns 1. (No exit in here: macOS bash 3.2 ends the whole script when a
 # function in $(...) exits under set -e, whatever follows it.)
 find_game() {
+    if [ "${1:-}" = gate2 ]; then  # the test folder the gate2 command made
+        if [ ! -f "$GATE2_FILE" ]; then echo "no gate2 test folder: run gate2 first" >&2; return 1; fi
+        set -- "$(cat "$GATE2_FILE")"
+    fi
     if [ -n "${1:-}" ]; then
         if [ ! -d "$1/World of Warcraft.app" ]; then
             echo "no 'World of Warcraft.app' in $1" >&2; return 1
@@ -268,14 +273,17 @@ case "$cmd" in
         fi
         ;;
     gate2)
-        [ $# -ge 2 ] || die "usage: $0 gate2 <build key> <CDN key> [game folder]"
-        BUILD_KEY="$1"; CDN_KEY="$2"
-        GAME="$(find_game "${3:-}")" || die "game folder not found"
+        GAME="$(find_game "${1:-}")" || die "game folder not found"
         [ -d "$GAME/$COPY_NAME" ] || die "no game copy: run setup first"
         ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
         ROOT="$(dirname "$GAME")"; FLAVOR="$(basename "$GAME")"
         [ -d "$ROOT/Data" ] && [ -f "$ROOT/.build.info" ] || die "no Data folder or .build.info in $ROOT"
         nc -z -G 3 "$ADDR" 80 2>/dev/null || die "the server's CDN (port 80) is not reachable: start tools/tact/cdn.py there"
+        KEYS="$(curl -sf -m 10 "http://$ADDR/everlake/build.json" \
+            | python3 -c 'import json,sys; b=json.load(sys.stdin); print(b["build_key"], b["cdn_key"])')" \
+            || die "could not read the build keys from the server's CDN"
+        BUILD_KEY="${KEYS% *}"; CDN_KEY="${KEYS#* }"
+        say "patched build from the server: build key $BUILD_KEY, CDN key $CDN_KEY"
         TEST="$SUPPORT/gate2/World of Warcraft"
         rm -rf "$SUPPORT/gate2"; mkdir -p "$TEST"
         say "cloning $ROOT into $TEST (APFS clones: instant, no extra space)..."
@@ -290,9 +298,10 @@ case "$cmd" in
             [ "$(md5 -q "$d/$key")" = "$key" ] || die "config $key does not match its name"
         done
         touch "$TEST/.everlake-gate2"
-        say "test folder ready. Original install untouched. Start it with:"
-        say "  $0 play <account email> \"$TEST/$FLAVOR\""
-        say "then: does the Hearthstone show the Ragnaros icon? Afterwards run: $0 check \"$TEST/$FLAVOR\""
+        echo "$TEST/$FLAVOR" > "$GATE2_FILE"
+        say "test folder ready ($TEST/$FLAVOR). Original install untouched. Start it with:"
+        say "  $0 play <account email> gate2"
+        say "then: does the Hearthstone show the Ragnaros icon? Afterwards run: $0 check gate2"
         ;;
     undo)
         stop_forward
