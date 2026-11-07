@@ -11,6 +11,7 @@
 #   ./everlake-client.sh gate2-install             (puts the added files into the test folder's local storage; gate2-uninstall undoes)
 #   ./everlake-client.sh test1-addon [game folder]  (Test 1: installs the EverlakeTest1 addon; then play, then test1)
 #   ./everlake-client.sh test1 [game folder]        (Test 1 report: hotfixes, the addon's record, errors, screenshots)
+#   ./everlake-client.sh test1-ui                   (Test 1 UI: gate2 copy from the server's build, its files, the addon)
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -474,6 +475,14 @@ case "$cmd" in
         GAME="$(find_game gate2)" || die "no gate2 test folder: run gate2 first"
         ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
         gate2_addon "$GAME" "$ADDR"
+        ;;
+    test1-ui)
+        # Test 1 UI (docs/era-data.md): the server's patched build switches on Blizzard's rune and Chi frames for
+        # Forever. Re-makes the gate2 test copy from that build, installs its files locally, then the test addon.
+        "$0" gate2 || die "gate2 failed"
+        "$0" gate2-install || die "gate2-install failed"
+        "$0" test1-addon gate2 || die "test1-addon failed"
+        say "ready. Next: $0 play <account email> gate2, log in with the Death Knight, then $0 test1 gate2"
         ;;
     test1-addon)
         # Test 1 (docs/era-data.md): installs client/addons/EverlakeTest1 and marks the start of the test, so the
