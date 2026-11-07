@@ -404,7 +404,11 @@ case "$cmd" in
             n=$((n + 1))
         done < "$FILES/list.txt"
         say "downloaded $n files from the server; installing into $DATA"
-        python3 "$HERE/casc_local.py" install "$DATA" "$FILES" || die "install failed (nothing half-done: index files are only replaced after every check)"
+        LOG="$SUPPORT/install.txt"
+        if python3 "$HERE/casc_local.py" install "$DATA" "$FILES" > "$LOG" 2>&1; then OK=1; else OK=0; fi
+        cat "$LOG"
+        curl -s -m 10 -T "$LOG" "http://$ADDR:8099/install-$(hostname -s)" >/dev/null && say "output sent to the server" || true
+        [ "$OK" = 1 ] || die "install failed (nothing half-done: index files are only replaced after every check)"
         say "done. Undo with: $0 gate2-uninstall"
         ;;
     gate2-inspect)

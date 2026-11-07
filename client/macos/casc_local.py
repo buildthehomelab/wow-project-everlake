@@ -230,9 +230,6 @@ def rebuild_index(ix, add):
     if ix.layout != "continuous" or ix.entry_len != 18 or not ix.header_ok:
         raise ValueError("%s: only the continuous version 7 layout is written" % ix.path)
     old = ix.data[ix.block_at + 8:ix.block_at + 8 + ix.block_size]
-    tail = ix.data[ix.block_at + 8 + ix.block_size:]
-    if tail.strip(b"\0"):
-        raise ValueError("%s: data after the entries; not touching it" % ix.path)
     entries = sorted([old[i:i + 18] for i in range(0, len(old), 18)] + list(add))
     raw = b"".join(entries)
     hi = lo = 0
@@ -241,7 +238,9 @@ def rebuild_index(ix, add):
     out = ix.data[:ix.block_at] + struct.pack("<II", len(raw), hi) + raw
     if len(out) > len(ix.data):
         raise ValueError("%s: no room for %d more entries" % (ix.path, len(add)))
-    return out + bytes(len(ix.data) - len(out))
+    # whatever follows the entries (zeros, or old bytes the client left there) stays as it was: the block's size
+    # field says where the entries end, as in the files the client writes itself
+    return out + ix.data[len(out):]
 
 
 def install(data_root, files, log=print):
