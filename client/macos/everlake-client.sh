@@ -6,6 +6,7 @@
 #   ./everlake-client.sh check [game folder]
 #   ./everlake-client.sh undo  [game folder]
 #   ./everlake-client.sh gate2 [game folder]       (then: play <account email> gate2, check gate2)
+#   ./everlake-client.sh gate2-addon               (re-installs the gate2 prefetch addon in the test folder)
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -178,6 +179,21 @@ write_wtf() {
     } > "$out.tmp"
     mv "$out.tmp" "$out"
     say "wrote $out"
+}
+
+gate2_addon() {
+    # Installs client/addons/EverlakePrefetch into a gate2 test folder, with the list of added files taken from the
+    # server's build.json. On login it asks the client for each file, so they are stored locally before a map
+    # that needs them loads.
+    local game="$1" addr="$2" dest="$1/Interface/AddOns/EverlakePrefetch"
+    mkdir -p "$dest"
+    cp "$HERE/../addons/EverlakePrefetch/EverlakePrefetch.toc" "$HERE/../addons/EverlakePrefetch/EverlakePrefetch.lua" "$dest/"
+    curl -sf -m 10 "http://$addr/everlake/build.json" | python3 -c '
+import json, sys
+ids = sorted(int(f) for f in json.load(sys.stdin)["files"])
+print("EverlakePrefetchList = {%s}" % ", ".join(map(str, ids)))' > "$dest/EverlakePrefetchList.lua" \
+        || die "could not read the file list from the server's CDN"
+    say "addon EverlakePrefetch installed in the test folder ($(grep -o '[0-9]\+' "$dest/EverlakePrefetchList.lua" | wc -l | tr -d ' ') files)"
 }
 
 gate2_folder_report() {
@@ -360,9 +376,16 @@ case "$cmd" in
         done
         touch "$TEST/.everlake-gate2"
         echo "$TEST/$FLAVOR" > "$GATE2_FILE"
+        gate2_addon "$TEST/$FLAVOR" "$ADDR"
         say "test folder ready ($TEST/$FLAVOR). Original install untouched. Start it with:"
         say "  $0 play <account email> gate2"
         say "then: does the Hearthstone show the Ragnaros icon? Afterwards run: $0 check gate2"
+        ;;
+    gate2-addon)
+        # (re)install the prefetch addon in the existing test folder, without making the folder again
+        GAME="$(find_game gate2)" || die "no gate2 test folder: run gate2 first"
+        ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
+        gate2_addon "$GAME" "$ADDR"
         ;;
     undo)
         stop_forward

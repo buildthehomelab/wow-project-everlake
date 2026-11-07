@@ -1,0 +1,6 @@
+## Interface: 11507, 11508, 16000, 16001, 16100, 120000, 120001
+## Title: Everlake Prefetch
+## Notes: Gate 2 test: asks the client for our added map files so they are stored locally before the map loads.
+## Version: 0.1.0
+EverlakePrefetchList.lua
+EverlakePrefetch.lua
