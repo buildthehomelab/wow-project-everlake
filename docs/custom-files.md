@@ -171,6 +171,41 @@ Then look at the Hearthstone in your bags.
   into the clone's `Data`.
 - **The client refuses the build:** the game log says why (version check, invalid build key, Armadillo).
 
+## Experiment 2 PASSED (2026-11-07, 01:10): Sunstrider Isle in the Forever client
+
+Ora teleported to map 530 and saw **Sunstrider Isle**: TBC Anniversary terrain drawn by the Forever client, on a map
+the client doesn't have, sent by our own server and CDN.
+
+**What it took:**
+- **Terrain:** 43 files from TBC Anniversary 2.5.6 (`collect.py`): the WDT and its 6 companions, plus 4 files each
+  for the 3×3 tiles around Sunstrider Isle. All 178 textures, models and buildings they use are already in Forever.
+- **The map, by hotfix** (`sql/everlake/2026_11_07_00_hotfixes_gate2_map530.sql`):
+  - A Map row modelled on Forever's Kalimdor, with **ExpansionID 0**: the core refuses a map above the account's
+    expansion, and Forever accounts are 0.
+  - A MapDifficulty row, and the 9 AreaTable rows of those tiles.
+  - The client accepted every row as valid.
+- **The WDT trimmed to the shipped tiles** (`collect.py --only-tiles`). This was the actual fix. Outland's WDT lists
+  800 tiles, and with 791 missing the client throws **WOW51900322 "a streaming error has occurred"** the moment the
+  map loads, before any request reaches the CDN. Map 530 pointed at Kalimdor's WDT loaded fine, which narrowed it
+  down.
+- **Local storage** (`client/macos/casc_local.py`, `gate2-install`): the trimmed WDT has new bytes, so it was
+  written into the game's own storage, in a new `data.048` (38 files, 8.4 MB, 16 index files updated, all read back
+  good), and the client read it from there.
+
+**Things learned on the way:**
+- **The client finds a file by TVFS path** (the sub-manifest of its root block), not through encoding alone.
+- **The download manifest is read by Battle.net's installer, not the game.**
+- **Files byte-identical to anything Blizzard hosts on the shared `tpr/wow` CDN are fetched from Blizzard's
+  archives.** Our TBC Anniversary tiles were, at startup.
+- **The local storage format** was checked read-only against a real install first: about a million index entries
+  with every Jenkins checksum right. The writer copies the 30-byte header the client writes for its own files.
+
+**Still to do:**
+- Server-side terrain for map 530 (map, vmap, mmap files). The server doesn't know where the ground is yet: Ora
+  arrived under the isle at z 26 and was fine at z 200.
+- Creatures.
+- More tiles, then all of Outland and Northrend.
+
 **Next:**
 - **Experiment 2:** add a new FileDataID, one Outland-map tile plus its WDT, with a `Map` row by hotfix. An
   Eversong Woods tile is a good first pick: it's on the same map as Outland and easy to recognise.

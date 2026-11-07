@@ -10,7 +10,8 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 2. **Custom files load**: the client draws world files it doesn't ship (Outland, Northrend, the post-Cataclysm
    world), served from our own patch server. This decides whether one client can run every ruleset
    ([notes](docs/custom-files.md)). Experiment 1 **passed** 2026-11-06: the client streamed and drew a replaced
-   icon from our own build. Next: an added Eversong Woods tile.
+   icon from our own build. Experiment 2 **passed** 2026-11-07: the client drew TBC Sunstrider Isle on map 530, which
+   it doesn't ship. Next: server-side terrain for map 530, then all of Outland.
 3. **The world feels alive**: PlayerbotV2 bots go where real players are and sleep elsewhere; find the number of
    bots each kind of place needs, check that bots on screen act like players (they wave back), and measure the
    cost per bot ([plan](docs/living-world.md)).
