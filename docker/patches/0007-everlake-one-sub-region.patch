@@ -1,0 +1,44 @@
+--- a/src/server/shared/Realm/RealmList.cpp
++++ b/src/server/shared/Realm/RealmList.cpp
+@@ -238,8 +238,17 @@
+ 
+ std::vector<std::string> RealmList::GetSubRegions() const
+ {
++    // Everlake: one sub-region for every realm, the lowest realm's (70-1-70). The Forever client shows a sub-region
++    // dropdown on its ruleset screen when there is more than one ("Beta" per realm: Cfg_Regions names region 70 so);
++    // realms are told apart by their ruleset card (contentSetId) instead. GetRealmList lists every realm for it.
+     std::shared_lock lock(_realmsMutex);
+-    return { _subRegions.begin(), _subRegions.end() };
++    Optional<Battlenet::RealmHandle> first;
++    for (auto const& [id, _] : _realms)
++        if (!first || id.Realm < first->Realm)
++            first = id;
++    if (!first)
++        return { _subRegions.begin(), _subRegions.end() };
++    return { first->GetSubRegionAddress() };
+ }
+ 
+ Optional<Battlenet::RealmHandle> RealmList::GetFirstRealmId() const
+@@ -408,11 +417,9 @@
+     JSON::RealmList::RealmListUpdates realmList;
+     {
+         std::shared_lock lock(_realmsMutex);
++        // Everlake: every realm, whatever sub-region was asked for (GetSubRegions offers just one)
+         for (auto const& [_, realm] : _realms)
+         {
+-            if (realm->Id.GetSubRegionAddress() != subRegion)
+-                continue;
+-
+             JSON::RealmList::RealmListUpdatePart* state = realmList.add_updates();
+             FillRealmEntry(*realm, build, accountSecurityLevel, state->mutable_update());
+             state->set_deleting(false);
+@@ -420,9 +427,6 @@
+ 
+         for (auto const& [id, _] : _removedRealms)
+         {
+-            if (id.GetSubRegionAddress() != subRegion)
+-                continue;
+-
+             JSON::RealmList::RealmListUpdatePart* state = realmList.add_updates();
+             state->set_wowrealmaddress(id.GetAddress());
+             state->set_deleting(true);

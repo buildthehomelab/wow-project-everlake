@@ -15,7 +15,8 @@ screens don't have to look like the originals:
 - **TBC and every later expansion** use the same retail talent screen. Each era's tree is built as a retail
   trait tree, so one screen and one server system cover them all.
 
-Nothing here is built or run yet, except Test 1 below.
+Nothing here is built or run yet, except Test 1 and the realm switch test (tests 4 to 6, run early with Test 1's
+Death Knight kit) below.
 
 ## What the client and core already have
 
@@ -317,3 +318,168 @@ errors show where.
 - WotLK rune types (Blood, Frost, Unholy, Death) for the Classic → WotLK ruleset: core work.
 - Acherus (map 609) for the DK start, like map 530.
 - The client build moves on (70840 and 70862 are out); the server accepts only 70790.
+
+## Tests 4 to 6, run early: switching realms (2026-11-07)
+
+**The question:** can one Forever client switch between two realms on one login server, each realm sending its own
+client data, without the two mixing? This decides whether Forever and retail (and later Classic to WotLK) can run side
+by side on the one client. Tests 4 to 6 above planned it with a TBC warrior; it's run first with Test 1's Death Knight
+and Monk kit, which is ready and shows plainly in the class list, the spellbook and the talent frame.
+
+**Two Forever realms** (the user's call, 2026-11-07): the test is about two realms on one login switching cleanly
+with per-realm hotfix data, so realm 2 is a second Forever realm (same image, same Forever data), not a retail one.
+The only difference between the two is the hotfix data in the table below.
+
+### Setup (on the spike server)
+
+| | Realm 1 | Realm 2 |
+|---|---|---|
+| Name in the realm list | Everlake | Everlake Two |
+| Ruleset card in the client's realm picker (`contentSetId`) | Normal (137) | Roleplay (138; only the card) |
+| Realm id, port | 70, 8085 | 71, 8095 |
+| Container | `worldserver` | `worldserver2` (`docker-compose.realm2.yml`, same image) |
+| Databases | `characters`, `hotfixes` | `characters2`, `hotfixes2` (copies of realm 1's made on 2026-11-07) |
+| World database, login server | shared | shared |
+| Class kit (Death Knight, Monk; pushes 9540010-9540030) | none | all of it |
+| Attack (6603), push 9550000 | "Attack (realm 1)" | "Attack (realm 2)" (same push and unique id, other text) |
+| Hearthstone (8690) | "Hearthstone (realm 1)", push 9550001 | "Hearthstone (realm 2)", push 9560001 |
+| Player characters | everything except Death Knights and Monks | the Death Knight Aevise and the Monk Asdasd |
+| Bots | yes | off (`Playerbot.World.Enable = 0`), no auction house bot |
+
+- **Why move the kit instead of adding a new marker kit to realm 2:** realm 1 is meant to be plain Forever, and a
+  client that already holds the kit's rows (from this morning on realm 1) is the hardest case for "nothing left
+  over": Test 1's lesson was that the client keeps rows it has. If realm 1 now shows no Death Knight, a removed push
+  really leaves the client's view. The kit's rows never replaced a row of Forever's own hotfixes (checked against
+  `TDB_full_hotfixes_forever_2026_10_14.sql`), so realm 1 is back to exactly what it was before Test 1.
+- **Two markers on purpose:** Attack uses the same push and unique id on both realms with different text, the case a
+  shared cache would get wrong. The Hearthstone uses each realm's own push range, the fix to test if the cache is
+  shared. Every character has both spells.
+- **Characters move, not copy:** realm 2's database is a full copy of realm 1's; then the core's own soft delete
+  (`deleteInfos_*`, restorable with `.character deleted restore <name>`) hides on each realm what belongs to the other.
+  On realm 1 `CharDeleteKeepDays` (30) would purge Aevise and Asdasd's soft-deleted rows; realm 2 holds them in full.
+- **Realm 2's settings** are the core's environment overrides (`TC_REALM_ID`, `TC_WORLD_SERVER_PORT`,
+  `TC_CHARACTER_DATABASE_INFO`, `TC_HOTFIX_DATABASE_INFO`, ...), so realm 1's `overrides/*.conf` (game rules) apply
+  to both. Its log is in its own volume (`logs2`).
+- The client reaches realm 2 through the mini's forwarder, which now also passes on port 8095.
+- **The Forever client changes realm through its ruleset cards** (RULESET at the top of the character screen), not a
+  realm list. It shows one card per `contentSetId` among the listed realms (137 Normal, 138 Roleplay, 140 Hardcore),
+  and the login server answers a card with `SELECT id FROM realmlist WHERE contentSetId = ? LIMIT 1`. With both
+  realms on Normal the picker showed a dropdown of identical "Beta" entries (the name of `Cfg_Regions` row 1160, our
+  realm region 70), one per realm. So **each realm needs its own content set**; realm 2 borrows the Roleplay card
+  (the server applies no roleplay rules, and Forever's `ExpectedStat` rows all have ContentSetID 0, so stats are the
+  same). The fork's two placeholder realms (72, 73: no worldserver) are hidden with `flag = 3`, and 72 gave up 138
+  because the card lookup doesn't skip hidden realms. For the era realms this means one card per ruleset, which
+  matches the plan of a ruleset picker; the card names and pictures are client data we could replace in our build.
+
+Made with `scripts/realm2-setup.sh` (steps `dbs`, `realm2`, `realm1`; the realm row is
+`sql/everlake/2026_11_07_06_auth_realm2.sql`, the markers `..._07_hotfixes2_realm2_markers.sql` and
+`..._08_hotfixes_realm1_markers.sql`). Start or restart realm 2 from the main checkout:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.realm2.yml up -d worldserver2
+```
+
+Undo: stop and remove `worldserver2`; run the realm row's undo; on realm 1, restore Aevise and Asdasd
+(`.character deleted restore`) and re-apply the kit files `2026_11_07_01/03/05` to `hotfixes`; drop `characters2` and
+`hotfixes2`. Realm 1 and 2 both started cleanly (realm 1: 24,432 hotfix records, realm 2: 25,379).
+
+### Running it (Mac mini, about 15 minutes)
+
+```sh
+git -C ~/everlake fetch
+git -C ~/everlake checkout claude/realm-switch
+~/everlake/client/macos/everlake-client.sh switch TEST@TEST.COM gate2
+```
+
+The subcommand installs the `EverlakeSwitch` addon, starts the game twice (it asks for the Everlake password each
+time) and prints what to do in each run:
+
+- **Run 1:** Everlake (Normal card, Pat) → Everlake Two (Roleplay card, Aevise) → Everlake → Everlake Two, with a look at both character
+  creation screens.
+- **Run 2, after a client restart:** Everlake Two first → Everlake → Everlake Two → Everlake.
+
+After every login the addon checks the client's view against what that realm sends (the two marker names, classes
+6 and 10, Death Coil and its text, the 53-node talent tree) and prints OK or MIXED in chat. After each run the
+subcommand keeps the `Cache` folder listing, the hotfix cache `DBCache.bin` (read by `client/macos/dbcache.py`: which
+pushes it holds, and the text of each marker row), `Hotfix.log` and the addon's record. It asks a few yes/no
+questions, then sends the report, both cache files and the screenshots to the report drop (port 8099).
+
+### Prediction
+
+- **One shared hotfix cache** (`Cache/ADB/enUS/DBCache.bin`, per locale, not per realm): likely.
+- **The class kit stays on realm 2:** likely. The server lists its pushes at every world connection, and the client
+  should apply only the rows of listed pushes even when it holds others.
+- **Attack (same push on both realms) shows the wrong realm's text on one of them:** likely. (Wrong: see the result.) The client sees a push
+  and unique id it already holds and doesn't ask again, which is Test 1's lesson seen from the other side.
+- **The Hearthstone (own push ranges) is right on both:** likely.
+- If so, the rule for every realm is: **its own hotfix push range, never a push id or unique id another realm uses
+  with other content.**
+
+### Result (2026-11-07, 11:22-11:29, Mac mini): PASS
+
+**One Forever client switches cleanly between two realms on one login server, each realm sending its own client
+data, and nothing mixes.** Report `switch-Agents-Mac-mini` (11:29) and 5 screenshots in the report drop.
+
+The printed steps were followed loosely (the user found them confusing and switched in their own order). The
+result doesn't rest on the order: the addon records every login with its realm, and the cache snapshots after each
+run show what the client kept. Next time: fewer, shorter steps, one switch per step.
+
+- **Every login was right.** The `EverlakeSwitch` addon checked 12 logins over the day, 5 of them in the two test
+  runs (before, between and after the switches, with a client restart in between): 12 OK, 0 MIXED.
+  - Everlake (Pat): "Attack (realm 1)", "Hearthstone (realm 1)", 9 classes, no class 6 or 10, no Death Coil, no
+    tree 954100.
+  - Everlake Two (Aevise, Asdasd): "Attack (realm 2)", "Hearthstone (realm 2)", 11 classes (Death Knight and Monk),
+    Death Coil with its tooltip text, tree 954100 with 53 nodes.
+- **Character creation followed the realm** (the answers typed during the run): no Death Knight or Monk on
+  Everlake in either run, both on Everlake Two.
+- **One cache file, kept per realm.** `Cache/ADB/enUS/DBCache.bin` is a single file (entry format version 9), but
+  each row carries the **virtual realm address** of the realm that sent it (the field `dbcache.py` labels
+  "region": 1174470726 = `70-1-70`, 1174470727 = `70-1-71`). After run 1 the file held both realms' rows side by
+  side, about 26,000 each (26,441 rows before, 52,362 after). The collision probe sat in it twice:
+  - push 9550000, SpellName 6603, realm `70-1-70`: "Attack (realm 1)"
+  - push 9550000, SpellName 6603, realm `70-1-71`: "Attack (realm 2)"
+
+  So **the same push id with different content on two realms does not collide**, and the prediction that it would
+  was wrong. The unique ids in the cache (72288707 and 1171873280) aren't the ones in our `hotfix_data`
+  (955000001): the client or core derives its own.
+- **The client applies only the listed set of the realm it joined.** `Hotfix.log` shows, at every world connection,
+  that realm's rows validated (9550000 + 9550001 on Everlake; 9550000 + 9560001 + the class kit on Everlake Two), and
+  never the other realm's.
+- **Rows are reused, not fetched again.** Run 2 (after a client restart, realms in the other order) added only 727
+  rows to the cache (52,362 → 53,089); both realms' sets came from the cache.
+- **A push the realm stops sending leaves the cache.** This morning the client held the class kit from realm 1 (Test
+  1). After realm 1 dropped it, the first realm 1 login (10:57) showed no Death Knight, and the cache taken before
+  the test (11:22) held no kit row at all; the kit came back in run 1 only under realm `70-1-71`.
+- On the way (fixed in the mini script): realm 2 was unreachable at first, because a forwarder started with sudo
+  this morning (macOS lets a normal user listen on port 80, the gate2 CDN, only on all addresses, not 127.0.0.1)
+  kept the ports without 8095. The forwarder now listens on 0.0.0.0 for ports below 1024, stops a stray forwarder,
+  and refuses to start the game unless it listens on every port.
+
+### The rule for realms on one login server
+
+1. **Each realm has its own hotfix database** and sends its own era data. The client keeps each realm's rows apart
+   (by the realm address), applies only the set of the realm it is on, and drops rows a realm stops sending.
+2. **Push ids may overlap between realms.** Separate ranges per realm (as here: 9550000-9559999 realm 1,
+   9560000-9569999 realm 2) are still a good habit for reading logs, but nothing breaks without them.
+3. **Within one realm, Test 1's rule stands:** a changed row needs a new push; the client keeps rows of a push it has.
+4. **Each realm needs its own ruleset card** (`contentSetId`): the Forever client picks realms by card, one realm per
+   content set.
+   The "Beta" dropdown above the cards is the **sub-region** picker (`SubRegionDropdown` in the client's
+   `Blizzard_GlueXML/mainline/SuperDistrict.lua`, shown when `C_Login.GetSubRegions()` has more than one entry). The
+   fork offers one sub-region per realm (its full address); the client names each after `Cfg_Regions` row 1160
+   ("Beta", region 70). The sub-region doesn't route anything: the card does (`Param_ContentSetIDFilter`). Core patch
+   `docker/patches/0007-everlake-one-sub-region.patch` makes the login server offer one sub-region (the lowest realm's,
+   `70-1-70`) and list every realm under it, so the dropdown goes away. Written 2026-11-07, not
+   compiled yet: the image build was cancelled when the spike was stopped.
+5. **Each realm keeps a stable realm address** (region 70, battlegroup 1, realm id): the client's cache is keyed by
+   it, so renumbering a realm makes the client fetch its whole set again.
+
+**The user's decisions (2026-11-07):** one sub-region always (no dropdown); one ruleset card per era realm;
+challenges (Hardcore and the like) come later as **an option at character creation**, not as their own realm or card.
+
+The spike's game servers were stopped on 2026-11-07 after this test (the user: "we have everything we need");
+`docker compose start` brings them back, realm 2 with the `-f docker-compose.realm2.yml` file.
+
+This settles the deciding question for Forever and retail side by side (and Classic to WotLK after): per-realm
+client data on the one client works. Next on this path: per-realm map rows (maps 0 and 1 pointing at each era's
+terrain), which go through the same hotfix path.

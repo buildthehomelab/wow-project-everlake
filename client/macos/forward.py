@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Forwards the Everlake ports from this Mac's 127.0.0.1 to the server.
 
-    forward.py <server address> [port ...]      (default ports: 1119 8081 8085)
+    forward.py <server address> [port ...]      (default ports: 1119 8081 8085 8095)
 
 Why: since macOS 15, an app needs the Local Network permission to connect to other machines on the LAN. The
 re-signed game copy doesn't get it (macOS blocks it without asking), while Terminal has it. Connections to
@@ -9,9 +9,10 @@ re-signed game copy doesn't get it (macOS blocks it without asking), while Termi
 passes the bytes on. TLS stays end to end: nothing is decrypted here.
 """
 import asyncio
+import os
 import sys
 
-PORTS = [1119, 8081, 8085]
+PORTS = [1119, 8081, 8085, 8095]  # login, REST, realm 1, realm 2
 
 
 async def pipe(reader, writer):
@@ -51,8 +52,20 @@ async def main():
         sys.exit(__doc__)
     server = sys.argv[1]
     ports = [int(p) for p in sys.argv[2:]] or PORTS
-    servers = [await asyncio.start_server(handler(server, p), "127.0.0.1", p) for p in ports]
+    # macOS lets a normal user listen on a port below 1024 (80, the gate2 CDN) only on every address, not on
+    # 127.0.0.1 alone ("permission denied" without sudo). Those ports listen on 0.0.0.0: the LAN could then reach this
+    # Mac's port 80, which only leads to the server's CDN, already open to the LAN itself. The others stay local.
+    servers = [await asyncio.start_server(handler(server, p), "0.0.0.0" if p < 1024 else "127.0.0.1", p)
+               for p in ports]
     print(f"[forward] 127.0.0.1:{','.join(map(str, ports))} -> {server}", flush=True)
+    # our own pid, once every port listens: macOS's /usr/bin/python3 is a stub that runs the real Python as a child,
+    # so the pid the shell saw isn't the one holding the ports
+    if os.environ.get("FORWARD_PID_FILE"):
+        try:
+            with open(os.environ["FORWARD_PID_FILE"], "w") as f:
+                f.write(f"{os.getpid()}\n")
+        except OSError as e:  # e.g. a support folder made by a run with sudo: fix-owner repairs it
+            print(f"[forward] cannot write the pid file: {e}", flush=True)
     await asyncio.gather(*(s.serve_forever() for s in servers))
 
 
