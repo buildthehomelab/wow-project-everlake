@@ -9,6 +9,8 @@
 #   ./everlake-client.sh gate2-addon               (re-installs the gate2 prefetch addon in the test folder)
 #   ./everlake-client.sh gate2-inspect             (read-only check of the local storage, sent to the server)
 #   ./everlake-client.sh gate2-install             (puts the added files into the test folder's local storage; gate2-uninstall undoes)
+#   ./everlake-client.sh test1-addon [game folder]  (Test 1: installs the EverlakeTest1 addon; then play, then test1)
+#   ./everlake-client.sh test1 [game folder]        (Test 1 report: hotfixes, the addon's record, errors, screenshots)
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -248,6 +250,42 @@ gate2_report() {
         -iname "*.log" 2>/dev/null || true; } | head -20 | sed 's/^/    /' || true
 }
 
+test1_report() {
+    # Test 1 (docs/era-data.md): what the client did with the Death Knight and Monk rows, read from the game folder.
+    local game="$1" mark="$SUPPORT/test1.mark" f n
+    say "test1: game folder $game, build $(game_build "$game") (the server takes 1.60.1.70790 only)"
+    say "test1: addon EverlakeTest1 $( [ -f "$game/Interface/AddOns/EverlakeTest1/EverlakeTest1.lua" ] && echo installed || echo MISSING: run test1-addon)"
+    say "test1: started $(stat -f '%Sm' "$mark" 2>/dev/null || echo '(no mark: run test1-addon first)')"
+    say "test1: hotfixes from our pushes (9540000-9540003 classes and spells, 9540010-9540015 talent tree) per table and result:"
+    grep -a -h -E "[^0-9]954000[0-9] Table |[^0-9]954001[0-9] Table " "$game/Logs/Hotfix.log" 2>/dev/null \
+        | awk '{for (i = 1; i <= NF; i++) if ($i == "Table") print $(i + 1), $NF}' | sort | uniq -c | sed 's/^/    /' || true
+    say "test1: our hotfix rows the client did NOT accept (first 40):"
+    grep -a -h -E "[^0-9]954000[0-9] Table |[^0-9]954001[0-9] Table " "$game/Logs/Hotfix.log" 2>/dev/null \
+        | grep -v "VALIDATION_RESULT_VALID" | head -n 40 | cut -c1-200 | sed 's/^/    /' || true
+    say "test1: the addon's record (SavedVariables EverlakeTest1.lua; written at /reload or logout):"
+    n=0
+    for f in "$game"/WTF/Account/*/SavedVariables/EverlakeTest1.lua; do
+        [ -f "$f" ] || continue
+        n=$((n + 1))
+        echo "  -- $f ($(stat -f '%Sm' "$f"))"
+        head -n 1500 "$f" | cut -c1-400 | sed 's/^/    /'
+    done
+    [ "$n" -gt 0 ] || echo "    (none yet)"
+    say "test1: logs written since test1-addon, error and character lines (last 80):"
+    { find "$game/Logs" -maxdepth 1 -type f -newer "$mark" 2>/dev/null || true; } | while read -r f; do
+        grep -a -H -i -E "error|invalid|fail|lua|script|charcreate|character create|class|exception|assert" "$f" 2>/dev/null \
+            | grep -v -E "Table [A-Za-z]+ RecID .* VALIDATION_RESULT_VALID|IBN_Resources" | tail -n 30 || true
+    done | tail -n 80 | cut -c1-260 | sed 's/^/    /'
+    say "test1: crash or error reports since test1-addon:"
+    { find "$game/Errors" -type f -newer "$mark" 2>/dev/null || true; } | head -3 | while read -r f; do
+        echo "  -- $(basename "$f")"; head -n 40 "$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /' || true
+    done
+    say "test1: screenshots since test1-addon (each sent to the server as its own file):"
+    { find "$game/Screenshots" -type f -newer "$mark" 2>/dev/null || true; } | sort | tail -n 12 | while read -r f; do
+        printf '    %s\t%s\n' "$(basename "$f")" "$(stat -f %z "$f")"
+    done
+}
+
 do_check() {
     # Everything that has to be right before the game can reach the server.
     local GAME addr exe f port
@@ -429,6 +467,40 @@ case "$cmd" in
         GAME="$(find_game gate2)" || die "no gate2 test folder: run gate2 first"
         ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
         gate2_addon "$GAME" "$ADDR"
+        ;;
+    test1-addon)
+        # Test 1 (docs/era-data.md): installs client/addons/EverlakeTest1 and marks the start of the test, so the
+        # test1 report only shows what happened afterwards. "gate2" as the folder means the gate2 test copy.
+        GAME="$(find_game "${1:-}")" || die "game folder not found"
+        mkdir -p "$SUPPORT" "$GAME/Interface/AddOns/EverlakeTest1"
+        cp "$HERE/../addons/EverlakeTest1/EverlakeTest1.toc" "$HERE/../addons/EverlakeTest1/EverlakeTest1.lua" \
+            "$GAME/Interface/AddOns/EverlakeTest1/"
+        touch "$SUPPORT/test1.mark"
+        say "EverlakeTest1 installed in $GAME (build $(game_build "$GAME")). Next: $0 play <account email> ${1:-}"
+        ;;
+    test1)
+        # Test 1 report, saved and sent to the server's report drop (port 8099) with the screenshots taken since
+        # test1-addon. Run it after logging out (the addon's record is written at logout or /reload).
+        GAME="$(find_game "${1:-}")" || die "game folder not found"
+        REPORT="$SUPPORT/test1.txt"; mkdir -p "$SUPPORT"
+        { test1_report "$GAME" 2>&1 || echo "[everlake] test1 report stopped early (exit $?)"; } | tee "$REPORT"
+        addr="$(server_addr)"
+        if [ -n "$addr" ] && curl -s -m 10 -T "$REPORT" "http://$addr:8099/test1-$(hostname -s)" >/dev/null; then
+            say "report sent to the server"
+            n=0
+            { find "$GAME/Screenshots" -type f -newer "$SUPPORT/test1.mark" 2>/dev/null || true; } | sort | tail -n 12 \
+                | while read -r f; do
+                    n=$((n + 1))
+                    if [ "$(stat -f %z "$f")" -lt 2000000 ]; then
+                        curl -s -m 30 -T "$f" "http://$addr:8099/test1-shot-$n-$(basename "$f" | tr -c 'A-Za-z0-9._\n-' _)" >/dev/null \
+                            && say "sent $(basename "$f")" || say "could not send $(basename "$f")"
+                    else
+                        say "$(basename "$f") is over 2 MB, not sent"
+                    fi
+                done
+        else
+            say "report NOT sent (saved in $REPORT)"
+        fi
         ;;
     undo)
         stop_forward

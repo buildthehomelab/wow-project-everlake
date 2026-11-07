@@ -1,0 +1,6 @@
+## Interface: 11507, 11508, 16000, 16001, 16100, 120000, 120001
+## Title: Everlake Test 1
+## Notes: Test 1 (docs/era-data.md): records what the client does with a class it doesn't ship (Death Knight, Monk) and every Lua error, for everlake-client.sh test1.
+## Version: 0.1.0
+## SavedVariables: EverlakeTest1DB
+EverlakeTest1.lua

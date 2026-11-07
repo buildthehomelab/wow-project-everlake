@@ -1,0 +1,43 @@
+{
+  "comment": "Test 1 (docs/era-data.md): classes the Forever client (1.60.1.70790) doesn't ship.\nDeath Knight (class 6) and, as a probe of the retail engine, Monk (class 10): their ChrClasses rows (MoP Classic\n5.5.4, with Forever-style DefaultSpec 0 and the Flags and spell texture blob of a Forever class), the power types the\ncore needs (retail runes: the core's DK code needs POWER_RUNES or it crashes), one Forever-style specialization\neach, CharBaseInfo for the 8 Forever races, and the Death Knight class skill line with five DK spells from retail\n12.1.5 (Death Coil, Death Strike, Anti-Magic Shell, Obliterate, Howling Blast) plus the spells the core's DK scripts\ncheck for. The world side (class_expansion_requirement) is sql/everlake/2026_11_07_02_world_test1_classes.sql.\nPushes from 9540000 (never 9530000-9530003, which are gate 2's map 530).",
+  "target_build": "1.60.1.70790",
+  "first_push": 9540000,
+  "rows": [
+    {"table": "ChrClasses", "build": "5.5.4.70631", "ids": [6, 10], "set": {
+      "6":  {"DefaultSpec": 0, "CinematicSequenceID": 0, "HasRelicSlot": 0, "Flags": 8425472, "SpellTextureBlobFileDataID": 791568},
+      "10": {"DefaultSpec": 0, "Flags": 36864, "SpellTextureBlobFileDataID": 791565, "Name_male_lang": "Monk"}}},
+    {"table": "PowerType", "build": "5.5.4.70631", "ids": [6, 7, 14]},
+    {"table": "ChrClassesXPowerTypes", "custom": [
+      {"ID": 954001, "PowerType": 5, "ClassID": 6},
+      {"ID": 954002, "PowerType": 6, "ClassID": 6},
+      {"ID": 954003, "PowerType": 3, "ClassID": 10},
+      {"ID": 954004, "PowerType": 12, "ClassID": 10},
+      {"ID": 954005, "PowerType": 0, "ClassID": 10}]},
+    {"table": "ChrSpecialization", "custom": [
+      {"Name_lang": "Death Knight", "FemaleName_lang": "Death Knight", "ID": 1455, "ClassID": 6, "OrderIndex": 0, "Role": 2, "Flags": 4, "SpellIconFileID": 135771},
+      {"Name_lang": "Monk", "FemaleName_lang": "Monk", "ID": 1450, "ClassID": 10, "OrderIndex": 0, "Role": 2, "Flags": 4, "SpellIconFileID": 626002}]},
+    {"table": "CharBaseInfo", "custom": [
+      {"ID": 954011, "RaceID": 1, "ClassID": 6}, {"ID": 954012, "RaceID": 2, "ClassID": 6},
+      {"ID": 954013, "RaceID": 3, "ClassID": 6}, {"ID": 954014, "RaceID": 4, "ClassID": 6},
+      {"ID": 954015, "RaceID": 5, "ClassID": 6}, {"ID": 954016, "RaceID": 6, "ClassID": 6},
+      {"ID": 954017, "RaceID": 7, "ClassID": 6}, {"ID": 954018, "RaceID": 8, "ClassID": 6},
+      {"ID": 954021, "RaceID": 1, "ClassID": 10}, {"ID": 954022, "RaceID": 2, "ClassID": 10},
+      {"ID": 954023, "RaceID": 3, "ClassID": 10}, {"ID": 954024, "RaceID": 4, "ClassID": 10},
+      {"ID": 954025, "RaceID": 5, "ClassID": 10}, {"ID": 954026, "RaceID": 6, "ClassID": 10},
+      {"ID": 954027, "RaceID": 7, "ClassID": 10}, {"ID": 954028, "RaceID": 8, "ClassID": 10}]},
+    {"table": "SkillLine", "build": "12.1.5.70783", "ids": [796]},
+    {"table": "SkillRaceClassInfo", "build": "12.1.5.70783", "ids": [982]},
+    {"table": "SkillLineAbility", "build": "12.1.5.70783", "ids": [47335, 51258]},
+    {"table": "SkillLineAbility", "custom": [
+      {"ID": 954031, "SkillLine": 796, "Spell": 49998, "MinSkillLineRank": 1, "ClassMask": 32, "AcquireMethod": 2, "RaceMasks_0": -1, "RaceMasks_1": -1},
+      {"ID": 954032, "SkillLine": 796, "Spell": 49020, "MinSkillLineRank": 1, "ClassMask": 32, "AcquireMethod": 2, "RaceMasks_0": -1, "RaceMasks_1": -1},
+      {"ID": 954033, "SkillLine": 796, "Spell": 49184, "MinSkillLineRank": 1, "ClassMask": 32, "AcquireMethod": 2, "RaceMasks_0": -1, "RaceMasks_1": -1}]}
+  ],
+  "spells": [
+    {"build": "12.1.5.70783", "follow_triggers": true,
+     "ids": [47541, 49998, 48707, 49020, 49184,
+             47632, 137007, 196263,
+             45470, 77513, 77535, 137006, 66188, 180612,
+             49088, 55095]}
+  ]
+}
