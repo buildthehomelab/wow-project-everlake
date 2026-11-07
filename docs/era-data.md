@@ -467,6 +467,9 @@ run show what the client kept. Next time: fewer, shorter steps, one switch per s
 5. **Each realm keeps a stable realm address** (region 70, battlegroup 1, realm id): the client's cache is keyed by
    it, so renumbering a realm makes the client fetch its whole set again.
 
+**The user's decisions (2026-11-07):** one sub-region always (no dropdown); one ruleset card per era realm;
+challenges (Hardcore and the like) come later as **an option at character creation**, not as their own realm or card.
+
 The spike's game servers were stopped on 2026-11-07 after this test (the user: "we have everything we need");
 `docker compose start` brings them back, realm 2 with the `-f docker-compose.realm2.yml` file.
 
