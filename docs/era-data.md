@@ -402,12 +402,60 @@ questions, then sends the report, both cache files and the screenshots to the re
 - **One shared hotfix cache** (`Cache/ADB/enUS/DBCache.bin`, per locale, not per realm): likely.
 - **The class kit stays on realm 2:** likely. The server lists its pushes at every world connection, and the client
   should apply only the rows of listed pushes even when it holds others.
-- **Attack (same push on both realms) shows the wrong realm's text on one of them:** likely. The client sees a push
+- **Attack (same push on both realms) shows the wrong realm's text on one of them:** likely. (Wrong: see the result.) The client sees a push
   and unique id it already holds and doesn't ask again, which is Test 1's lesson seen from the other side.
 - **The Hearthstone (own push ranges) is right on both:** likely.
 - If so, the rule for every realm is: **its own hotfix push range, never a push id or unique id another realm uses
   with other content.**
 
-### Result
+### Result (2026-11-07, 11:22-11:29, Mac mini): PASS
 
-Waiting for the run on the mini.
+**One Forever client switches cleanly between two realms on one login server, each realm sending its own client
+data, and nothing mixes.** Report `switch-Agents-Mac-mini` (11:29) and 5 screenshots in the report drop.
+
+- **Every login was right.** The `EverlakeSwitch` addon checked 12 logins over the day, 4 of them in the two test
+  runs (before, between and after the switches, with a client restart in between): 12 OK, 0 MIXED.
+  - Everlake (Pat): "Attack (realm 1)", "Hearthstone (realm 1)", 9 classes, no class 6 or 10, no Death Coil, no
+    tree 954100.
+  - Everlake Two (Aevise, Asdasd): "Attack (realm 2)", "Hearthstone (realm 2)", 11 classes (Death Knight and Monk),
+    Death Coil with its tooltip text, tree 954100 with 53 nodes.
+- **Character creation followed the realm** (the answers typed during the run): no Death Knight or Monk on
+  Everlake in either run, both on Everlake Two.
+- **One cache file, kept per realm.** `Cache/ADB/enUS/DBCache.bin` is a single file (entry format version 9), but
+  each row carries the **virtual realm address** of the realm that sent it (the field `dbcache.py` labels
+  "region": 1174470726 = `70-1-70`, 1174470727 = `70-1-71`). After run 1 the file held both realms' rows side by
+  side, about 26,000 each (26,441 rows before, 52,362 after). The collision probe sat in it twice:
+  - push 9550000, SpellName 6603, realm `70-1-70`: "Attack (realm 1)"
+  - push 9550000, SpellName 6603, realm `70-1-71`: "Attack (realm 2)"
+
+  So **the same push id with different content on two realms does not collide**, and the prediction that it would
+  was wrong. The unique ids in the cache (72288707 and 1171873280) aren't the ones in our `hotfix_data`
+  (955000001): the client or core derives its own.
+- **The client applies only the listed set of the realm it joined.** `Hotfix.log` shows, at every world connection,
+  that realm's rows validated (9550000 + 9550001 on Everlake; 9550000 + 9560001 + the class kit on Everlake Two), and
+  never the other realm's.
+- **Rows are reused, not fetched again.** Run 2 (after a client restart, realms in the other order) added only 727
+  rows to the cache (52,362 → 53,089); both realms' sets came from the cache.
+- **A push the realm stops sending leaves the cache.** This morning the client held the class kit from realm 1 (Test
+  1). After realm 1 dropped it, the first realm 1 login (10:57) showed no Death Knight, and the cache taken before
+  the test (11:22) held no kit row at all; the kit came back in run 1 only under realm `70-1-71`.
+- On the way (fixed in the mini script): realm 2 was unreachable at first, because a forwarder started with sudo
+  this morning (macOS lets a normal user listen on port 80, the gate2 CDN, only on all addresses, not 127.0.0.1)
+  kept the ports without 8095. The forwarder now listens on 0.0.0.0 for ports below 1024, stops a stray forwarder,
+  and refuses to start the game unless it listens on every port.
+
+### The rule for realms on one login server
+
+1. **Each realm has its own hotfix database** and sends its own era data. The client keeps each realm's rows apart
+   (by the realm address), applies only the set of the realm it is on, and drops rows a realm stops sending.
+2. **Push ids may overlap between realms.** Separate ranges per realm (as here: 9550000-9559999 realm 1,
+   9560000-9569999 realm 2) are still a good habit for reading logs, but nothing breaks without them.
+3. **Within one realm, Test 1's rule stands:** a changed row needs a new push; the client keeps rows of a push it has.
+4. **Each realm needs its own ruleset card** (`contentSetId`): the Forever client picks realms by card, one realm per
+   content set.
+5. **Each realm keeps a stable realm address** (region 70, battlegroup 1, realm id): the client's cache is keyed by
+   it, so renumbering a realm makes the client fetch its whole set again.
+
+This settles the deciding question for Forever and retail side by side (and Classic to WotLK after): per-realm
+client data on the one client works. Next on this path: per-realm map rows (maps 0 and 1 pointing at each era's
+terrain), which go through the same hotfix path.
