@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Retail files straight from Blizzard's CDN, by file data id (the TACT protocol).
 
-    python3 tact.py --cache <download dir> <file data id> [-o file] [--refresh]
+    python3 tact.py --cache <download dir> [--product wow] <file data id> [-o file] [--refresh]
 
 wago.tools serves the same files and is simpler, but it goes down. This asks Blizzard's own
 servers, the way the game's launcher does:
@@ -339,10 +339,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache", required=True)
     ap.add_argument("--refresh", action="store_true", help="move to the build that is live now")
+    ap.add_argument("--product", default="wow", help="product to pin a new cache to (wow, wowf, wow_anniversary, ...)")
     ap.add_argument("-o", "--out")
     ap.add_argument("fdid", type=int, nargs="?")
     args = ap.parse_args()
-    t = Tact(args.cache, refresh=args.refresh)
+    t = Tact(args.cache, product=args.product, refresh=args.refresh)
     print("build %s (%s)" % (t.version, t.build))
     if args.fdid is not None:
         data = t.read(args.fdid)

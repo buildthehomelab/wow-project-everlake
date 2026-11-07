@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A game build that is Blizzard's plus our own files (gate 2, docs/custom-files.md).
 
-    python3 tools/tact/patch.py --cache <tact cache> --out <dir> FDID=FILE [FDID=FILE ...]
+    python3 tools/tact/patch.py --cache <tact cache> --out <dir> [--files-from files.tsv] [FDID=FILE ...]
     python3 tools/tact/patch.py --cache <tact cache> --selftest
 
 <tact cache> is the folder `tact.py --cache` downloads into, already pinned to the build to patch (product wowf).
@@ -131,8 +131,9 @@ def root_set(data, files):
     while at < len(data):
         count, locale, f1, f2, f3 = struct.unpack_from("<IIIIB", data, at)
         flags, body = f1 | f2 | (f3 << 17), at + 17
-        if (template is None and locale & tact.ENUS and flags & tact.NO_NAME_HASH
-                and not flags & tact.LOW_VIOLENCE):
+        # new files go in a block like the plainest existing one: enUS, no content flags (f1 = 0), no name hashes
+        if (locale & tact.ENUS and flags & tact.NO_NAME_HASH and not flags & tact.LOW_VIOLENCE
+                and (template is None or (template[1] != 0 and f1 == 0))):
             template = (locale, f1, f2, f3)
         fdid = -1
         for i, delta in enumerate(struct.unpack_from("<%di" % count, data, body)):
@@ -515,14 +516,21 @@ def main():
     ap.add_argument("--cache", required=True, help="tact cache folder, pinned to the build to patch")
     ap.add_argument("--out", help="folder for the patched build (laid out like the CDN)")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--files-from", help="a files.tsv from collect.py (FileDataID first; the files sit next to it)")
     ap.add_argument("files", nargs="*", metavar="FDID=FILE")
     args = ap.parse_args()
     build = Build(args.cache)
     if args.selftest:
         sys.exit(0 if build.selftest() else 1)
-    if not args.out or not args.files:
-        ap.error("--out and at least one FDID=FILE are needed")
+    if not args.out or not (args.files or args.files_from):
+        ap.error("--out and at least one FDID=FILE (or --files-from) are needed")
     files = {}
+    if args.files_from:
+        folder = os.path.dirname(os.path.abspath(args.files_from))
+        for line in open(args.files_from):
+            fdid = line.split("\t")[0].strip()
+            if fdid.isdigit():
+                files[int(fdid)] = open(os.path.join(folder, fdid), "rb").read()
     for item in args.files:
         fdid, _, path = item.partition("=")
         files[int(fdid)] = open(path, "rb").read()
