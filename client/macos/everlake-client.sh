@@ -180,6 +180,24 @@ write_wtf() {
     say "wrote $out"
 }
 
+gate2_report() {
+    # What the client did with the patched build: every log line about storage, streaming and the CDN, and the
+    # files it wrote into the test folder's Data since the folder was made.
+    local game="$1" root mark
+    root="$(dirname "$game")"; mark="$root/.everlake-gate2"
+    say "gate2: .build.info wowf row:"
+    grep -a '|wowf' "$root/.build.info" | cut -c1-300 | sed 's/^/    /'
+    say "gate2: all game logs (name, size):"
+    ls -l "$game/Logs" 2>/dev/null | awk 'NR>1{print "    " $5 "\t" $9}'
+    say "gate2: storage, streaming and CDN lines from every log (last 60):"
+    grep -a -h -i -E "cas[^a-z]|casc|tact|stream|loose|resident|armadillo|cdn|build key|encoding|root|vfs|repair|missing|not found|failed to (open|read|load)|http|40[34]|5[0-9][0-9] " \
+        "$game/Logs"/*.log 2>/dev/null | grep -v -E "IBN_Resources|title icons" | tail -n 60 | cut -c1-260 | sed 's/^/    /'
+    say "gate2: files in Data written since gate2 ran (newest 40):"
+    find "$root/Data" -type f -newer "$mark" 2>/dev/null | head -400 | while read -r f; do
+        printf '    %s\t%s\n' "$(stat -f %z "$f")" "${f#"$root"/}"
+    done | sort -t$'\t' -k2 | tail -n 40
+}
+
 do_check() {
     # Everything that has to be right before the game can reach the server.
     local GAME addr exe f port
@@ -215,6 +233,9 @@ do_check() {
             echo "  -- $f"
             tail -n 12 "$GAME/Logs/$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /'
         done
+        if [ -f "$(dirname "$GAME")/.everlake-gate2" ]; then
+            gate2_report "$GAME"
+        fi
     fi
     say "net.battle launch options (values hidden except the connection):"
     defaults read net.battle 2>/dev/null | grep -E "Launch Options|CONNECTION_STRING|GAME_ACCOUNT|WEB_TOKEN" \
