@@ -1,0 +1,6 @@
+## Interface: 11507, 11508, 16000, 16001, 16100, 120000, 120001
+## Title: Everlake Switch
+## Notes: Gate 5 realm switch test (docs/era-data.md): at every login, checks that the client uses this realm's data and nothing from the other realm, for everlake-client.sh switch.
+## Version: 0.1.0
+## SavedVariables: EverlakeSwitchDB
+EverlakeSwitch.lua

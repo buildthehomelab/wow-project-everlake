@@ -13,6 +13,7 @@
 #   ./everlake-client.sh test1 [game folder]        (Test 1 report: hotfixes, the addon's record, errors, screenshots)
 #   ./everlake-client.sh test1-ui                   (Test 1 UI: gate2 copy from the server's build, its files, the addon)
 #   ./everlake-client.sh fix-owner                  (gives the Everlake folder back to you after a run with sudo)
+#   ./everlake-client.sh switch <account email> [game folder]  (gate 5 realm switch test: guided, sends a report)
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -108,8 +109,8 @@ stop_forward() {
 start_forward() {
     local addr="$1"; shift
     stop_forward
-    # extra ports (gate2 adds 80, the CDN) on top of forward.py's default 1119 8081 8085
-    if [ $# -gt 0 ]; then set -- 1119 8081 8085 "$@"; fi
+    # extra ports (gate2 adds 80, the CDN) on top of forward.py's default 1119 8081 8085 8095 (8095 = realm 2)
+    if [ $# -gt 0 ]; then set -- 1119 8081 8085 8095 "$@"; fi
     nohup python3 "$HERE/forward.py" "$addr" "$@" > "$FORWARD_LOG" 2>&1 &
     echo $! > "$FORWARD_PID"
     for _ in 1 2 3 4 5 6 7 8 9 10; do
@@ -300,6 +301,156 @@ test1_shots() {
         \( -iname "*.jpg" -o -iname "*.png" -o -iname "*.tga" \) 2>/dev/null || true; } | sort | tail -n 12
 }
 
+# --- gate 5 realm switch test (docs/era-data.md, tests 4-6) ---
+# Realm 1 "Everlake" (Forever) and realm 2 "Everlake Retail Test" send different data: realm 2 alone has the Death
+# Knight and Monk kit (hotfix pushes 9540010-9540030), and both rename Attack (push 9550000 on both: same push, other
+# text) and the Hearthstone (realm 1 push 9550001, realm 2 push 9560001). The EverlakeSwitch addon checks at every
+# login that the client shows only the current realm's data; these functions keep what the client stored after each run.
+SWITCH="$SUPPORT/switch"
+
+game_running() { pgrep -f "$COPY_NAME/Contents/MacOS" >/dev/null 2>&1; }
+
+switch_snapshot() {
+    # <game> <label>: the client's caches, its hotfix log and the addon's record, as they are now
+    local game="$1" label="$2" out="$SWITCH/$2" f
+    mkdir -p "$out"
+    {
+        echo "== snapshot $label at $(date '+%H:%M:%S')"
+        echo "-- Cache folder (size, modified, path; md5 of the hotfix cache):"
+        { find "$game/Cache" -type f 2>/dev/null || true; } | sort | while read -r f; do
+            printf '    %10s  %s  %s\n' "$(stat -f %z "$f")" "$(stat -f '%Sm' -t '%H:%M:%S' "$f")" "${f#"$game"/}"
+        done | head -n 80 || true
+        find "$game/Cache" -name DBCache.bin 2>/dev/null | while read -r f; do
+            echo "-- ${f#"$game"/} md5 $(md5 -q "$f")"
+            python3 "$HERE/dbcache.py" "$f" 2>&1 | sed 's/^/    /'
+            cp "$f" "$out/DBCache.bin" 2>/dev/null || true
+        done
+        echo "-- per-realm folders under WTF/Account (the client keeps settings per realm there):"
+        { find "$game/WTF/Account" -mindepth 2 -maxdepth 2 -type d 2>/dev/null || true; } | sed "s#^$game/##; s/^/    /"
+        echo "-- Hotfix.log: $(wc -l < "$game/Logs/Hotfix.log" 2>/dev/null | tr -d ' ' || echo 0) lines, modified $(stat -f '%Sm' "$game/Logs/Hotfix.log" 2>/dev/null || echo -)"
+    } > "$out/snapshot.txt" 2>&1
+    cp "$game/Logs/Hotfix.log" "$out/Hotfix.log" 2>/dev/null || true
+    for f in "$game"/WTF/Account/*/SavedVariables/EverlakeSwitch.lua; do [ -f "$f" ] && cp "$f" "$out/"; done
+    cat "$out/snapshot.txt"
+}
+
+switch_hotfix_lines() {
+    # <Hotfix.log>: our pushes per push id, the marker rows as logged, and the other kinds of lines in the log
+    local log="$1"
+    [ -f "$log" ] || { echo "    (no Hotfix.log)"; return 0; }
+    echo "    our pushes, rows logged per push id:"
+    grep -a -o -E '[^0-9](95[3-6][0-9]{4})[^0-9]' "$log" | tr -dc '0-9\n' | sort | uniq -c | sed 's/^/      /' || true
+    echo "    every line naming a marker push (9550000, 9550001, 9560001) or record 6603 / 8690:"
+    grep -a -E '955000[01]|9560001|RecID:? ?(6603|8690)[^0-9]' "$log" | head -n 40 | cut -c1-240 | sed 's/^/      /' || true
+    echo "    lines that are not single rows (requests, connections, summaries), first 40:"
+    grep -a -v -E 'Table [A-Za-z0-9_]+ RecID' "$log" | head -n 40 | cut -c1-240 | sed 's/^/      /' || true
+}
+
+switch_ask() {
+    # <question>: the answer typed in Terminal goes into the report
+    local answer
+    printf '\033[1;33m[everlake] %s\033[0m ' "$1"
+    read -r answer < /dev/tty || answer="(no answer)"
+    echo "Q: $1" >> "$SWITCH/answers.txt"
+    echo "A: ${answer:-(empty)}" >> "$SWITCH/answers.txt"
+}
+
+switch_run() {
+    # <email> <folder> <run number> <instructions...>: starts the game, waits until it has been quit
+    local email="$1" folder="$2" run="$3" n=0
+    shift 3
+    say "---- run $run ----"
+    for line in "$@"; do say "  $line"; done
+    if game_running; then die "the game is already running: quit it first"; fi
+    "$0" play "$email" ${folder:+"$folder"} || die "play failed"
+    while ! game_running && [ $n -lt 60 ]; do sleep 1; n=$((n + 1)); done
+    game_running || die "the game did not start"
+    say "waiting for you to quit the game (Exit button or Cmd+Q)..."
+    while game_running; do sleep 3; done
+    say "game quit at $(date '+%H:%M:%S')"
+}
+
+switch_report() {
+    # everything the test kept, in run order
+    local d
+    say "switch: game folder $1, build $(game_build "$1"); started $(stat -f '%Sm' "$SWITCH/mark" 2>/dev/null)"
+    for d in "$SWITCH"/[0-9]*; do
+        [ -d "$d" ] || continue
+        cat "$d/snapshot.txt" 2>/dev/null
+        echo "-- Hotfix.log at this point:"
+        switch_hotfix_lines "$d/Hotfix.log"
+    done
+    say "switch: the answers you typed"
+    sed 's/^/    /' "$SWITCH/answers.txt" 2>/dev/null || echo "    (none)"
+    say "switch: the addon's record, every login (EverlakeSwitch saved variables):"
+    d="$(ls -d "$SWITCH"/[0-9]* 2>/dev/null | tail -n 1)"
+    if [ -n "$d" ] && [ -f "$d/EverlakeSwitch.lua" ]; then sed 's/^/    /' "$d/EverlakeSwitch.lua" | head -n 600; else echo "    (none: was the addon enabled?)"; fi
+    say "switch: crash or error reports since the test started:"
+    { find "$1/Errors" -type f -newer "$SWITCH/mark" 2>/dev/null || true; } | head -3 | while read -r f; do
+        echo "  -- $(basename "$f")"; head -n 30 "$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /' || true
+    done
+}
+
+switch_test() {
+    local email="$1" folder="${2:-}" game addr report f n=0 small
+    game="$(find_game "$folder")" || die "game folder not found"
+    addr="$(server_addr)"; [ -n "$addr" ] || die "no server address saved: run setup first"
+    nc -z -G 3 "$addr" 8095 2>/dev/null || die "realm 2 (port 8095 on the server) is not reachable: is worldserver2 running?"
+    if game_running; then die "the game is running: quit it first"; fi
+    rm -rf "$SWITCH"; mkdir -p "$SWITCH"; touch "$SWITCH/mark"
+    mkdir -p "$game/Interface/AddOns/EverlakeSwitch"
+    cp "$HERE/../addons/EverlakeSwitch/EverlakeSwitch.toc" "$HERE/../addons/EverlakeSwitch/EverlakeSwitch.lua" \
+        "$game/Interface/AddOns/EverlakeSwitch/"
+    say "addon EverlakeSwitch installed in $game (build $(game_build "$game"))"
+    say "Two game runs, about 15 minutes. After each login the addon prints a line in chat: OK (green) or MIXED (red)."
+    say "Take a screenshot (Cmd+Shift+3) whenever something looks wrong, and at the two character creation screens."
+    switch_snapshot "$game" 0-before >/dev/null || say "snapshot 0-before incomplete"
+    switch_run "$email" "$folder" 1 \
+        "1. Realm list: pick Everlake. Enter the world with Pat. Wait for the chat line. Press P: in General," \
+        "   is Attack called 'Attack (Forever realm)'? Log out (to the character list)." \
+        "2. Create New Character, Human: Death Knight and Monk should NOT be offered here. Screenshot. Back." \
+        "3. Change Realm: Everlake Retail Test. Enter the world with Aevise. Chat line. Press P: 'Attack (Retail" \
+        "   realm)' and a Death Knight tab; hover Death Coil: does the tooltip have text? Screenshot. Log out." \
+        "4. Create New Character, Human: Death Knight and Monk SHOULD be offered here. Screenshot. Back." \
+        "5. Change Realm: Everlake, Pat, chat line, log out. Change Realm: Retail Test, Aevise, chat line, log out." \
+        "6. Quit the game (Exit)."
+    switch_snapshot "$game" 1-after-run1 >/dev/null || say "snapshot 1-after-run1 incomplete"
+    switch_ask "Run 1: was 'Everlake Retail Test' in the realm list next to Everlake? (y/n)"
+    switch_ask "Run 1: did Everlake's character creation offer Death Knight or Monk? (y/n, which)"
+    switch_ask "Run 1: did Retail Test's character creation offer both? (y/n)"
+    switch_ask "Run 1: any red MIXED line, or anything else odd? (n, or what)"
+    switch_run "$email" "$folder" 2 \
+        "The game restarts: this run starts on the other realm." \
+        "1. Realm list: Everlake Retail Test first. Aevise, chat line, Death Coil in the spellbook? Log out." \
+        "2. Change Realm: Everlake. Pat, chat line. Log out. Create New Character, Human: no Death Knight? Back." \
+        "3. Change Realm: Retail Test, Aevise, chat line, log out. Change Realm: Everlake, Pat, chat line, log out." \
+        "4. Quit the game (Exit)."
+    switch_snapshot "$game" 2-after-run2 >/dev/null || say "snapshot 2-after-run2 incomplete"
+    switch_ask "Run 2: did Everlake's character creation offer Death Knight or Monk? (y/n)"
+    switch_ask "Run 2: any red MIXED line, or anything else odd? (n, or what)"
+    report="$SWITCH/report.txt"
+    { switch_report "$game" 2>&1 || echo "[everlake] switch report stopped early (exit $?)"; } > "$report"
+    say "logins the addon checked: $(grep -a -c '"verdict"] = "OK"' "$report" || true) OK, $(grep -a -c '"verdict"] = "MIXED"' "$report" || true) MIXED"
+    if curl -s -m 20 -T "$report" "http://$addr:8099/switch-$(hostname -s)" >/dev/null; then
+        say "report sent to the server ($report)"
+    else
+        say "report NOT sent (saved in $report)"
+    fi
+    for f in 1-after-run1 2-after-run2; do
+        [ -f "$SWITCH/$f/DBCache.bin" ] && curl -s -m 30 -T "$SWITCH/$f/DBCache.bin" \
+            "http://$addr:8099/switch-dbcache-$f-$(hostname -s).bin" >/dev/null && say "sent the hotfix cache after ${f#*-}"
+    done
+    { find "$game/Screenshots" "$HOME/Desktop" -maxdepth 1 -type f -newer "$SWITCH/mark" \
+        \( -iname "*.jpg" -o -iname "*.png" -o -iname "*.tga" \) 2>/dev/null || true; } | sort | tail -n 12 | while read -r f; do
+        n=$((n + 1))
+        small="$SWITCH/$(basename "${f%.*}").jpg"
+        sips -s format jpeg -s formatOptions 70 -Z 1600 "$f" --out "$small" >/dev/null 2>&1 && [ -s "$small" ] && f="$small"
+        curl -s -m 30 -T "$f" "http://$addr:8099/switch-shot-$n-$(basename "$f" | tr -c 'A-Za-z0-9._\n-' _)" >/dev/null \
+            && say "sent $(basename "$f")" || say "could not send $(basename "$f")"
+    done
+    say "done. Thanks!"
+}
+
 do_check() {
     # Everything that has to be right before the game can reach the server.
     local GAME addr exe f port
@@ -311,7 +462,7 @@ do_check() {
     say "resolves to: $(dscacheutil -q host -a name "$PORTAL" | awk '/ip_address/{print $2}' | tr '\n' ' ')"
     addr="$(server_addr)"
     say "server address: ${addr:-NOT SAVED (run setup again)}"
-    for port in 1119 8081 8085; do
+    for port in 1119 8081 8085 8095; do
         if [ -n "$addr" ] && nc -z -G 3 "$addr" "$port" 2>/dev/null; then say "server port $port: open"; else say "server port $port: NOT REACHABLE"; fi
     done
     if [ -f "$FORWARD_PID" ] && kill -0 "$(cat "$FORWARD_PID")" 2>/dev/null; then
@@ -552,6 +703,11 @@ case "$cmd" in
         else
             say "report NOT sent (saved in $REPORT)"
         fi
+        ;;
+    switch)
+        # gate 5 realm switch test (docs/era-data.md, tests 4-6): guided, two game runs, report sent to the server
+        [ $# -ge 1 ] || die "usage: $0 switch <account email> [game folder]   (e.g. switch TEST@TEST.COM gate2)"
+        switch_test "$@"
         ;;
     undo)
         stop_forward

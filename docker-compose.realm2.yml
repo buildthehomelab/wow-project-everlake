@@ -1,0 +1,43 @@
+# Realm 2 ("Everlake Retail Test", realm id 71) on the same login server as realm 1: gate 5 tests 4-6
+# (docs/era-data.md). Same image and world database as realm 1, its own characters and hotfix databases
+# (characters2, hotfixes2: scripts/realm2-setup.sh), port 8095 and logs volume. Bots stay on realm 1.
+#   docker compose -f docker-compose.yml -f docker-compose.realm2.yml up -d worldserver2
+# The realm settings are the core's environment overrides (TC_ + the config key in upper snake case), so realm 1's
+# overrides/*.conf (game rules) apply here too.
+services:
+  worldserver2:
+    image: everlake-trinitycore:latest
+    pull_policy: never   # local image, built by the worldserver service
+    command: ["worldserver"]
+    networks: [everlake]
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ:-UTC}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-trinity}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MMAP_PATHFINDING: ${MMAP_PATHFINDING:-0}
+      CLIENT_BUILD: ${CLIENT_BUILD:-}
+      TC_REALM_ID: "71"
+      TC_WORLD_SERVER_PORT: "8095"
+      TC_CHARACTER_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};characters2"
+      TC_HOTFIX_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};hotfixes2"
+      TC_PLAYERBOT_WORLD_ENABLE: "0"
+      TC_AUCTION_HOUSE_BOT_SELLER_ENABLED: "0"
+      TC_AUCTION_HOUSE_BOT_BUYER_ENABLED: "0"
+    stdin_open: true
+    tty: true
+    stop_grace_period: 2m
+    ports:
+      - "8095:8095"
+    volumes:
+      - ${DATA_DIR:-./data}:/opt/trinitycore/data:ro
+      - ./overrides:/opt/trinitycore/overrides:ro
+      - logs2:/opt/trinitycore/logs
+
+volumes:
+  logs2:

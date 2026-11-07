@@ -15,7 +15,8 @@ screens don't have to look like the originals:
 - **TBC and every later expansion** use the same retail talent screen. Each era's tree is built as a retail
   trait tree, so one screen and one server system cover them all.
 
-Nothing here is built or run yet, except Test 1 below.
+Nothing here is built or run yet, except Test 1 and the realm switch test (tests 4 to 6, run early with Test 1's
+Death Knight kit) below.
 
 ## What the client and core already have
 
@@ -310,3 +311,89 @@ errors show where.
 - WotLK rune types (Blood, Frost, Unholy, Death) for the Classic → WotLK ruleset: core work.
 - Acherus (map 609) for the DK start, like map 530.
 - The client build moves on (70840 and 70862 are out); the server accepts only 70790.
+
+## Tests 4 to 6, run early: switching realms (2026-11-07)
+
+**The question:** can one Forever client switch between two realms on one login server, each realm sending its own
+client data, without the two mixing? This decides whether Forever and retail (and later Classic to WotLK) can run side
+by side on the one client. Tests 4 to 6 above planned it with a TBC warrior; it's run first with Test 1's Death Knight
+and Monk kit, which is ready and shows plainly in the class list, the spellbook and the talent frame.
+
+### Setup (on the spike server)
+
+| | Realm 1 | Realm 2 |
+|---|---|---|
+| Name in the realm list | Everlake | Everlake Retail Test |
+| Realm id, port | 70, 8085 | 71, 8095 |
+| Container | `worldserver` | `worldserver2` (`docker-compose.realm2.yml`, same image) |
+| Databases | `characters`, `hotfixes` | `characters2`, `hotfixes2` (copies of realm 1's made on 2026-11-07) |
+| World database, login server | shared | shared |
+| Class kit (Death Knight, Monk; pushes 9540010-9540030) | none | all of it |
+| Attack (6603), push 9550000 | "Attack (Forever realm)" | "Attack (Retail realm)" (same push and unique id, other text) |
+| Hearthstone (8690) | "Hearthstone (Forever realm)", push 9550001 | "Hearthstone (Retail realm)", push 9560001 |
+| Player characters | everything except Death Knights and Monks | the Death Knight Aevise and the Monk Asdasd |
+| Bots | yes | off (`Playerbot.World.Enable = 0`), no auction house bot |
+
+- **Why move the kit instead of adding a new marker kit to realm 2:** realm 1 is meant to be plain Forever, and a
+  client that already holds the kit's rows (from this morning on realm 1) is the hardest case for "nothing left
+  over": Test 1's lesson was that the client keeps rows it has. If realm 1 now shows no Death Knight, a removed push
+  really leaves the client's view. The kit's rows never replaced a row of Forever's own hotfixes (checked against
+  `TDB_full_hotfixes_forever_2026_10_14.sql`), so realm 1 is back to exactly what it was before Test 1.
+- **Two markers on purpose:** Attack uses the same push and unique id on both realms with different text, the case a
+  shared cache would get wrong. The Hearthstone uses each realm's own push range, the fix to test if the cache is
+  shared. Every character has both spells.
+- **Characters move, not copy:** realm 2's database is a full copy of realm 1's; then the core's own soft delete
+  (`deleteInfos_*`, restorable with `.character deleted restore <name>`) hides on each realm what belongs to the other.
+  On realm 1 `CharDeleteKeepDays` (30) would purge Aevise and Asdasd's soft-deleted rows; realm 2 holds them in full.
+- **Realm 2's settings** are the core's environment overrides (`TC_REALM_ID`, `TC_WORLD_SERVER_PORT`,
+  `TC_CHARACTER_DATABASE_INFO`, `TC_HOTFIX_DATABASE_INFO`, ...), so realm 1's `overrides/*.conf` (game rules) apply
+  to both. Its log is in its own volume (`logs2`).
+- The client reaches realm 2 through the mini's forwarder, which now also passes on port 8095.
+
+Made with `scripts/realm2-setup.sh` (steps `dbs`, `realm2`, `realm1`; the realm row is
+`sql/everlake/2026_11_07_06_auth_realm2.sql`, the markers `..._07_hotfixes2_realm2_markers.sql` and
+`..._08_hotfixes_realm1_markers.sql`). Start or restart realm 2 from the main checkout:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.realm2.yml up -d worldserver2
+```
+
+Undo: stop and remove `worldserver2`; run the realm row's undo; on realm 1, restore Aevise and Asdasd
+(`.character deleted restore`) and re-apply the kit files `2026_11_07_01/03/05` to `hotfixes`; drop `characters2` and
+`hotfixes2`. Realm 1 and 2 both started cleanly (realm 1: 24,432 hotfix records, realm 2: 25,379).
+
+### Running it (Mac mini, about 15 minutes)
+
+```sh
+git -C ~/everlake fetch
+git -C ~/everlake checkout claude/realm-switch
+~/everlake/client/macos/everlake-client.sh switch TEST@TEST.COM gate2
+```
+
+The subcommand installs the `EverlakeSwitch` addon, starts the game twice (it asks for the Everlake password each
+time) and prints what to do in each run:
+
+- **Run 1:** Everlake (Pat) → Everlake Retail Test (Aevise) → Everlake → Retail Test, with a look at both character
+  creation screens.
+- **Run 2, after a client restart:** Retail Test first → Everlake → Retail Test → Everlake.
+
+After every login the addon checks the client's view against what that realm sends (the two marker names, classes
+6 and 10, Death Coil and its text, the 53-node talent tree) and prints OK or MIXED in chat. After each run the
+subcommand keeps the `Cache` folder listing, the hotfix cache `DBCache.bin` (read by `client/macos/dbcache.py`: which
+pushes it holds, and the text of each marker row), `Hotfix.log` and the addon's record. It asks a few yes/no
+questions, then sends the report, both cache files and the screenshots to the report drop (port 8099).
+
+### Prediction
+
+- **One shared hotfix cache** (`Cache/ADB/enUS/DBCache.bin`, per locale, not per realm): likely.
+- **The class kit stays on realm 2:** likely. The server lists its pushes at every world connection, and the client
+  should apply only the rows of listed pushes even when it holds others.
+- **Attack (same push on both realms) shows the wrong realm's text on one of them:** likely. The client sees a push
+  and unique id it already holds and doesn't ask again, which is Test 1's lesson seen from the other side.
+- **The Hearthstone (own push ranges) is right on both:** likely.
+- If so, the rule for every realm is: **its own hotfix push range, never a push id or unique id another realm uses
+  with other content.**
+
+### Result
+
+Waiting for the run on the mini.
