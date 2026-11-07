@@ -264,8 +264,11 @@ def install(data_root, files, log=print):
             continue
         todo.append((ekey, blob))
     if not todo:
-        log("nothing to add")
-        return None
+        backups = os.path.join(data_root, "everlake-backup")
+        log("nothing to add. Backups: %s; archives: %s" % (
+            sorted(os.listdir(backups)) if os.path.isdir(backups) else "none",
+            sorted(n for n in os.listdir(folder) if re.fullmatch(r"data\.\d{3}", n))[-3:]))
+        return "present" if check(data_root, [e for e, _b in files], log) else None
     numbers = [int(n[5:]) for n in os.listdir(folder) if re.fullmatch(r"data\.\d{3}", n)]
     archive = max(numbers) + 1
     if archive >= 1 << (40 - 30):
@@ -316,16 +319,21 @@ def check(data_root, ekeys, log=print):
             bad += 1
             continue
         _k, archive, offset, size, _w = found[0]
-        with open(os.path.join(folder, "data.%03d" % archive), "rb") as f:
-            f.seek(offset)
-            raw = f.read(size)
-        blob = raw[30:]
-        head = struct.unpack_from(">I", blob, 4)[0]
-        ok = (raw[:30] == entry_header(ekey, size, offset) and blob[:4] == b"BLTE"
-              and hashlib.md5(blob[:head] if head else blob).digest() == ekey)
+        try:
+            with open(os.path.join(folder, "data.%03d" % archive), "rb") as f:
+                f.seek(offset)
+                raw = f.read(size)
+            blob = raw[30:]
+            head = struct.unpack_from(">I", blob, 4)[0] if len(blob) >= 8 else 0
+            same_header = raw[:30] == entry_header(ekey, size, offset)
+            jenkins = raw[22:26] == entry_header(ekey, size, offset)[22:26]
+            ok = (len(raw) == size and blob[:4] == b"BLTE"
+                  and hashlib.md5(blob[:head] if head else blob).digest() == ekey)
+            note = "" if same_header else (" (written by someone else: jenkins %s)" % jenkins)
+        except (OSError, struct.error) as e:
+            ok, note = False, " (%s)" % e
         bad += not ok
-        if not ok:
-            log("  %s: bad bytes in data.%03d at %d" % (ekey.hex(), archive, offset))
+        log("  %s: data.%03d @%d, %d bytes: %s%s" % (ekey.hex(), archive, offset, size, "good" if ok else "BAD", note))
     log("read back %d files: %s" % (len(ekeys), "all good" if not bad else "%d BAD" % bad))
     return not bad
 
@@ -404,7 +412,14 @@ if __name__ == "__main__":
         src = sys.argv[3]
         files = [(bytes.fromhex(n), open(os.path.join(src, n), "rb").read()) for n in sorted(os.listdir(src))
                  if re.fullmatch(r"[0-9a-f]{32}", n)]
-        sys.exit(0 if install(sys.argv[2], files) is not None or not files else 1)
+        try:
+            result = install(sys.argv[2], files)
+        except Exception as e:  # say what went wrong, with the traceback, for the report
+            import traceback
+            traceback.print_exc()
+            print("install stopped: %s" % e)
+            sys.exit(1)
+        sys.exit(0 if result is not None or not files else 1)
     elif len(sys.argv) == 3 and sys.argv[1] == "undo":
         undo(sys.argv[2])
     else:
