@@ -328,6 +328,7 @@ The only difference between the two is the hotfix data in the table below.
 | | Realm 1 | Realm 2 |
 |---|---|---|
 | Name in the realm list | Everlake | Everlake Two |
+| Ruleset card in the client's realm picker (`contentSetId`) | Normal (137) | Roleplay (138; only the card) |
 | Realm id, port | 70, 8085 | 71, 8095 |
 | Container | `worldserver` | `worldserver2` (`docker-compose.realm2.yml`, same image) |
 | Databases | `characters`, `hotfixes` | `characters2`, `hotfixes2` (copies of realm 1's made on 2026-11-07) |
@@ -353,6 +354,15 @@ The only difference between the two is the hotfix data in the table below.
   `TC_CHARACTER_DATABASE_INFO`, `TC_HOTFIX_DATABASE_INFO`, ...), so realm 1's `overrides/*.conf` (game rules) apply
   to both. Its log is in its own volume (`logs2`).
 - The client reaches realm 2 through the mini's forwarder, which now also passes on port 8095.
+- **The Forever client changes realm through its ruleset cards** (RULESET at the top of the character screen), not a
+  realm list. It shows one card per `contentSetId` among the listed realms (137 Normal, 138 Roleplay, 140 Hardcore),
+  and the login server answers a card with `SELECT id FROM realmlist WHERE contentSetId = ? LIMIT 1`. With both
+  realms on Normal the picker showed a dropdown of identical "Beta" entries (the name of `Cfg_Regions` row 1160, our
+  realm region 70), one per realm. So **each realm needs its own content set**; realm 2 borrows the Roleplay card
+  (the server applies no roleplay rules, and Forever's `ExpectedStat` rows all have ContentSetID 0, so stats are the
+  same). The fork's two placeholder realms (72, 73: no worldserver) are hidden with `flag = 3`, and 72 gave up 138
+  because the card lookup doesn't skip hidden realms. For the era realms this means one card per ruleset, which
+  matches the plan of a ruleset picker; the card names and pictures are client data we could replace in our build.
 
 Made with `scripts/realm2-setup.sh` (steps `dbs`, `realm2`, `realm1`; the realm row is
 `sql/everlake/2026_11_07_06_auth_realm2.sql`, the markers `..._07_hotfixes2_realm2_markers.sql` and
@@ -377,7 +387,7 @@ git -C ~/everlake checkout claude/realm-switch
 The subcommand installs the `EverlakeSwitch` addon, starts the game twice (it asks for the Everlake password each
 time) and prints what to do in each run:
 
-- **Run 1:** Everlake (Pat) → Everlake Two (Aevise) → Everlake → Everlake Two, with a look at both character
+- **Run 1:** Everlake (Normal card, Pat) → Everlake Two (Roleplay card, Aevise) → Everlake → Everlake Two, with a look at both character
   creation screens.
 - **Run 2, after a client restart:** Everlake Two first → Everlake → Everlake Two → Everlake.
 

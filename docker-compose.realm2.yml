@@ -24,6 +24,7 @@ services:
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       TC_REALM_ID: "71"
       TC_WORLD_SERVER_PORT: "8095"
+      TC_REALM_CFG_CONTENT_SET_ID: "138"   # the Roleplay ruleset card in the client's realm picker (only the card)
       TC_CHARACTER_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};characters2"
       TC_HOTFIX_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};hotfixes2"
       TC_PLAYERBOT_WORLD_ENABLE: "0"

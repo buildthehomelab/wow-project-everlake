@@ -406,24 +406,24 @@ switch_test() {
     say "Take a screenshot (Cmd+Shift+3) whenever something looks wrong, and at the two character creation screens."
     switch_snapshot "$game" 0-before >/dev/null || say "snapshot 0-before incomplete"
     switch_run "$email" "$folder" 1 \
-        "1. Realm list: pick Everlake. Enter the world with Pat. Wait for the chat line. Press P: in General," \
+        "1. RULESET (top of the character screen): Normal card = Everlake. Select. Enter the world with Pat. Wait for the chat line. Press P: in General," \
         "   is Attack called 'Attack (realm 1)'? Log out (to the character list)." \
         "2. Create New Character, Human: Death Knight and Monk should NOT be offered here. Screenshot. Back." \
-        "3. Change Realm: Everlake Two. Enter the world with Aevise. Chat line. Press P: 'Attack (realm 2)'" \
+        "3. RULESET: Roleplay card = Everlake Two. Select. Enter the world with Aevise. Chat line. Press P: 'Attack (realm 2)'" \
         "   and a Death Knight tab; hover Death Coil: does the tooltip have text? Screenshot. Log out." \
         "4. Create New Character, Human: Death Knight and Monk SHOULD be offered here. Screenshot. Back." \
-        "5. Change Realm: Everlake, Pat, chat line, log out. Change Realm: Everlake Two, Aevise, chat line, log out." \
+        "5. RULESET Normal: Pat, chat line, log out. RULESET Roleplay: Aevise, chat line, log out." \
         "6. Quit the game (Exit)."
     switch_snapshot "$game" 1-after-run1 >/dev/null || say "snapshot 1-after-run1 incomplete"
-    switch_ask "Run 1: was 'Everlake Two' in the realm list next to Everlake? (y/n)"
+    switch_ask "Run 1: did the Roleplay card take you to Everlake Two (Aevise and Asdasd listed)? (y/n)"
     switch_ask "Run 1: did Everlake's character creation offer Death Knight or Monk? (y/n, which)"
     switch_ask "Run 1: did Everlake Two's character creation offer both? (y/n)"
     switch_ask "Run 1: any red MIXED line, or anything else odd? (n, or what)"
     switch_run "$email" "$folder" 2 \
         "The game restarts: this run starts on the other realm." \
-        "1. Realm list: Everlake Two first. Aevise, chat line, Death Coil in the spellbook? Log out." \
-        "2. Change Realm: Everlake. Pat, chat line. Log out. Create New Character, Human: no Death Knight? Back." \
-        "3. Change Realm: Everlake Two, Aevise, chat line, log out. Change Realm: Everlake, Pat, chat line, log out." \
+        "1. RULESET Roleplay (Everlake Two) first. Aevise, chat line, Death Coil in the spellbook? Log out." \
+        "2. RULESET Normal (Everlake). Pat, chat line. Log out. Create New Character, Human: no Death Knight? Back." \
+        "3. RULESET Roleplay: Aevise, chat line, log out. RULESET Normal: Pat, chat line, log out." \
         "4. Quit the game (Exit)."
     switch_snapshot "$game" 2-after-run2 >/dev/null || say "snapshot 2-after-run2 incomplete"
     switch_ask "Run 2: did Everlake's character creation offer Death Knight or Monk? (y/n)"
