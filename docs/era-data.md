@@ -300,9 +300,13 @@ errors show where.
   crit and dodge per agility) had no case for classes 6 and 10, so a Death Knight regenerated 0 health.
   `docker/patches/0006-everlake-dk-monk-class-formulas.patch` gives the Death Knight the Warrior's formulas and the
   Monk the Rogue's. Image rebuilt and worldserver restarted 2026-11-07 10:36; **health regenerates in game.**
+- **Monk (2026-11-07):** a Human Monk was created and played. Health regenerates (patch 0006), the main bar is Energy
+  (its spark glows at the right end while it refills), and there were no Lua errors. **No Chi bar:** Blizzard's
+  `MonkHarmonyBar` shows only for the Windwalker specialization, and the kit gives the Monk a placeholder
+  specialization (1450) and no Chi spells. Showing it needs spec 269 (Windwalker) or our own check.
 - Not a bug: no XP in Northshire. The Death Knight starts at level 8, where anything level 3 or below is grey.
 - Still open:
-  - Tooltip text and the Monk aren't checked yet.
+  - Tooltip text isn't checked yet.
 
 ### Follow-ups found on the way
 
