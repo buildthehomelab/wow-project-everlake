@@ -8,6 +8,7 @@
 #   ./everlake-client.sh gate2 [game folder]       (then: play <account email> gate2, check gate2)
 #   ./everlake-client.sh gate2-addon               (re-installs the gate2 prefetch addon in the test folder)
 #   ./everlake-client.sh gate2-inspect             (read-only check of the local storage, sent to the server)
+#   ./everlake-client.sh gate2-install             (puts the added files into the test folder's local storage; gate2-uninstall undoes)
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -381,6 +382,30 @@ case "$cmd" in
         say "test folder ready ($TEST/$FLAVOR). Original install untouched. Start it with:"
         say "  $0 play <account email> gate2"
         say "then: does the Hearthstone show the Ragnaros icon? Afterwards run: $0 check gate2"
+        ;;
+    gate2-install|gate2-uninstall)
+        # put the build's added files into the TEST folder's local storage (never the real install), or undo that
+        GAME="$(find_game gate2)" || die "no gate2 test folder: run gate2 first"
+        DATA="$(dirname "$GAME")/Data"
+        if pgrep -f "$COPY_NAME/Contents/MacOS" >/dev/null 2>&1; then die "quit the game first"; fi
+        if [ "$cmd" = gate2-uninstall ]; then
+            python3 "$HERE/casc_local.py" undo "$DATA"
+            exit 0
+        fi
+        ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
+        FILES="$SUPPORT/gate2-files"; rm -rf "$FILES"; mkdir -p "$FILES"
+        curl -sf -m 10 "http://$ADDR/everlake/build.json" \
+            | python3 -c 'import json,sys; [print(k) for k in json.load(sys.stdin).get("local_files", {})]' > "$FILES/list.txt" \
+            || die "could not read the build's file list from the server"
+        [ -s "$FILES/list.txt" ] || die "the server's build lists no local files (rebuild it with the current patch.py)"
+        n=0
+        while read -r k; do
+            curl -sf -m 60 -o "$FILES/$k" "http://$ADDR/tpr/wow/data/${k:0:2}/${k:2:2}/$k" || die "could not download $k"
+            n=$((n + 1))
+        done < "$FILES/list.txt"
+        say "downloaded $n files from the server; installing into $DATA"
+        python3 "$HERE/casc_local.py" install "$DATA" "$FILES" || die "install failed (nothing half-done: index files are only replaced after every check)"
+        say "done. Undo with: $0 gate2-uninstall"
         ;;
     gate2-inspect)
         # read-only: what the local storage of the test folder and of the real install contain, sent to the server

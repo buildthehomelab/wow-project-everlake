@@ -359,6 +359,17 @@ class Build:
         self.file_index = self.stored("data", self.cdn["file-index"][0], ".index")
 
 
+    def blizzard_blob(self, ckey, ekey):
+        """The stored (BLTE) bytes of a file Blizzard ships, by content key, from its CDN archive."""
+        t = tact.Tact(os.path.dirname(self.dir), log=lambda *a: None)
+        row = t.db.execute("SELECT ekey, archive, offset, size FROM files WHERE ckey = ?", (ckey,)).fetchone()
+        if not row or row[0] != ekey:
+            raise KeyError("no stored copy of %s with key %s" % (ckey.hex(), ekey.hex()))
+        blob = t.raw(*row)
+        if tact.blte(blob) and md5(tact.blte(blob)) != ckey:
+            raise RuntimeError("Blizzard's copy of %s doesn't match its content key" % ckey.hex())
+        return blob
+
     def download_template(self, enc):
         """Encoded key of Kalimdor's WDT (FileDataID 782779): new download entries copy its tags."""
         ckey = dict(tact.root_entries(self.root))[782779]
@@ -475,6 +486,15 @@ class Build:
             if e[6:22] in wanted:
                 used[wanted[e[6:22]]] = (e[22:38], int.from_bytes(e[1:6], "big"))
         sizes = {bytes.fromhex(v["ekey"]): stored[int(f)][2] for f, v in ours.items()}
+        # every file the client must find in its local storage (a map's terrain is never streamed): ours, plus
+        # Blizzard's copy wherever Blizzard ships the same bytes. Those copies are fetched now and served loose too.
+        local = {}
+        for fdid, (ekey, _csize) in used.items():
+            if ekey.hex() != ours[fdid]["ekey"]:
+                blob = self.blizzard_blob(stored[fdid][0], ekey)
+                put("data", ekey.hex(), blob)
+                sizes[ekey] = len(blob)
+            local[ekey.hex()] = sizes[ekey]
         dl = download_add(old_dl, [(k, sizes.get(k, n)) for k, n in used.values()], template)
         # Blizzard's spec names the sizes: header and entries stored plain, the tag bitmasks zlib-compressed
         entries = struct.unpack_from(">I", dl, 5)[0] * 22
@@ -519,7 +539,8 @@ class Build:
         summary = {"blizzard_build_key": self.build_key, "blizzard_cdn_key": self.cdn_key, "version": self.version,
                    "cdn_path": self.path, "blizzard_hosts": self.hosts, "build_key": build_key,
                    "cdn_key": cdn_key, "files": {str(f): v for f, v in ours.items()},
-                   "added_file_data_ids": added, "config_lines": lines, "data_files": data_files}
+                   "added_file_data_ids": added, "config_lines": lines, "data_files": data_files,
+                   "local_files": local}
         json.dump(summary, open(os.path.join(out, "build.json"), "w"), indent=2)
         return summary
 
@@ -593,6 +614,11 @@ def verify(out, build, files):
         if mask[0] & 0x80:
             tagged.append(dl[at:end].decode())
         at = end + 3 + (count + 7) // 8
+    for ekey_hex, size in summary["local_files"].items():  # what the client must have locally, served loose
+        blob = ours("data", ekey_hex)
+        head = struct.unpack_from(">I", blob, 4)[0]
+        assert len(blob) == size and md5(blob[:head] if head else blob).hex() == ekey_hex, "local file " + ekey_hex
+    assert len(summary["local_files"]) == len(files), "one local file per added file"
     original = dict(tact.root_entries(build.root))
     found = dict(tact.root_entries(rootdata))
     changed = sum(1 for f, c in original.items() if found.get(f) != c and f not in files)

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """The game's local storage (Data/data: data.NNN archives, .idx key tables, shmem), read and checked.
 
-    casc_local.py inspect <Data folder>      prints what the files contain and whether every checksum matches
+    casc_local.py inspect <Data folder>             prints what the files contain and whether every checksum matches
+    casc_local.py install <Data folder> <dir>       adds the BLTE files in <dir> (named by encoded key); backs up first
+    casc_local.py undo <Data folder>                reverses the newest install
+    casc_local.py selftest                          install into a fake storage, read back, undo
 
 Gate 2 (docs/custom-files.md): the client never streams map terrain; a map's files must already be in local
 storage, as Blizzard's installer leaves them. This module reads that storage the way CascLib (MIT) does and checks
@@ -126,6 +129,7 @@ class Index:
         if hi != hsh:
             return False
         self.layout = "continuous"
+        self.block_at, self.block_size = at, size
         for i in range(0, size - size % self.entry_len, self.entry_len):
             self.entries.append(self._parse(self.data[at + 8 + i:at + 8 + i + self.entry_len], at + 8 + i))
         return True
@@ -216,8 +220,193 @@ def inspect(data_root):
     print("headers: jenkins right %d, checksum right %d, of %d" % (ok_j, ok_c, min(len(samples), 24)))
 
 
+def entry_bytes(key, archive, offset, size, segment_bits=30):
+    """One 18-byte index entry: 9-byte key, 5-byte archive and offset (big endian), 4-byte size (little endian)."""
+    return key[:9] + ((archive << segment_bits) | offset).to_bytes(5, "big") + struct.pack("<I", size)
+
+
+def rebuild_index(ix, add):
+    """The bytes of index `ix` with entries `add` (18-byte raw entries) added, sorted, re-hashed, same file size."""
+    if ix.layout != "continuous" or ix.entry_len != 18 or not ix.header_ok:
+        raise ValueError("%s: only the continuous version 7 layout is written" % ix.path)
+    old = ix.data[ix.block_at + 8:ix.block_at + 8 + ix.block_size]
+    tail = ix.data[ix.block_at + 8 + ix.block_size:]
+    if tail.strip(b"\0"):
+        raise ValueError("%s: data after the entries; not touching it" % ix.path)
+    entries = sorted([old[i:i + 18] for i in range(0, len(old), 18)] + list(add))
+    raw = b"".join(entries)
+    hi = lo = 0
+    for e in entries:
+        hi, lo = hashlittle2(e, hi, lo)
+    out = ix.data[:ix.block_at] + struct.pack("<II", len(raw), hi) + raw
+    if len(out) > len(ix.data):
+        raise ValueError("%s: no room for %d more entries" % (ix.path, len(add)))
+    return out + bytes(len(ix.data) - len(out))
+
+
+def install(data_root, files, log=print):
+    """Put files [(encoded key, BLTE bytes)] into local storage: a new data.NNN for them, entries added in place to
+    the newest index of their buckets (shmem names those versions, so the names stay). Backs up what it changes in
+    <Data>/everlake-backup/<n>, with undo.json. Returns the backup folder."""
+    import hashlib
+    import json
+    import time
+    folder = os.path.join(data_root, "data")
+    idx = newest_indexes(folder)
+    parsed = {b: Index(p) for b, p in idx.items()}
+    have = {e[0] for ix in parsed.values() for e in ix.entries}
+    todo = []
+    for ekey, blob in files:
+        head = struct.unpack_from(">I", blob, 4)[0]
+        if blob[:4] != b"BLTE" or hashlib.md5(blob[:head] if head else blob).digest() != ekey:
+            raise ValueError("%s: not the BLTE file of that key" % ekey.hex())
+        if ekey[:9] in have:
+            log("  %s already in local storage, skipped" % ekey.hex())
+            continue
+        todo.append((ekey, blob))
+    if not todo:
+        log("nothing to add")
+        return None
+    numbers = [int(n[5:]) for n in os.listdir(folder) if re.fullmatch(r"data\.\d{3}", n)]
+    archive = max(numbers) + 1
+    if archive >= 1 << (40 - 30):
+        raise ValueError("no free archive number")
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    backup = os.path.join(data_root, "everlake-backup", stamp)
+    os.makedirs(backup)
+    adds, offset, blob_all = {}, 0, bytearray()
+    for ekey, blob in todo:
+        size = 30 + len(blob)
+        blob_all += entry_header(ekey, size, offset) + blob
+        adds.setdefault(bucket_of(ekey), []).append(entry_bytes(ekey, archive, offset, size))
+        offset += size
+    if offset >= 1 << 30:
+        raise ValueError("files too large for one archive")
+    new_indexes = {b: rebuild_index(parsed[b], add) for b, add in adds.items()}   # all checks before any write
+    undo = {"archive": "data.%03d" % archive, "indexes": []}
+    for b in new_indexes:
+        name = os.path.basename(idx[b])
+        open(os.path.join(backup, name), "wb").write(parsed[b].data)
+        undo["indexes"].append(name)
+    json.dump(undo, open(os.path.join(backup, "undo.json"), "w"), indent=1)
+    path = os.path.join(folder, "data.%03d" % archive)
+    with open(path + ".part", "wb") as f:
+        f.write(blob_all)
+    os.replace(path + ".part", path)
+    for b, data in new_indexes.items():
+        with open(idx[b] + ".part", "wb") as f:
+            f.write(data)
+        os.replace(idx[b] + ".part", idx[b])
+    log("wrote %d files (%d bytes) to data.%03d, %d index files updated; backup %s" % (
+        len(todo), len(blob_all), archive, len(new_indexes), backup))
+    check(data_root, [e for e, _b in todo], log)
+    return backup
+
+
+def check(data_root, ekeys, log=print):
+    """Find each file through the index and read it back from its archive, checking every hash on the way."""
+    import hashlib
+    folder = os.path.join(data_root, "data")
+    idx = {b: Index(p) for b, p in newest_indexes(folder).items()}
+    bad = 0
+    for ekey in ekeys:
+        ix = idx[bucket_of(ekey)]
+        found = [e for e in ix.entries if e[0] == ekey[:9]]
+        if not ix.header_ok or ix.layout != "continuous" or len(found) != 1:
+            log("  %s: not found in index %s" % (ekey.hex(), os.path.basename(ix.path)))
+            bad += 1
+            continue
+        _k, archive, offset, size, _w = found[0]
+        with open(os.path.join(folder, "data.%03d" % archive), "rb") as f:
+            f.seek(offset)
+            raw = f.read(size)
+        blob = raw[30:]
+        head = struct.unpack_from(">I", blob, 4)[0]
+        ok = (raw[:30] == entry_header(ekey, size, offset) and blob[:4] == b"BLTE"
+              and hashlib.md5(blob[:head] if head else blob).digest() == ekey)
+        bad += not ok
+        if not ok:
+            log("  %s: bad bytes in data.%03d at %d" % (ekey.hex(), archive, offset))
+    log("read back %d files: %s" % (len(ekeys), "all good" if not bad else "%d BAD" % bad))
+    return not bad
+
+
+def undo(data_root, log=print):
+    """Reverse the newest install: restore its index files, remove its archive."""
+    import json
+    root = os.path.join(data_root, "everlake-backup")
+    stamps = sorted(os.listdir(root)) if os.path.isdir(root) else []
+    if not stamps:
+        log("nothing to undo")
+        return
+    backup = os.path.join(root, stamps[-1])
+    plan = json.load(open(os.path.join(backup, "undo.json")))
+    folder = os.path.join(data_root, "data")
+    for name in plan["indexes"]:
+        data = open(os.path.join(backup, name), "rb").read()
+        with open(os.path.join(folder, name) + ".part", "wb") as f:
+            f.write(data)
+        os.replace(os.path.join(folder, name) + ".part", os.path.join(folder, name))
+    archive = os.path.join(folder, plan["archive"])
+    if os.path.exists(archive):
+        os.remove(archive)
+    os.rename(backup, backup + "-undone")
+    log("restored %d index files, removed %s" % (len(plan["indexes"]), plan["archive"]))
+
+
+def selftest(log=print):
+    """Build a small fake storage, install into it, read it back with the same reader that checked a real install."""
+    import hashlib
+    import tempfile
+    root = tempfile.mkdtemp()
+    folder = os.path.join(root, "data")
+    os.makedirs(folder)
+    rng = hashlib.sha256(b"everlake").digest()
+    fake = []
+    for b in range(16):
+        keys = []
+        n = 0
+        while len(keys) < 20:
+            k = hashlib.md5(rng + bytes([b, n % 256, n // 256])).digest()
+            n += 1
+            if bucket_of(k) == b:
+                keys.append(entry_bytes(k, 0, 1000 * len(keys), 100))
+        header = struct.pack("<HBBBBBBQ", 7, b, 0, 4, 5, 9, 30, 0xFFC0000000)
+        body = struct.pack("<II", 16, hashlittle(header)) + header + bytes(8)
+        raw = b"".join(sorted(keys))
+        hi = lo = 0
+        for e in sorted(keys):
+            hi, lo = hashlittle2(e, hi, lo)
+        data = body + struct.pack("<II", len(raw), hi) + raw
+        open(os.path.join(folder, "%02x%08x.idx" % (b, 0x22)), "wb").write(data + bytes(4096 - len(data)))
+        fake.append(keys)
+    open(os.path.join(folder, "data.000"), "wb").write(bytes(100))
+    files = []
+    for i in range(5):
+        content = b"everlake test file %d" % i
+        blob = b"BLTE" + bytes(4) + b"N" + content
+        files.append((hashlib.md5(blob).digest(), blob))
+    ok = all(Index(p).header_ok and Index(p).layout == "continuous" for p in newest_indexes(folder).values())
+    install(root, files, log)
+    good = check(root, [e for e, _b in files], log)
+    undo(root, log)
+    restored = all(len(Index(p).entries) == 20 for p in newest_indexes(folder).values())
+    log("selftest: fake storage readable %s, install read back %s, undo restored %s" % (ok, good, restored))
+    return ok and good and restored and not os.path.exists(os.path.join(folder, "data.001"))
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "inspect":
         inspect(sys.argv[2])
+    elif len(sys.argv) == 2 and sys.argv[1] == "selftest":
+        sys.exit(0 if selftest() else 1)
+    elif len(sys.argv) == 4 and sys.argv[1] == "install":
+        # install <Data folder> <folder of files named by their encoded key>
+        src = sys.argv[3]
+        files = [(bytes.fromhex(n), open(os.path.join(src, n), "rb").read()) for n in sorted(os.listdir(src))
+                 if re.fullmatch(r"[0-9a-f]{32}", n)]
+        sys.exit(0 if install(sys.argv[2], files) is not None or not files else 1)
+    elif len(sys.argv) == 3 and sys.argv[1] == "undo":
+        undo(sys.argv[2])
     else:
         sys.exit(__doc__)
