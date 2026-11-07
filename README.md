@@ -1,15 +1,23 @@
 # Project Everlake
 
 A private World of Warcraft server built on the **WoW Forever** client (1.60.x, the modern 64-bit client that runs
-natively on Apple Silicon), with a long-term goal of carrying the Forever 1-60 game on into later expansions.
+natively on Apple Silicon). The goal is one client for every ruleset: Forever, Classic to WotLK, and retail, picked
+in the client's ruleset screen.
 
-Status: **spike**. Nothing here is playable yet. The first job is to prove four things:
+Status: **spike**. Nothing here is playable yet. The first job is to prove these things:
 
 1. **Server runs**: the TrinityCore `forever` core builds from source, a frozen client logs in and walks around.
-2. **Custom files load**: the client draws a file it doesn't ship (one Outland terrain tile and its buildings),
-   served from our own patch server.
-3. **Bots scale**: PlayerbotV2 at 500, 1,000 and 2,500 bots, measuring server CPU and update time.
-4. **Characters move**: one character converted from an AzerothCore 3.3.5 server.
+2. **Custom files load**: the client draws world files it doesn't ship (Outland, Northrend, the post-Cataclysm
+   world), served from our own patch server. This decides whether one client can run every ruleset
+   ([notes](docs/custom-files.md)). Experiment 1 **passed** 2026-11-06: the client streamed and drew a replaced
+   icon from our own build. Experiment 2 **passed** 2026-11-07: the client drew TBC Sunstrider Isle on map 530, which
+   it doesn't ship. Next: server-side terrain for map 530, then all of Outland.
+3. **The world feels alive**: PlayerbotV2 bots go where real players are and sleep elsewhere; find the number of
+   bots each kind of place needs, check that bots on screen act like players (they wave back), and measure the
+   cost per bot ([plan](docs/living-world.md)).
+4. ~~Characters move~~: dropped. Everyone starts fresh.
+5. **Each ruleset has its own era**: a second realm sends the client TBC warrior talents and spells, and switching
+   between realms switches the data without mixing ([plan](docs/era-data.md)).
 
 ## What's here
 
@@ -21,6 +29,7 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove four 
 | `docker/entrypoint.sh` | Writes the server configs from the environment on every start |
 | `docker/patches/` | Fixes on top of the core that aren't merged upstream yet |
 | `scripts/gen-certs.sh` | Your own root CA (limited to `*.actual.battle.net`) and the login server certificate |
+| `tools/tact/` | Gate 2: `patch.py` makes a build that is Blizzard's plus our files, `cdn.py` serves it ([notes](docs/custom-files.md)) |
 | `client/macos/everlake-client.sh` | Sets up a Mac to play here (hosts entry, CA, key patch, game copy) and starts the game |
 | `docs/client-connection.md` | What a client needs to connect, and why |
 

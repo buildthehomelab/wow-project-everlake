@@ -1,0 +1,8 @@
+{
+  "comment": "Test 1, talents (docs/era-data.md): a talent tree sent as data. Forever's Warrior tree (TraitTree 1117: 53 talents\nin three groups, points-spent conditions per tier, talent-point currency 3820) copied under new IDs as TraitTree\n954100 and linked to the Death Knight class skill line (796, from 2026_11_07_01_hotfixes_test1_classes.sql). The\ntalents are the Warrior's own spells: this tests the plumbing (does a tree the client never shipped open, take\npoints and survive a relog), not Death Knight content. Pushes from 9540010.",
+  "target_build": "1.60.1.70790",
+  "first_push": 9540010,
+  "clone_trees": [
+    {"tree": 1117, "new_tree": 954100, "skill_line": 796, "id_base": 9541000}
+  ]
+}
