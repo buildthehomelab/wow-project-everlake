@@ -7,6 +7,7 @@
 #   ./everlake-client.sh undo  [game folder]
 #   ./everlake-client.sh gate2 [game folder]       (then: play <account email> gate2, check gate2)
 #   ./everlake-client.sh gate2-addon               (re-installs the gate2 prefetch addon in the test folder)
+#   ./everlake-client.sh gate2-inspect             (read-only check of the local storage, sent to the server)
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -380,6 +381,19 @@ case "$cmd" in
         say "test folder ready ($TEST/$FLAVOR). Original install untouched. Start it with:"
         say "  $0 play <account email> gate2"
         say "then: does the Hearthstone show the Ragnaros icon? Afterwards run: $0 check gate2"
+        ;;
+    gate2-inspect)
+        # read-only: what the local storage of the test folder and of the real install contain, sent to the server
+        ADDR="$(server_addr)"; mkdir -p "$SUPPORT"; REPORT="$SUPPORT/inspect.txt"
+        {
+            T="$(find_game gate2 2>/dev/null)" && { say "test folder: $(dirname "$T")/Data"; python3 "$HERE/casc_local.py" inspect "$(dirname "$T")/Data" 2>&1 || true; }
+            R="$(find_game "" 2>/dev/null)" && { say "real install: $(dirname "$R")/Data"; python3 "$HERE/casc_local.py" inspect "$(dirname "$R")/Data" 2>&1 || true; }
+        } | tee "$REPORT"
+        if [ -n "$ADDR" ] && curl -s -m 10 -T "$REPORT" "http://$ADDR:8099/inspect-$(hostname -s)" >/dev/null; then
+            say "report sent to the server"
+        else
+            say "report NOT sent (saved in $REPORT)"
+        fi
         ;;
     gate2-addon)
         # (re)install the prefetch addon in the existing test folder, without making the folder again
