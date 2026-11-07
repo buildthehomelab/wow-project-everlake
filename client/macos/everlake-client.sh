@@ -280,10 +280,17 @@ test1_report() {
     { find "$game/Errors" -type f -newer "$mark" 2>/dev/null || true; } | head -3 | while read -r f; do
         echo "  -- $(basename "$f")"; head -n 40 "$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /' || true
     done
-    say "test1: screenshots since test1-addon (each sent to the server as its own file):"
-    { find "$game/Screenshots" -type f -newer "$mark" 2>/dev/null || true; } | sort | tail -n 12 | while read -r f; do
+    say "test1: screenshots since test1-addon, the game's and the Desktop's (each sent to the server as its own file):"
+    test1_shots "$game" | while read -r f; do
         printf '    %s\t%s\n' "$(basename "$f")" "$(stat -f %z "$f")"
     done
+}
+
+test1_shots() {
+    # Screenshots taken since test1-addon: the game's own (Screenshots folder) and macOS ones (Cmd+Shift+3 or 4, on
+    # the Desktop), newest 12.
+    { find "$1/Screenshots" "$HOME/Desktop" -maxdepth 1 -type f -newer "$SUPPORT/test1.mark" \
+        \( -iname "*.jpg" -o -iname "*.png" -o -iname "*.tga" \) 2>/dev/null || true; } | sort | tail -n 12
 }
 
 do_check() {
@@ -488,9 +495,12 @@ case "$cmd" in
         if [ -n "$addr" ] && curl -s -m 10 -T "$REPORT" "http://$addr:8099/test1-$(hostname -s)" >/dev/null; then
             say "report sent to the server"
             n=0
-            { find "$GAME/Screenshots" -type f -newer "$SUPPORT/test1.mark" 2>/dev/null || true; } | sort | tail -n 12 \
-                | while read -r f; do
+            SHOTS="$SUPPORT/test1-shots"; rm -rf "$SHOTS"; mkdir -p "$SHOTS"
+            test1_shots "$GAME" | while read -r f; do
                     n=$((n + 1))
+                    # macOS screenshots are large PNGs: send a JPEG at most 1600 pixels wide instead
+                    small="$SHOTS/$(basename "${f%.*}").jpg"
+                    sips -s format jpeg -s formatOptions 70 -Z 1600 "$f" --out "$small" >/dev/null 2>&1 && [ -s "$small" ] && f="$small"
                     if [ "$(stat -f %z "$f")" -lt 2000000 ]; then
                         curl -s -m 30 -T "$f" "http://$addr:8099/test1-shot-$n-$(basename "$f" | tr -c 'A-Za-z0-9._\n-' _)" >/dev/null \
                             && say "sent $(basename "$f")" || say "could not send $(basename "$f")"
