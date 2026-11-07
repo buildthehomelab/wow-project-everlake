@@ -457,8 +457,18 @@ run show what the client kept. Next time: fewer, shorter steps, one switch per s
 3. **Within one realm, Test 1's rule stands:** a changed row needs a new push; the client keeps rows of a push it has.
 4. **Each realm needs its own ruleset card** (`contentSetId`): the Forever client picks realms by card, one realm per
    content set.
+   The "Beta" dropdown above the cards is the **sub-region** picker (`SubRegionDropdown` in the client's
+   `Blizzard_GlueXML/mainline/SuperDistrict.lua`, shown when `C_Login.GetSubRegions()` has more than one entry). The
+   fork offers one sub-region per realm (its full address); the client names each after `Cfg_Regions` row 1160
+   ("Beta", region 70). The sub-region doesn't route anything: the card does (`Param_ContentSetIDFilter`). Core patch
+   `docker/patches/0007-everlake-one-sub-region.patch` makes the login server offer one sub-region (the lowest realm's,
+   `70-1-70`) and list every realm under it, so the dropdown goes away. Written 2026-11-07; the image build that
+   compiles it was still running when the spike was stopped, so it hasn't been seen in game.
 5. **Each realm keeps a stable realm address** (region 70, battlegroup 1, realm id): the client's cache is keyed by
    it, so renumbering a realm makes the client fetch its whole set again.
+
+The spike's game servers were stopped on 2026-11-07 after this test (the user: "we have everything we need");
+`docker compose start` brings them back, realm 2 with the `-f docker-compose.realm2.yml` file.
 
 This settles the deciding question for Forever and retail side by side (and Classic to WotLK after): per-realm
 client data on the one client works. Next on this path: per-realm map rows (maps 0 and 1 pointing at each era's
