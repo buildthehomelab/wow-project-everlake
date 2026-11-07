@@ -25,9 +25,12 @@ RUN git init -q /src/TrinityCore \
     && git -C /src/TrinityCore fetch -q --depth 1 origin "${TC_COMMIT}" \
     && git -C /src/TrinityCore checkout -q FETCH_HEAD
 
-# Fixes not merged upstream yet (docker/patches/*.patch, applied in name order; the build fails if one no longer applies)
+# Fixes not merged upstream yet (docker/patches/*.patch, applied in name order; the build fails if one no longer applies).
+# docker/patches/playerbot/*.patch change the PlayerbotV2 module: applied only when the core has it (forever-bots).
 COPY docker/patches/ /patches/
-RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; echo "applying $p"; git -C /src/TrinityCore apply "$p" || exit 1; done
+RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; echo "applying $p"; git -C /src/TrinityCore apply "$p" || exit 1; done \
+    && if [ -d /src/TrinityCore/src/modules/PlayerbotV2 ]; then \
+        for p in /patches/playerbot/*.patch; do [ -e "$p" ] || continue; echo "applying $p"; git -C /src/TrinityCore apply "$p" || exit 1; done; fi
 
 # BUILD_JOBS: lower it on small machines (GCC needs ~2 GB RAM per job on the biggest files)
 ARG BUILD_JOBS=4
@@ -84,6 +87,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=build /opt/trinitycore /opt/trinitycore
 # The updater looks for sql/ under the source directory baked in at build time
 COPY --from=build /src/TrinityCore/sql /src/TrinityCore/sql
+# Our login-database tables the core patches need, applied by the updater on start like the fork's own custom files
+# (name reservation: docker/patches/0008). The other sql/everlake files are data and stay manual.
+COPY sql/everlake/2026_11_07_09_auth_name_reservation.sql /src/TrinityCore/sql/custom/auth/
 # worldserver's auto-setup imports TDB_full_*.sql from its working directory
 COPY --from=tdb /tdb/ /opt/trinitycore/bin/
 COPY docker/entrypoint.sh docker/extract.sh /usr/local/bin/

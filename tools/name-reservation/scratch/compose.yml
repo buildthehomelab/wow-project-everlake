@@ -1,0 +1,74 @@
+# Scratch stack for the name reservation test (tools/name-reservation/scratch_test.py): its own compose project,
+# MySQL volume and network, two realms sharing one login database. Nothing is published on the host, so it runs
+# beside a live stack without touching its ports or databases. Test passwords only; never use this file for a realm.
+#   docker compose -p everlake-names-test -f tools/name-reservation/scratch/compose.yml up -d
+#   docker compose -p everlake-names-test -f tools/name-reservation/scratch/compose.yml down -v   (removes it all)
+name: everlake-names-test
+
+x-db: &db
+  TZ: UTC
+  DB_HOST: mysql
+  DB_PORT: 3306
+  DB_USER: trinity
+  DB_PASSWORD: names-test
+
+x-world: &world
+  image: ${NAMES_TEST_IMAGE:-everlake-trinitycore:names-test}
+  pull_policy: never
+  command: ["worldserver"]
+  depends_on:
+    mysql:
+      condition: service_healthy
+  stdin_open: true
+  tty: true
+  stop_grace_period: 1m
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      TZ: UTC
+      MYSQL_ROOT_PASSWORD: names-test-root
+      DB_USER: trinity
+      DB_PASSWORD: names-test
+    command: ["--skip-log-bin", "--innodb-buffer-pool-size=256M",
+              "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../../../docker/mysql-init/01-trinity.sh:/docker-entrypoint-initdb.d/01-trinity.sh:ro
+      - ./mysql-init.sh:/docker-entrypoint-initdb.d/09-names-test.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -pnames-test-root --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  # realm 1: realmlist id 70, databases characters + hotfixes (the entrypoint's defaults)
+  worldserver:
+    <<: *world
+    environment:
+      <<: *db
+      TC_NAME_RESERVATION_GRACE_PERIOD: "${NAMES_TEST_GRACE:-60}"
+      TC_PLAYERBOT_WORLD_ENABLE: "0"
+      TC_AUCTION_HOUSE_BOT_SELLER_ENABLED: "0"
+      TC_AUCTION_HOUSE_BOT_BUYER_ENABLED: "0"
+    volumes:
+      - ${DATA_DIR:-../../../data}:/opt/trinitycore/data:ro
+
+  # realm 2: realmlist id 71, its own characters database, the same world, hotfixes and login databases
+  worldserver2:
+    <<: *world
+    environment:
+      <<: *db
+      TC_REALM_ID: "71"
+      TC_WORLD_SERVER_PORT: "8095"
+      TC_CHARACTER_DATABASE_INFO: "mysql;3306;trinity;names-test;characters2"
+      TC_NAME_RESERVATION_GRACE_PERIOD: "${NAMES_TEST_GRACE:-60}"
+      TC_PLAYERBOT_WORLD_ENABLE: "0"
+      TC_AUCTION_HOUSE_BOT_SELLER_ENABLED: "0"
+      TC_AUCTION_HOUSE_BOT_BUYER_ENABLED: "0"
+    volumes:
+      - ${DATA_DIR:-../../../data}:/opt/trinitycore/data:ro
+
+volumes:
+  mysql-data:
