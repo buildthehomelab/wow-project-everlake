@@ -296,9 +296,12 @@ errors show where.
   - On the way: Blizzard made 1.60.1.70862 live, and the gate2 copy asked the version service and tried to update.
     `keypatch.dylib` now blocks `patch.battle.net` and `version.battle.net` for the gate2 copy (and logs every
     lookup), so it stays on our build. And a mini run with sudo made the copy root's: the script now refuses root.
+- **Health regeneration fixed by a core patch:** the core's vanilla formulas (`OCTRegenHPPerSpirit`, attack power,
+  crit and dodge per agility) had no case for classes 6 and 10, so a Death Knight regenerated 0 health.
+  `docker/patches/0006-everlake-dk-monk-class-formulas.patch` gives the Death Knight the Warrior's formulas and the
+  Monk the Rogue's. Image rebuilt and worldserver restarted 2026-11-07 10:36; **health regenerates in game.**
 - Not a bug: no XP in Northshire. The Death Knight starts at level 8, where anything level 3 or below is grey.
 - Still open:
-  - Health doesn't regenerate out of combat: `Player::OCTRegenHPPerSpirit` has no case for classes 6 and 10 (core).
   - Tooltip text and the Monk aren't checked yet.
 
 ### Follow-ups found on the way
