@@ -16,6 +16,7 @@ finds a file through this chain, so these are rewritten and everything else is B
   encoding       content key -> encoded key, encoded key -> encoding spec  -> entries for every new file
   CDN config     names the loose-file index                                -> new CDN config
   file-index     encoded key -> size, for files stored on their own        -> entries for every new file
+  download       what the client fetches ahead of use, by priority         -> every new file, first, priority 0
 
 The sub-manifest step is what the first run on the client was missing: the client looked our file up by its
 TVFS path, "000173F600000000:00020D0E<content key>", and reported "not found".
@@ -245,6 +246,51 @@ class Encoding:
         return header + specs + ce_index + b"".join(ce_pages) + ek_index + b"".join(ek_pages) + trailer
 
 
+# --- download manifest -----------------------------------------------------------------------------
+
+def download_add(data, ekeys, template_ekey, priority=0):
+    """The download manifest with `ekeys` [(encoded key, encoded size)] added first, at `priority`.
+
+    The client's background downloader fetches the files listed here ahead of use; a map's world file is read the
+    moment the map loads, so it must already be local (Blizzard lists Kalimdor's at priority 1). The new entries get
+    the tags (platform, architecture, locale, region) of `template_ekey`'s entry. Version 1 layout: "DL", version,
+    ekey size, has checksum, entry count (4), tag count (2); entries of ekey, size (5), priority (1); then per tag
+    a name, a type (2) and one bit per entry, highest bit first."""
+    if data[:2] != b"DL" or data[2] != 1 or data[3] != 16 or data[4] != 0:
+        raise ValueError("download manifest layout not supported")
+    count, tags = struct.unpack_from(">IH", data, 5)
+    at, size = 11, 22
+    entries = data[at:at + count * size]
+    index = {entries[i * size:i * size + 16]: i for i in range(count)}
+    if template_ekey not in index:
+        raise KeyError("template %s is not in the download manifest" % template_ekey.hex())
+    t = index[template_ekey]
+    new = [(k, n) for k, n in ekeys if k not in index]
+    entries = bytearray(entries)
+    for k, _n in ekeys:  # already listed (a file with the same bytes as one of Blizzard's): raise its priority
+        if k in index:
+            o = index[k] * size + 21
+            entries[o] = min(struct.unpack_from(">b", entries, o)[0], priority) & 0xFF
+    entries = bytes(entries)
+    head = b"".join(k + n.to_bytes(5, "big") + struct.pack(">b", priority) for k, n in new)
+    at += count * size
+    out_tags = b""
+    for _ in range(tags):
+        end = data.index(b"\0", at)
+        name_type = data[at:end + 3]
+        mask = data[end + 3:end + 3 + (count + 7) // 8]
+        at = end + 3 + (count + 7) // 8
+        old = int.from_bytes(mask, "big") >> (len(mask) * 8 - count)
+        bit = (old >> (count - 1 - t)) & 1
+        ours = ((1 << len(new)) - 1) if bit else 0
+        total = len(new) + count
+        value = (ours << count) | old
+        out_tags += name_type + (value << ((-total) % 8)).to_bytes((total + 7) // 8, "big")
+    if at != len(data):
+        raise ValueError("download manifest has data after its tags")
+    return data[:5] + struct.pack(">IH", count + len(new), tags) + head + entries + out_tags
+
+
 # --- loose-file index ----------------------------------------------------------------------------
 
 def index_build(entries):
@@ -313,6 +359,14 @@ class Build:
         self.file_index = self.stored("data", self.cdn["file-index"][0], ".index")
 
 
+    def download_template(self, enc):
+        """Encoded key of Kalimdor's WDT (FileDataID 782779): new download entries copy its tags."""
+        ckey = dict(tact.root_entries(self.root))[782779]
+        for e in enc.ce:
+            if e[6:22] == ckey:
+                return e[22:38]
+        raise KeyError("Kalimdor's WDT is not in the encoding file")
+
     def sub_manifest(self, top, mount):
         """(config line name, encoded key, bytes) of the sub-manifest vfs-root mounts at `mount`."""
         mounts = dict(top.files())
@@ -338,6 +392,9 @@ class Build:
         data, name = index_build(entries)
         check("loose-file index rebuilt", data == self.file_index and name == self.cdn["file-index"][0])
         check("root with nothing set", root_set(self.root, {})[0] == self.root)
+        dl = tact.blte(self.loose(self.build["download"][1]))
+        dl_some = dl[11:27]
+        check("download manifest with nothing added", download_add(dl, [], dl_some) == dl)
         check("vfs-root rebuilt", tvfs.Manifest(self.vfs).build() == self.vfs)
         for key in ("vfs-2", "vfs-100", "vfs-300"):
             sub = tact.blte(self.loose(self.build[key][1]))
@@ -408,6 +465,25 @@ class Build:
             lines[key] = "%s %s" % (md5(vfs).hex(), vfs_ekey.hex())
             lines[key + "-size"] = "%d %d" % (len(vfs), len(vfs_blob))
 
+        # the download manifest: our files first, at the top priority, so the client has them before a map loads
+        old_dl = tact.blte(self.loose(b["download"][1]))
+        template = self.download_template(enc)
+        # the encoded key the client will use: ours, or Blizzard's when Blizzard ships the very same bytes
+        wanted = {stored[f][0]: f for f in stored}
+        used = {}
+        for e in enc.ce:
+            if e[6:22] in wanted:
+                used[wanted[e[6:22]]] = (e[22:38], int.from_bytes(e[1:6], "big"))
+        sizes = {bytes.fromhex(v["ekey"]): stored[int(f)][2] for f, v in ours.items()}
+        dl = download_add(old_dl, [(k, sizes.get(k, n)) for k, n in used.values()], template)
+        # Blizzard's spec names the sizes: header and entries stored plain, the tag bitmasks zlib-compressed
+        entries = struct.unpack_from(">I", dl, 5)[0] * 22
+        dl_spec = "b:{11=n,%d=n,%d=z}" % (entries, len(dl) - 11 - entries)
+        dl_blob, dl_ekey = blte_encode(dl, dl_spec)
+        put("data", dl_ekey.hex(), dl_blob)
+        enc.add(md5(dl), dl_ekey, len(dl), len(dl_blob), dl_spec)
+        lines["download"] = "%s %s" % (md5(dl).hex(), dl_ekey.hex())
+        lines["download-size"] = "%d %d" % (len(dl), len(dl_blob))
         enc_content = enc.build()
         trailer = enc_content[enc_content.rindex(b"b:{"):].decode()
         enc_blob, enc_ekey = blte_encode(enc_content, trailer)
@@ -503,12 +579,27 @@ def verify(out, build, files):
             assert sub.container(spans[0][2])[0] == ekey[:9], "file %d TVFS span" % fdid
             assert ekey in loose, "file %d in the loose-file index" % fdid
             assert tact.blte(ours("data", ekey.hex())) == files[fdid], "file %d bytes" % fdid
+    dl = tact.blte(ours("data", conf["download"][1]))
+    assert md5(dl).hex() == conf["download"][0], "download manifest content key"
+    count, tags = struct.unpack_from(">IH", dl, 5)
+    listed = {dl[11 + i * 22:27 + i * 22]: struct.unpack_from(">b", dl, 11 + i * 22 + 21)[0] for i in range(count)}
+    for fdid, content in files.items():
+        ekey = ckey_to_ekey[md5(content)]
+        assert listed.get(ekey) == 0, "file %d in the download manifest at priority 0" % fdid
+    at, tagged = 11 + count * 22, []
+    for _ in range(tags):
+        end = dl.index(b"\0", at)
+        mask = dl[end + 3:end + 3 + (count + 7) // 8]
+        if mask[0] & 0x80:
+            tagged.append(dl[at:end].decode())
+        at = end + 3 + (count + 7) // 8
     original = dict(tact.root_entries(build.root))
     found = dict(tact.root_entries(rootdata))
     changed = sum(1 for f, c in original.items() if found.get(f) != c and f not in files)
     assert changed == 0, "%d files we didn't touch changed" % changed
-    return "verified: %d file(s) found through root, vfs-root and %d sub-manifest(s) of build %s" % (
-        len(files), len(subs), summary["build_key"])
+    return ("verified: %d file(s) found through root, vfs-root and %d sub-manifest(s) of build %s; in the "
+            "download manifest at priority 0, tagged %s" % (len(files), len(subs), summary["build_key"],
+                                                          " ".join(tagged)))
 
 
 def main():
