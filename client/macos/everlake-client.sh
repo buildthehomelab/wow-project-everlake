@@ -12,6 +12,7 @@
 #   ./everlake-client.sh test1-addon [game folder]  (Test 1: installs the EverlakeTest1 addon; then play, then test1)
 #   ./everlake-client.sh test1 [game folder]        (Test 1 report: hotfixes, the addon's record, errors, screenshots)
 #   ./everlake-client.sh test1-ui                   (Test 1 UI: gate2 copy from the server's build, its files, the addon)
+#   ./everlake-client.sh fix-owner                  (gives the Everlake folder back to you after a run with sudo)
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -346,7 +347,19 @@ do_check() {
 }
 
 cmd="${1:-}"; shift || true
+# Run as yourself, never with sudo: the game runs as you and can't write files root made (2026-11-07, the gate2 copy).
+# The steps that need root (hosts file, CA trust, fix-owner) ask for your password themselves.
+if [ "$(id -u)" = 0 ]; then
+    die "don't run this with sudo or as root: run it as yourself (it asks for your password when it needs it). If the
+       gate2 copy was made as root, repair it once with: $0 fix-owner"
+fi
 case "$cmd" in
+    fix-owner)
+        # gives everything under the Everlake support folder back to you (after a run with sudo made files root's)
+        say "making $(id -un) the owner of $SUPPORT (asks for your password)"
+        sudo chown -R "$(id -un):staff" "$SUPPORT" || die "chown failed"
+        say "done. Next: $0 test1-ui, then $0 play <account email> gate2"
+        ;;
     setup)
         [ $# -ge 2 ] || die "usage: $0 setup <server address> <forever_root_ca.crt> [game folder]"
         GAME="$(find_game "${3:-}")" || die "game folder not found"
