@@ -25,7 +25,9 @@ import subprocess
 import sys
 import urllib.request
 
-PORTAL = "trinity.actual.battle.net"
+# The login server's name: trinity.actual.battle.net with our own CA, or our own name with a real certificate
+# (everlake-client.sh passes it on from setup).
+PORTAL = os.environ.get("EVERLAKE_LOGIN_HOST") or "trinity.actual.battle.net"
 BNET_PORT = 1119
 REST_PORT = 8081
 CA_FILE = os.path.expanduser("~/Library/Application Support/Everlake/forever_root_ca.crt")
@@ -53,7 +55,8 @@ def self_test():
 
 
 def post(path, body=None, ticket=None):
-    ctx = ssl.create_default_context(cafile=CA_FILE)
+    # our own CA when setup trusted one, else the system's trusted CAs (a real certificate for our own name)
+    ctx = ssl.create_default_context(cafile=CA_FILE if os.path.exists(CA_FILE) else None)
     data = json.dumps(body).encode() if body is not None else b""
     req = urllib.request.Request(f"https://{PORTAL}:{REST_PORT}/bnetserver{path}", data=data, method="POST")
     req.add_header("Content-Type", "application/json")

@@ -60,6 +60,74 @@ The core still signs with TrinityCore's stock key. Its public half is
   (`app/macos/keypatch.c`) with `DYLD_INSERT_LIBRARIES`, which patches the key from inside. Known issue: the very
   first realm login of a session can fail ("server identity check failed"); Reconnect works.
 
+## Our own login name instead of battle.net (proposed, not tested on the client yet)
+
+Steps 1 and 2 exist because the login name has to be a `*.actual.battle.net` one, and no public certificate authority
+issues certificates for battle.net. With a name of our own, players install nothing: a real DNS record and a real
+certificate (e.g. Let's Encrypt) replace the hosts entry and our CA. Only the in-memory patches remain, which the
+launcher does anyway.
+
+**Why the client refuses other names.** Read in the Windows `Wow.exe` of 1.60.1.70790 (from Blizzard's CDN, not run):
+
+- `.data` holds a table of Blizzard's login domains, one entry each of {domain ending, its length, sign-in page}:
+  `.actual.battle.net` (18), `.actual.battlenet.com.cn` (24), `.bgs.battle.net` (15), `.dev.bgs.cn.battle.net` (22),
+  plus integration and staging ones.
+- The length beside each ending says the login name must *end with* one of them.
+- Arctium's launcher (MIT, [copy on GitHub](https://github.com/brian8544/Arctium-Launcher), `src/Patterns/Common.cs`
+  `Portal`) lets custom servers in by overwriting `.actual.battle.net` in the running game with zeros.
+
+**The patch.** `FOREVER_ANY_PORTAL=1` makes `client/macos/keypatch.c` do the same before the game starts:
+
+1. It finds `.actual.battle.net` as a string of its own in the game's data.
+2. It sets the length of the table entry pointing at it to 0.
+3. It blanks the ending, so every login name ends with it.
+
+`everlake-client.sh` turns it on whenever the login name isn't a `*.actual.battle.net` one. Checked only on a stand-in
+program with the same table; the real client is next. Arctium also patches a certificate name check for some clients
+(`CertCommonName`); whether Forever needs that too, only the test will tell. Windows needs the same write in its
+key patcher.
+
+**The names (proposed):**
+
+| Name | Points at | Used for |
+|---|---|---|
+| `login.realm.example.com` | the login server (bnetserver, ports 1119 and 8081) | `LOGIN_HOSTNAME`, the name the game logs in at |
+| `forever.realm.example.com` | that realm's worldserver | the realm's `PUBLIC_ADDRESS` (`realmlist.address`) |
+| `classic.realm.example.com`, `retail.realm.example.com` | their worldservers, later | the same |
+
+- The login server looks realm addresses up by DNS (`RealmList.cpp`) and hands the client an IP. So realm names need
+  no client patch.
+- The login server hands the client the login *name* (`LoginRESTService.cpp`, `HandleGetPortal`). That's why the
+  login name is the one the client checks.
+- One wildcard certificate, `*.realm.example.com`, covers them all. Let's Encrypt issues wildcards only through a DNS
+  challenge.
+
+**Server settings** (`.env`):
+
+```sh
+LOGIN_HOSTNAME=login.realm.example.com
+PUBLIC_ADDRESS=forever.realm.example.com
+CERTS_DIR=/path/to/certificate/files   # real files, not symlinks into another folder (the container can't follow those)
+CERT_FILE=fullchain.pem
+KEY_FILE=privkey.pem
+```
+
+The login server reads the certificate at start, so it needs a restart after each renewal (every 90 days for Let's
+Encrypt).
+
+**On the Mac mini** (the LAN still needs the forwarder, see 0):
+
+```sh
+EVERLAKE_LOGIN_HOST=login.realm.example.com ./client/macos/everlake-client.sh setup <server address> none
+./client/macos/everlake-client.sh play <account email>
+```
+
+`keypatch.log` then says how many endings and table lengths were blanked.
+- **Passes when** the game logs in and enters the world with no CA trusted.
+- **If the client refuses the name** (a "can't connect" before any request reaches the server), the table check
+  isn't the only one.
+- **If TLS fails**, the certificate name check is the next suspect.
+
 ## What changed since forever_docker
 
 forever_docker was written for the beta. The live Forever build 70790 differs:

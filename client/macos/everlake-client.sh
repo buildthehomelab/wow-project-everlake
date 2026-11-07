@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sets up a Mac to play the Forever client on an Everlake server, and starts it.
 #
-#   ./everlake-client.sh setup <server address> <path to forever_root_ca.crt> [game folder]
+#   ./everlake-client.sh setup <server address> <path to forever_root_ca.crt | none> [game folder]
 #   ./everlake-client.sh play  <account email> [game folder]
 #   ./everlake-client.sh check [game folder]
 #   ./everlake-client.sh undo  [game folder]
@@ -24,6 +24,10 @@
 #   4. makes "World of Warcraft Everlake.app", an ad-hoc signed copy of the game that can load keypatch.dylib.
 #      The original app is never changed. Run setup again after Battle.net updates the game.
 #   5. writes WTF/Everlake.wtf (your Config.wtf + the Everlake portal)
+#   Our own login name: EVERLAKE_LOGIN_HOST=login.realm.example.com ./everlake-client.sh setup <server address> none
+#   The name is remembered for play. With a real certificate for it there is no CA to trust ("none"), and play has the
+#   key patch also lift the client's rule that login names end in .actual.battle.net (FOREVER_ANY_PORTAL in
+#   keypatch.c). See docs/client-connection.md.
 # play: starts the forwarder, asks for your Everlake password, logs in to the server and hands the game a login
 #       ticket (login.py, the way Battle.net does it), then starts the copy with the server key patch.
 # check: prints everything that has to be right for the game to reach the server, and sends the report to the
@@ -38,9 +42,13 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-PORTAL=trinity.actual.battle.net
 MARK="# everlake"
 SUPPORT="$HOME/Library/Application Support/Everlake"
+# The login server's name: EVERLAKE_LOGIN_HOST, else the one setup saved, else the battle.net name with our own CA.
+LOGIN_FILE="$SUPPORT/login-host.txt"
+PORTAL="${EVERLAKE_LOGIN_HOST:-$(cat "$LOGIN_FILE" 2>/dev/null || true)}"
+PORTAL="${PORTAL:-trinity.actual.battle.net}"
+export EVERLAKE_LOGIN_HOST="$PORTAL"   # login.py logs in there
 DYLIB="$SUPPORT/libeverlake_keypatch.dylib"
 COPY_NAME="World of Warcraft Everlake.app"
 WTF_NAME=Everlake.wtf
@@ -97,6 +105,9 @@ setup_hosts() {
 }
 
 server_addr() { cat "$SERVER_FILE" 2>/dev/null || true; }
+
+# true when the login name is our own, not a *.actual.battle.net one: the client then needs the login-name patch
+custom_portal() { case "$PORTAL" in *.actual.battle.net) return 1 ;; *) return 0 ;; esac; }
 
 FORWARD_PORTS="1119 8081 8085 8095 80"
 
@@ -499,6 +510,7 @@ do_check() {
     say "game folder: ${GAME:-NOT FOUND} (build $( [ -n "$GAME" ] && game_build "$GAME" || echo -))"
     say "game copy: $( [ -n "$GAME" ] && [ -d "$GAME/$COPY_NAME" ] && echo present || echo MISSING)"
     say "keypatch.dylib: $( [ -f "$DYLIB" ] && echo present || echo MISSING)"
+    say "login name: $PORTAL$(custom_portal && echo " (our own name: login-name patch on)")"
     say "hosts entry: $(grep "$MARK" /etc/hosts || echo MISSING)"
     say "resolves to: $(dscacheutil -q host -a name "$PORTAL" | awk '/ip_address/{print $2}' | tr '\n' ' ')"
     addr="$(server_addr)"
@@ -553,11 +565,20 @@ case "$cmd" in
         say "done. Next: $0 test1-ui, then $0 play <account email> gate2"
         ;;
     setup)
-        [ $# -ge 2 ] || die "usage: $0 setup <server address> <forever_root_ca.crt> [game folder]"
+        [ $# -ge 2 ] || die "usage: $0 setup <server address> <forever_root_ca.crt | none> [game folder]"
         GAME="$(find_game "${3:-}")" || die "game folder not found"
         say "game folder: $GAME (build $(game_build "$GAME"))"
+        mkdir -p "$SUPPORT"
+        echo "$PORTAL" > "$LOGIN_FILE"
+        say "login name: $PORTAL$(custom_portal && echo " (our own: the key patch lifts the battle.net rule)")"
         setup_hosts "$1"
-        setup_ca "$2"
+        if [ "$2" = none ]; then
+            custom_portal || die "$PORTAL needs our CA: pass forever_root_ca.crt, not none"
+            rm -f "$SUPPORT/forever_root_ca.crt"
+            say "no CA: $PORTAL needs a real certificate the system already trusts"
+        else
+            setup_ca "$2"
+        fi
         build_dylib
         make_copy "$GAME"
         write_wtf "$GAME"
@@ -568,7 +589,7 @@ case "$cmd" in
         GAME="$(find_game "${2:-}")" || die "game folder not found"
         [ -d "$GAME/$COPY_NAME" ] || die "no game copy: run setup first"
         [ -f "$DYLIB" ] || die "no keypatch.dylib: run setup first"
-        [ -f "$SUPPORT/forever_root_ca.crt" ] || die "no copy of the CA certificate: run setup again"
+        custom_portal || [ -f "$SUPPORT/forever_root_ca.crt" ] || die "no copy of the CA certificate: run setup again"
         ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup again"
         grep "$MARK" /etc/hosts | grep -q '^127\.0\.0\.1' || die "hosts entry is not 127.0.0.1: run setup again"
         # a newer keypatch.c (git pull) is built before it's used
@@ -592,6 +613,7 @@ case "$cmd" in
             --env "FOREVER_REGION_GROUP=$REGION_GROUP" \
             --env "FOREVER_PATCH_LOG=$LOG" \
             --env "FOREVER_BLOCK_HOSTS=$BLOCK" \
+            --env "FOREVER_ANY_PORTAL=$(custom_portal && echo 1 || echo 0)" \
             --args -launcherlogin -config "$WTF_NAME"
         say "first realm login can fail with 'server identity check failed': click Reconnect"
         ;;
