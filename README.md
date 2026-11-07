@@ -9,7 +9,8 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 1. **Server runs**: the TrinityCore `forever` core builds from source, a frozen client logs in and walks around.
 2. **Custom files load**: the client draws world files it doesn't ship (Outland, Northrend, the post-Cataclysm
    world), served from our own patch server. This decides whether one client can run every ruleset
-   ([research](docs/custom-files.md)).
+   ([notes](docs/custom-files.md)). Experiment 1 **passed** 2026-11-06: the client streamed and drew a replaced
+   icon from our own build. Next: an added Eversong Woods tile.
 3. **The world feels alive**: PlayerbotV2 bots go where real players are and sleep elsewhere; find the number of
    bots each kind of place needs, check that bots on screen act like players (they wave back), and measure the
    cost per bot ([plan](docs/living-world.md)).

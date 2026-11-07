@@ -101,7 +101,7 @@ From the Forever 1.60.1.70790 build on Blizzard's CDN, read with the TACT tool i
 - **Passes when** the mini shows our texture, it's still there after a client restart, and the Battle.net install is
   untouched.
 
-### Status, 2026-11-06: built and checked on the server side, not yet run on the mini
+### Status, 2026-11-06: passed on the mini (see below)
 
 - **`tools/tact/patch.py`** writes the patched build.
   - `--selftest` rebuilds Blizzard's encoding file (141 MB), loose-file index, root and TVFS manifest with
@@ -120,6 +120,18 @@ From the Forever 1.60.1.70790 build on Blizzard's CDN, read with the TACT tool i
   CDN through the forwarder.
 - **The file table oddity:** its TVFS entry lists a size 1,024 bytes larger than the stored file, while every
   sub-manifest's entry lists the exact size. The tool keeps that same offset.
+
+**Experiment 1 PASSED (2026-11-06, 23:46): the Hearthstone shows the Ragnaros icon.**
+- **The run, from the CDN log:** the client loaded our configs, loose-file index, vfs-root, encoding, root and the
+  rewritten `vfs-575`. Then it **streamed our icon from our server** (`382676ff…`, 3,286 bytes) and drew it.
+- **What this settles:**
+  - The client accepts a build that isn't Blizzard's.
+  - It streams files it doesn't have from whatever CDN `.build.info` names.
+  - Armadillo doesn't get in the way.
+  - Its one request Blizzard refuses (an all-zero config key) is harmless.
+- **The recipe:** list a file in the root and in the TVFS sub-manifest of its root block, plus the encoding and
+  loose-file index entries, and serve it.
+- **The test folder:** an APFS clone. The Battle.net install was never touched.
 
 **First run on the mini (2026-11-06): the client accepted our build, and the icon was green.**
 - **Accepted:** through our CDN, the client downloaded our build and CDN configs, the loose-file index, vfs-root,
