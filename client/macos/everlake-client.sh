@@ -5,6 +5,7 @@
 #   ./everlake-client.sh play  <account email> [game folder]
 #   ./everlake-client.sh check [game folder]
 #   ./everlake-client.sh undo  [game folder]
+#   ./everlake-client.sh gate2 <build key> <CDN key> [game folder]
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -20,6 +21,10 @@
 # check: prints everything that has to be right for the game to reach the server, and sends the report to the
 #        server (report-drop service, port 8099) so nobody has to copy it by hand.
 # undo: stops the forwarder, removes the hosts entry, the CA trust and the copy.
+# gate2 (docs/custom-files.md, experiment 1): makes a test game folder in Application Support from APFS clones
+#       (instant, no extra disk space; the Battle.net install is never changed) whose .build.info points at the
+#       patched build and at the server's CDN (tools/tact/cdn.py on port 80, reached through the forwarder).
+#       It prints the play command for the test folder.
 #
 # Based on jibay442/forever_docker's macOS launcher (GPL-2.0), see docs/client-connection.md.
 set -euo pipefail
@@ -89,9 +94,11 @@ stop_forward() {
 }
 
 start_forward() {
-    local addr="$1"
+    local addr="$1"; shift
     stop_forward
-    nohup python3 "$HERE/forward.py" "$addr" > "$FORWARD_LOG" 2>&1 &
+    # extra ports (gate2 adds 80, the CDN) on top of forward.py's default 1119 8081 8085
+    if [ $# -gt 0 ]; then set -- 1119 8081 8085 "$@"; fi
+    nohup python3 "$HERE/forward.py" "$addr" "$@" > "$FORWARD_LOG" 2>&1 &
     echo $! > "$FORWARD_PID"
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         nc -z -G 1 127.0.0.1 8081 2>/dev/null && { say "forwarder running (log: $FORWARD_LOG)"; return 0; }
@@ -232,7 +239,12 @@ case "$cmd" in
         [ -f "$SUPPORT/forever_root_ca.crt" ] || die "no copy of the CA certificate: run setup again"
         ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup again"
         grep "$MARK" /etc/hosts | grep -q '^127\.0\.0\.1' || die "hosts entry is not 127.0.0.1: run setup again"
-        start_forward "$ADDR"
+        if [ -f "$(dirname "$GAME")/.everlake-gate2" ]; then
+            say "gate2 test folder: the game's CDN is the server's port 80"
+            start_forward "$ADDR" 80
+        else
+            start_forward "$ADDR"
+        fi
         python3 "$HERE/login.py" "$1" || die "login failed"
         LOG="$SUPPORT/keypatch.log"; : > "$LOG"
         say "starting the game (key patch log: $LOG)"
@@ -255,6 +267,33 @@ case "$cmd" in
             say "report NOT sent (saved in $REPORT)"
         fi
         ;;
+    gate2)
+        [ $# -ge 2 ] || die "usage: $0 gate2 <build key> <CDN key> [game folder]"
+        BUILD_KEY="$1"; CDN_KEY="$2"
+        GAME="$(find_game "${3:-}")" || die "game folder not found"
+        [ -d "$GAME/$COPY_NAME" ] || die "no game copy: run setup first"
+        ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
+        ROOT="$(dirname "$GAME")"; FLAVOR="$(basename "$GAME")"
+        [ -d "$ROOT/Data" ] && [ -f "$ROOT/.build.info" ] || die "no Data folder or .build.info in $ROOT"
+        nc -z -G 3 "$ADDR" 80 2>/dev/null || die "the server's CDN (port 80) is not reachable: start tools/tact/cdn.py there"
+        TEST="$SUPPORT/gate2/World of Warcraft"
+        rm -rf "$SUPPORT/gate2"; mkdir -p "$TEST"
+        say "cloning $ROOT into $TEST (APFS clones: instant, no extra space)..."
+        cp -cR "$ROOT/Data" "$TEST/Data" || die "cloning failed: is the disk APFS?"
+        cp -cR "$GAME" "$TEST/$FLAVOR"
+        for f in "$ROOT"/.[!.]*; do [ -f "$f" ] && cp -c "$f" "$TEST/"; done
+        python3 "$HERE/buildinfo.py" "$TEST/.build.info" wowf "$BUILD_KEY" "$CDN_KEY" 127.0.0.1 || die ".build.info not changed"
+        for key in "$BUILD_KEY" "$CDN_KEY"; do
+            d="$TEST/Data/config/${key:0:2}/${key:2:2}"; mkdir -p "$d"
+            curl -sf -m 30 -o "$d/$key" "http://$ADDR/tpr/wow/config/${key:0:2}/${key:2:2}/$key" \
+                || die "could not fetch config $key from the server's CDN"
+            [ "$(md5 -q "$d/$key")" = "$key" ] || die "config $key does not match its name"
+        done
+        touch "$TEST/.everlake-gate2"
+        say "test folder ready. Original install untouched. Start it with:"
+        say "  $0 play <account email> \"$TEST/$FLAVOR\""
+        say "then: does the Hearthstone show the Ragnaros icon? Afterwards run: $0 check \"$TEST/$FLAVOR\""
+        ;;
     undo)
         stop_forward
         if grep -q "$MARK" /etc/hosts; then sudo sed -i '' "/$MARK/d" /etc/hosts; say "hosts entry removed"; fi
@@ -268,6 +307,6 @@ case "$cmd" in
         rm -rf "${SUPPORT:?}"
         ;;
     *)
-        sed -n '2,22p' "$0"; exit 1
+        sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 1
         ;;
 esac
