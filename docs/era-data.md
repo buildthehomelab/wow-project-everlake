@@ -288,6 +288,14 @@ errors show where.
 - **The talent frame opens with the copied tree** (Forever's Warrior tree as TraitTree 954100 on the Death Knight's
   skill line), and points can be chosen and applied. **They are still spent after logging out and back in.** A tree the client never shipped works: era trees are data. This
   answers gate 5's first unknown (the retail talent frame on the Forever client).
+- **The rune display works:** Forever ships retail's `RuneFrame` and `MonkHarmonyBar` but its
+  `Blizzard_UnitFrame.toc` (FileDataID 8286112) excludes them for its game type (camelot). The patched build
+  `gate2/exp3-ui` swaps in the toc without that exclusion (`tools/era/ui_unlock.py`), and **the Death Knight shows its
+  6 runes under the player frame.** The client accepts a changed Blizzard UI file from our build: Blizzard's own
+  frames, switched on, instead of our own addons.
+  - On the way: Blizzard made 1.60.1.70862 live, and the gate2 copy asked the version service and tried to update.
+    `keypatch.dylib` now blocks `patch.battle.net` and `version.battle.net` for the gate2 copy (and logs every
+    lookup), so it stays on our build. And a mini run with sudo made the copy root's: the script now refuses root.
 - Not a bug: no XP in Northshire. The Death Knight starts at level 8, where anything level 3 or below is grey.
 - Still open:
   - Health doesn't regenerate out of combat: `Player::OCTRegenHPPerSpirit` has no case for classes 6 and 10 (core).
