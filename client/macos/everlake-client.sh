@@ -109,7 +109,7 @@ server_addr() { cat "$SERVER_FILE" 2>/dev/null || true; }
 # true when the login name is our own, not a *.actual.battle.net one: the client then needs the login-name patch
 custom_portal() { case "$PORTAL" in *.actual.battle.net) return 1 ;; *) return 0 ;; esac; }
 
-FORWARD_PORTS="1119 8081 8085 8095 80"
+FORWARD_PORTS="1119 8081 8085 8086 8095 80"
 
 # the pid listening on 127.0.0.1:<port>, if any
 port_listener() { lsof -nP -t -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -n 1 || true; }
@@ -153,8 +153,9 @@ start_forward() {
     local addr="$1" pid="" port missing
     shift
     stop_forward
-    # extra ports (gate2 adds 80, the CDN) on top of forward.py's default 1119 8081 8085 8095 (8095 = realm 2)
-    set -- 1119 8081 8085 8095 "$@"
+    # extra ports (gate2 adds 80, the CDN) on top of forward.py's default 1119 8081 8085 8086 8095
+    # (8086 = realm 1 on a host that already runs Evermore on 8085, 8095 = realm 2)
+    set -- 1119 8081 8085 8086 8095 "$@"
     FORWARD_PID_FILE="$FORWARD_PID" nohup python3 "$HERE/forward.py" "$addr" "$@" > "$FORWARD_LOG" 2>&1 &
     missing=" $*"
     for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
@@ -515,7 +516,7 @@ do_check() {
     say "resolves to: $(dscacheutil -q host -a name "$PORTAL" | awk '/ip_address/{print $2}' | tr '\n' ' ')"
     addr="$(server_addr)"
     say "server address: ${addr:-NOT SAVED (run setup again)}"
-    for port in 1119 8081 8085 8095; do
+    for port in 1119 8081 8085 8086 8095; do
         if [ -n "$addr" ] && nc -z -G 3 "$addr" "$port" 2>/dev/null; then say "server port $port: open"; else say "server port $port: NOT REACHABLE"; fi
     done
     if [ -f "$FORWARD_PID" ] && kill -0 "$(cat "$FORWARD_PID")" 2>/dev/null; then

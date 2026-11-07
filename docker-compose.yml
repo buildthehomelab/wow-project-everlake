@@ -6,6 +6,7 @@ x-trinity-env: &trinity-env
   DB_PORT: 3306
   DB_USER: ${DB_USER:-trinity}
   DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+  WORLD_PORT: ${WORLD_PORT:-8085}   # realm 1's port: worldserver listens on it, bnetserver writes it to the realm list
 
 services:
   mysql:
@@ -59,7 +60,7 @@ services:
     tty: true
     stop_grace_period: 2m
     ports:
-      - "8085:8085"
+      - "${WORLD_PORT:-8085}:${WORLD_PORT:-8085}"
     volumes:
       - ${DATA_DIR:-./data}:/opt/trinitycore/data:ro
       - ./overrides:/opt/trinitycore/overrides:ro

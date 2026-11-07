@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Forwards the Everlake ports from this Mac's 127.0.0.1 to the server.
 
-    forward.py <server address> [port ...]      (default ports: 1119 8081 8085 8095)
+    forward.py <server address> [port ...]      (default ports: 1119 8081 8085 8086 8095)
 
 Why: since macOS 15, an app needs the Local Network permission to connect to other machines on the LAN. The
 re-signed game copy doesn't get it (macOS blocks it without asking), while Terminal has it. Connections to
@@ -12,7 +12,7 @@ import asyncio
 import os
 import sys
 
-PORTS = [1119, 8081, 8085, 8095]  # login, REST, realm 1, realm 2
+PORTS = [1119, 8081, 8085, 8086, 8095]  # login, REST, realm 1 (8085, or 8086 beside Evermore), realm 2
 
 
 async def pipe(reader, writer):

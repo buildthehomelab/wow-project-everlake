@@ -19,6 +19,8 @@ OVERRIDES="$ROOT/overrides"
 : "${REALM_LOCAL_SUBNET_MASK:=255.255.255.0}"
 : "${REALM_NAME:=Forever}"
 : "${REALM_ID:=70}"
+# Realm 1's world port. 8085 by default; another one when the host already runs a server on 8085 (e.g. beside Evermore)
+: "${WORLD_PORT:=8085}"
 : "${LOGIN_HOSTNAME:=trinity.actual.battle.net}"
 # The login server's certificate chain and key, in $CERTS: scripts/gen-certs.sh's by default, or a real certificate
 # for LOGIN_HOSTNAME (e.g. Let's Encrypt's fullchain.pem and privkey.pem, see docs/client-connection.md)
@@ -90,6 +92,7 @@ configure_worldserver() {
     setkey "$f" CharacterDatabaseInfo "$(db_info characters)"
     setkey "$f" HotfixDatabaseInfo    "$(db_info hotfixes)"
     setkey "$f" RealmID 70
+    setkey "$f" WorldServerPort "$WORLD_PORT"
     setkey "$f" Expansion 0
     setkey "$f" BindIP '"0.0.0.0"'
     setkey "$f" DataDir "\"$ROOT/data\""
@@ -155,9 +158,9 @@ check_data() {
 }
 
 check_certs() {
-    if [ ! -f "$CERTS/forever.cert.pem" ] || [ ! -f "$CERTS/forever.key.pem" ]; then
-        echo "[entrypoint] ERROR: $CERTS/forever.cert.pem and forever.key.pem are required."
-        echo "[entrypoint] Generate them with ./scripts/gen-certs.sh (see README)."
+    if [ ! -f "$CERTS/$CERT_FILE" ] || [ ! -f "$CERTS/$KEY_FILE" ]; then
+        echo "[entrypoint] ERROR: $CERTS/$CERT_FILE and $KEY_FILE are required (CERTS_DIR, CERT_FILE, KEY_FILE)."
+        echo "[entrypoint] Generate them with ./scripts/gen-certs.sh, or use a real certificate (docs/client-connection.md)."
         exit 1
     fi
 }
@@ -192,8 +195,9 @@ update_realmlist() {
         sleep 5
     done
     mysql_q "UPDATE auth.realmlist SET name='${REALM_NAME//\'/\'\'}', address='${PUBLIC_ADDRESS}', \
-        localAddress='${REALM_LOCAL_ADDRESS}', localSubnetMask='${REALM_LOCAL_SUBNET_MASK}' WHERE id=${REALM_ID}"
-    echo "[entrypoint] realm ${REALM_ID}: address=${PUBLIC_ADDRESS} localAddress=${REALM_LOCAL_ADDRESS}"
+        localAddress='${REALM_LOCAL_ADDRESS}', localSubnetMask='${REALM_LOCAL_SUBNET_MASK}', port=${WORLD_PORT} \
+        WHERE id=${REALM_ID}"
+    echo "[entrypoint] realm ${REALM_ID}: address=${PUBLIC_ADDRESS} localAddress=${REALM_LOCAL_ADDRESS} port=${WORLD_PORT}"
 }
 
 case "${1:-worldserver}" in
