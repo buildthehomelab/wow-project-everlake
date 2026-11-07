@@ -319,18 +319,22 @@ client data, without the two mixing? This decides whether Forever and retail (an
 by side on the one client. Tests 4 to 6 above planned it with a TBC warrior; it's run first with Test 1's Death Knight
 and Monk kit, which is ready and shows plainly in the class list, the spellbook and the talent frame.
 
+**Two Forever realms** (the user's call, 2026-11-07): the test is about two realms on one login switching cleanly
+with per-realm hotfix data, so realm 2 is a second Forever realm (same image, same Forever data), not a retail one.
+The only difference between the two is the hotfix data in the table below.
+
 ### Setup (on the spike server)
 
 | | Realm 1 | Realm 2 |
 |---|---|---|
-| Name in the realm list | Everlake | Everlake Retail Test |
+| Name in the realm list | Everlake | Everlake Two |
 | Realm id, port | 70, 8085 | 71, 8095 |
 | Container | `worldserver` | `worldserver2` (`docker-compose.realm2.yml`, same image) |
 | Databases | `characters`, `hotfixes` | `characters2`, `hotfixes2` (copies of realm 1's made on 2026-11-07) |
 | World database, login server | shared | shared |
 | Class kit (Death Knight, Monk; pushes 9540010-9540030) | none | all of it |
-| Attack (6603), push 9550000 | "Attack (Forever realm)" | "Attack (Retail realm)" (same push and unique id, other text) |
-| Hearthstone (8690) | "Hearthstone (Forever realm)", push 9550001 | "Hearthstone (Retail realm)", push 9560001 |
+| Attack (6603), push 9550000 | "Attack (realm 1)" | "Attack (realm 2)" (same push and unique id, other text) |
+| Hearthstone (8690) | "Hearthstone (realm 1)", push 9550001 | "Hearthstone (realm 2)", push 9560001 |
 | Player characters | everything except Death Knights and Monks | the Death Knight Aevise and the Monk Asdasd |
 | Bots | yes | off (`Playerbot.World.Enable = 0`), no auction house bot |
 
@@ -373,9 +377,9 @@ git -C ~/everlake checkout claude/realm-switch
 The subcommand installs the `EverlakeSwitch` addon, starts the game twice (it asks for the Everlake password each
 time) and prints what to do in each run:
 
-- **Run 1:** Everlake (Pat) → Everlake Retail Test (Aevise) → Everlake → Retail Test, with a look at both character
+- **Run 1:** Everlake (Pat) → Everlake Two (Aevise) → Everlake → Everlake Two, with a look at both character
   creation screens.
-- **Run 2, after a client restart:** Retail Test first → Everlake → Retail Test → Everlake.
+- **Run 2, after a client restart:** Everlake Two first → Everlake → Everlake Two → Everlake.
 
 After every login the addon checks the client's view against what that realm sends (the two marker names, classes
 6 and 10, Death Coil and its text, the 53-node talent tree) and prints OK or MIXED in chat. After each run the

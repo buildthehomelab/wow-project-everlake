@@ -1,17 +1,17 @@
 -- Gate 5 realm switch test (docs/era-data.md, tests 4-6): one Forever client, two realms that send different data.
---   Everlake (realm 1, Forever):          no Death Knight or Monk; "Attack (Forever realm)", "Hearthstone (Forever realm)"
---   Everlake Retail Test (realm 2):        Death Knight and Monk with their spells and talent tree;
---                                          "Attack (Retail realm)", "Hearthstone (Retail realm)"
+--   Everlake (realm 1):                   no Death Knight or Monk; "Attack (realm 1)", "Hearthstone (realm 1)"
+--   Everlake Two (realm 2):               Death Knight and Monk with their spells and talent tree;
+--                                          "Attack (realm 2)", "Hearthstone (realm 2)"
 -- At every login it reads what the client holds for each probe, compares it with what this realm sends, prints the
 -- verdict in chat and keeps it in the saved variables EverlakeSwitchDB (account-wide, so one list across both realms;
 -- written at logout or /reload). "everlake-client.sh switch" reads it. /els takes a snapshot by hand.
 local EXPECT = {
-    forever = {
-        attack = "Attack (Forever realm)", hearth = "Hearthstone (Forever realm)",
+    realm1 = {
+        attack = "Attack (realm 1)", hearth = "Hearthstone (realm 1)",
         class6 = nil, class10 = nil, deathCoil = nil, treeNodes = 0,
     },
-    retail = {
-        attack = "Attack (Retail realm)", hearth = "Hearthstone (Retail realm)",
+    realm2 = {
+        attack = "Attack (realm 2)", hearth = "Hearthstone (realm 2)",
         class6 = "DEATHKNIGHT", class10 = "MONK", deathCoil = "Death Coil", treeNodes = 53,
     },
 }
@@ -62,7 +62,7 @@ end
 
 local function check(label)
     local realm = GetRealmName() or "?"
-    local kind = realm:find("Retail") and "retail" or "forever"
+    local kind = realm == "Everlake Two" and "realm2" or "realm1"
     local expect = EXPECT[kind]
     local p = probe()
     local wrong = {}

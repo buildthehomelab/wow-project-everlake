@@ -1,5 +1,5 @@
 #!/bin/bash
-# Realm 2 ("Everlake Retail Test", realm id 71) beside realm 1 ("Everlake", realm id 70) on the same login server.
+# Realm 2 ("Everlake Two", realm id 71) beside realm 1 ("Everlake", realm id 70) on the same login server.
 # Gate 5 tests 4 to 6 in docs/era-data.md: one Forever client switching between two realms that send different
 # client data. Run it from the checkout that holds .env and the running containers (it uses `docker compose exec`).
 #

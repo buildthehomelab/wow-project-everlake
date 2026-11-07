@@ -7,8 +7,8 @@
 DELETE FROM `hotfix_data` WHERE `Id` IN (9550000, 9550001, 9560001);
 DELETE FROM `spell_name` WHERE `ID` IN (6603, 8690);
 INSERT INTO `spell_name` (`ID`, `Name`, `VerifiedBuild`) VALUES
-(6603, 'Attack (Forever realm)', 70790),
-(8690, 'Hearthstone (Forever realm)', 70790);
+(6603, 'Attack (realm 1)', 70790),
+(8690, 'Hearthstone (realm 1)', 70790);
 INSERT INTO `hotfix_data` (`Id`, `UniqueId`, `TableHash`, `RecordId`, `Status`, `VerifiedBuild`) VALUES
 (9550000, 955000001, 1187407512, 6603, 1, 70790),
 (9550001, 955000101, 1187407512, 8690, 1, 70790);

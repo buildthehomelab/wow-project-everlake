@@ -302,7 +302,7 @@ test1_shots() {
 }
 
 # --- gate 5 realm switch test (docs/era-data.md, tests 4-6) ---
-# Realm 1 "Everlake" (Forever) and realm 2 "Everlake Retail Test" send different data: realm 2 alone has the Death
+# Realm 1 "Everlake" (Forever) and realm 2 "Everlake Two" (a second Forever realm) send different data: realm 2 alone has the Death
 # Knight and Monk kit (hotfix pushes 9540010-9540030), and both rename Attack (push 9550000 on both: same push, other
 # text) and the Hearthstone (realm 1 push 9550001, realm 2 push 9560001). The EverlakeSwitch addon checks at every
 # login that the client shows only the current realm's data; these functions keep what the client stored after each run.
@@ -407,23 +407,23 @@ switch_test() {
     switch_snapshot "$game" 0-before >/dev/null || say "snapshot 0-before incomplete"
     switch_run "$email" "$folder" 1 \
         "1. Realm list: pick Everlake. Enter the world with Pat. Wait for the chat line. Press P: in General," \
-        "   is Attack called 'Attack (Forever realm)'? Log out (to the character list)." \
+        "   is Attack called 'Attack (realm 1)'? Log out (to the character list)." \
         "2. Create New Character, Human: Death Knight and Monk should NOT be offered here. Screenshot. Back." \
-        "3. Change Realm: Everlake Retail Test. Enter the world with Aevise. Chat line. Press P: 'Attack (Retail" \
-        "   realm)' and a Death Knight tab; hover Death Coil: does the tooltip have text? Screenshot. Log out." \
+        "3. Change Realm: Everlake Two. Enter the world with Aevise. Chat line. Press P: 'Attack (realm 2)'" \
+        "   and a Death Knight tab; hover Death Coil: does the tooltip have text? Screenshot. Log out." \
         "4. Create New Character, Human: Death Knight and Monk SHOULD be offered here. Screenshot. Back." \
-        "5. Change Realm: Everlake, Pat, chat line, log out. Change Realm: Retail Test, Aevise, chat line, log out." \
+        "5. Change Realm: Everlake, Pat, chat line, log out. Change Realm: Everlake Two, Aevise, chat line, log out." \
         "6. Quit the game (Exit)."
     switch_snapshot "$game" 1-after-run1 >/dev/null || say "snapshot 1-after-run1 incomplete"
-    switch_ask "Run 1: was 'Everlake Retail Test' in the realm list next to Everlake? (y/n)"
+    switch_ask "Run 1: was 'Everlake Two' in the realm list next to Everlake? (y/n)"
     switch_ask "Run 1: did Everlake's character creation offer Death Knight or Monk? (y/n, which)"
-    switch_ask "Run 1: did Retail Test's character creation offer both? (y/n)"
+    switch_ask "Run 1: did Everlake Two's character creation offer both? (y/n)"
     switch_ask "Run 1: any red MIXED line, or anything else odd? (n, or what)"
     switch_run "$email" "$folder" 2 \
         "The game restarts: this run starts on the other realm." \
-        "1. Realm list: Everlake Retail Test first. Aevise, chat line, Death Coil in the spellbook? Log out." \
+        "1. Realm list: Everlake Two first. Aevise, chat line, Death Coil in the spellbook? Log out." \
         "2. Change Realm: Everlake. Pat, chat line. Log out. Create New Character, Human: no Death Knight? Back." \
-        "3. Change Realm: Retail Test, Aevise, chat line, log out. Change Realm: Everlake, Pat, chat line, log out." \
+        "3. Change Realm: Everlake Two, Aevise, chat line, log out. Change Realm: Everlake, Pat, chat line, log out." \
         "4. Quit the game (Exit)."
     switch_snapshot "$game" 2-after-run2 >/dev/null || say "snapshot 2-after-run2 incomplete"
     switch_ask "Run 2: did Everlake's character creation offer Death Knight or Monk? (y/n)"
