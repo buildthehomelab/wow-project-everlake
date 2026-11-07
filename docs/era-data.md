@@ -148,7 +148,7 @@ visuals only where Forever has them) and whole talent trees. The kits are in `to
 
 | File | What | Hotfix pushes |
 |---|---|---|
-| `sql/everlake/2026_11_07_01_hotfixes_test1_classes.sql` (`test1.json`) | ChrClasses 6 and 10 (MoP Classic rows, Forever-style flags), PowerType Runes, Runic Power and Chi, class powers, specializations 1455 and 1450, CharBaseInfo for races 1-8, DK skill line 796, and 22 retail spells: Death Coil, Death Strike, Anti-Magic Shell, Obliterate, Howling Blast and their helpers. 331 rows | 9540000-9540003 |
+| `sql/everlake/2026_11_07_01_hotfixes_test1_classes.sql` (`test1.json`) | ChrClasses 6 and 10 (MoP Classic rows, Forever-style flags), PowerType Runes, Runic Power and Chi, class powers, specializations 1455 and 1450, CharBaseInfo for races 1-8, DK skill line 796, 24 retail spells (Death Coil, Death Strike, Anti-Magic Shell, Obliterate, Howling Blast and their helpers) with their `Spell` text rows in `hotfix_blob`, and the all-class, weapon and armor skill rows for both classes | 9540020-9540024 |
 | `sql/everlake/2026_11_07_03_hotfixes_test1_talent_tree.sql` (`test1_tree.json`) | Forever's Warrior tree copied as TraitTree 954100 and linked to the DK skill line: 53 talents, 43 groups, 18 tier conditions. 498 rows. It tests whether a tree the client never shipped opens and takes points. The talents are Warrior spells | 9540010-9540015 |
 | `sql/everlake/2026_11_07_02_world_test1_classes.sql` | `class_expansion_requirement` for DK and Monk on races 1-8: 0/0 | |
 
@@ -161,7 +161,7 @@ python3 tools/era/hotfix_kit.py tools/era/kits/test1.json --schema <hotfixes sch
     --dbc data/dbc/enUS --cache <dir> --out sql/everlake/2026_11_07_01_hotfixes_test1_classes.sql
 ```
 
-Undo: `DELETE FROM hotfix_data WHERE Id BETWEEN 9540000 AND 9540015;`, the row DELETEs at the top of each table
+Undo: `DELETE FROM hotfix_data WHERE Id BETWEEN 9540010 AND 9540024;`, the `hotfix_blob` DELETE in the classes file, the row DELETEs at the top of each table
 block in the two hotfix files, and the UPDATEs in the comment of the world file. Then restart the worldserver.
 
 ### Checked on the server (2026-11-07, 01:47-01:52)
@@ -253,10 +253,44 @@ separate result.
 entering the world, or the spells can't be cast at all. Then the report's hotfix lines (any non-VALID row) and Lua
 errors show where.
 
+### In game (2026-11-07 morning, Mac mini)
+
+- **The creator offers Death Knight**, and a Human Death Knight (Aevise) was created at level 8 and entered the world.
+  The client's class list has 11 classes, Monk included. The talent API sees the copied tree (53 nodes); the frame
+  itself isn't checked yet. The 6 runes exist in the client API.
+- **Lua errors at every login:** `PlayerFrame.lua:688` indexes the missing `RuneFrame` (the mainline player frame
+  expects it for a DK), and the micro menu calls a missing `CanShowEncounterJournal` function.
+- Fixed on the way, each a kit or world change (commits on `claude/test1-classes`):
+  - **"You cannot speak that language":** Forever's SkillRaceClassInfo gives languages, racials, riding, cloth and
+    survival to ClassMask 1503 (the nine vanilla classes) and Defense/Unarmed to 1535. The kit sends those 52 rows
+    with ClassMask 2047.
+  - **Weapons and armor:** Forever's weapon and armor rows list vanilla classes only, so `.learn 197` gave the spell
+    without the skill and the axe couldn't be equipped. The kit adds race-wide rows for the WotLK Death Knight's and
+    the Monk's weapons and armor, and adds both classes to the proficiency spells.
+  - **4,830 health at level 8:** TDB's `player_classlevelstats` for classes 6 and 10 are retail-scale. The Death
+    Knight now takes the Warrior's rows and the Monk the Rogue's
+    (`sql/everlake/2026_11_07_04_world_test1_class_stats.sql`).
+  - **Death Knight spells missing from the spellbook:** the server taught them (`.learn 47541` said "already known")
+    but the client dropped them: no "You have learned" line, `IsPlayerSpell` false, while Fireball learned on the
+    same character showed at once. The cause was the `Spell` table (name subtext, description, aura text): Forever
+    has a row for each of its spells, the kit sent none, and the client keeps no spell without one. The core has
+    no hotfix table for it, so the kit now writes those rows to `hotfix_blob` as the client's record bytes. **After
+    that, Death Coil is in the spellbook.** Any spell sent to the client needs its `Spell` row.
+- The class kit moved from pushes 9540000-9540004 to 9540020-9540024 (the old pushes are deleted), so the client
+  fetches every row again.
+- Not a bug: no XP in Northshire. The Death Knight starts at level 8, where anything level 3 or below is grey.
+- Still open:
+  - The skill tab doesn't list the new weapon and armor skills, though the server has them and mail equips (a
+    display rule, maybe fixed by the push move).
+  - Health doesn't regenerate out of combat: `Player::OCTRegenHPPerSpirit` has no case for classes 6 and 10 (core).
+  - Casting, damage, animations and tooltip text, the talent frame, and the Monk aren't checked yet.
+
 ### Follow-ups found on the way
 
 - The bot factory's Death Knight appearance roll breaks the DK customization rules (bots can't be DKs yet).
-- No hotfix table for `Spell` (descriptions) in the core: sent spells get no tooltip text.
+- Health and mana regeneration and the other vanilla class formulas in `StatSystem.cpp` need Death Knight and Monk
+  cases (core).
+- A Death Knight rune display (our own addon), and a guard for the `RuneFrame` error in the mainline player frame.
 - WotLK rune types (Blood, Frost, Unholy, Death) for the Classic → WotLK ruleset: core work.
 - Acherus (map 609) for the DK start, like map 530.
 - The client build moves on (70840 and 70862 are out); the server accepts only 70790.
