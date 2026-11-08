@@ -220,6 +220,23 @@ def custom_sql_mentions(sources, applied=frozenset()):
     return out, {"label": pin["label"], "files": files}
 
 
+def newest_windows(cur, tbl):
+    """EG Link's newest vendor or trainer window per NPC that lists anything: {npc: (product, build, data)}. The highest
+    build wins; on a tie the live product (wowf) wins over the beta, so the choice doesn't depend on row order.
+    import_slice3.py reads the same windows."""
+    field = {"vendors": "entries", "trainers": "services"}[tbl]
+    out = {}
+    for r in candidates.rows(cur, f"SELECT id, data FROM {F}.src_eg_link WHERE tbl = %s AND id IS NOT NULL", (tbl,)):
+        d = j(r["data"]) or {}
+        listed = d.get(field)
+        if not (isinstance(listed, dict) and listed) and not (isinstance(listed, list) and listed):
+            continue
+        rank = (build_no(d.get("_build")), d.get("_product") == "wowf")
+        if int(r["id"]) not in out or rank >= out[int(r["id"])][0]:
+            out[int(r["id"])] = (rank, d)
+    return {npc: (d.get("_product"), rank[0], d) for npc, (rank, d) in out.items()}
+
+
 def set_world(world):
     """Compare another copy of the world: SCHEMA.PREFIX, e.g. acore_world_dryrun.elstep_ (names checked: they go into SQL)."""
     global WORLD
@@ -345,14 +362,12 @@ def main():
 
     # ---- NPCs Forever spawns, uses as quest givers/enders, or sells from
     stock = {}
-    for r in candidates.rows(cur, f"SELECT id, data FROM {F}.src_eg_link WHERE tbl = 'vendors' AND id IS NOT NULL"):
-        d = j(r["data"])
-        b = build_no(d.get("_build"))
+    for npc, (_, b, d) in newest_windows(cur, "vendors").items():
         entries = d.get("entries") or {}
         entries = entries.values() if isinstance(entries, dict) else entries if isinstance(entries, list) else []
         items = {candidates.as_int(e.get("itemId")) for e in entries if isinstance(e, dict)} - {None}
-        if items and (int(r["id"]) not in stock or b >= stock[int(r["id"])][0]):
-            stock[int(r["id"])] = (b, items)
+        if items:
+            stock[npc] = (b, items)
     npc_ids = set(points) | set(quest_npcs) | set(stock)
     tc_npc = {r["entry"]: r["name"] for r in candidates.rows(cur, f"SELECT entry, name FROM {WORLD}creature_template "
                                                                     f"WHERE entry IN ({candidates.ids_sql(npc_ids)})")}
@@ -464,13 +479,11 @@ def main():
         if m and isinstance(items, dict):
             drops[int(m.group(1))] |= {int(i) for i in items if str(i).isdigit()}
     teach = {}
-    for r in candidates.rows(cur, f"SELECT id, JSON_UNQUOTE(JSON_EXTRACT(data, '$._build')) AS build, JSON_EXTRACT(data, '$.services') AS services "
-                                  f"FROM {F}.src_eg_link WHERE tbl = 'trainers' AND id IS NOT NULL"):
-        services = j(r["services"]) if r["services"] else None
+    for npc, (_, b, d) in newest_windows(cur, "trainers").items():
+        services = d.get("services")
         spells = {int(k) for k in services if str(k).isdigit()} if isinstance(services, dict) else set()
-        b = build_no(r["build"])
-        if spells and (r["id"] not in teach or b >= teach[r["id"]][0]):
-            teach[r["id"]] = (b, spells)
+        if spells:
+            teach[npc] = (b, spells)
     flight = {r["id"] for r in candidates.rows(cur, f"SELECT DISTINCT id FROM {F}.src_eg_link WHERE tbl = 'flights' AND id IS NOT NULL")}
     more = (set(drops) | set(teach) | flight) - set(tc_npc) - npc_ids
     tc_npc.update({r["entry"]: r["name"] for r in candidates.rows(cur, f"SELECT entry, name FROM {WORLD}creature_template "

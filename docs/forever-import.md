@@ -4,7 +4,7 @@ Everlake's world is the TrinityCore `forever` fork's world release plus the fork
 on since that release: new quests, NPCs, loot and trainer spells that players see every day. This plan is how we bring
 that into Everlake's own world database, a little at a time, without breaking the fork's updates or the game.
 
-Slices 1 and 2 have generators (`import_slice1.py`, `import_slice2.py`), and one dry run covers every slice's files (`import_dryrun.py`); the rest is not yet. The data side is: `tools/forever-data` pins the public Forever sources every day,
+Slices 1 to 3 have generators (`import_slice1.py`, `import_slice2.py`, `import_slice3.py`), and one dry run covers every slice's files (`import_dryrun.py`); the rest is not yet. The data side is: `tools/forever-data` pins the public Forever sources every day,
 loads them next to the fork's world (the release plus the fork's update files, in the same order and by the same re-run
 rules as Everlake's worldserver), and `gap_report.py` lists what is missing ([tools/forever-data/README.md](../tools/forever-data/README.md)).
 

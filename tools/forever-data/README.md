@@ -10,7 +10,7 @@ release (the `tc_*` tables here); every other source is a view of the live game.
 | Load each source | `load_sources.py` | `src_<source>` tables + `src_pins` |
 | Load the fork's world | `load_tc.py` | `tc_<table>` (TrinityCore layout): the release plus the fork's `sql/updates` and `sql/custom` world files, run as Everlake's worldserver runs them; `tc_updates` lists every update file in it |
 | What Everlake's world lacks | `gap_report.py [--zone NAME] [--world SCHEMA.PREFIX]` | `reports/everlake-gaps.md` + `.json` |
-| Write an import slice | `import_slice1.py`, `import_slice2.py` | update files, review and held-back lists in `world-data/` (gitignored) |
+| Write an import slice | `import_slice1.py`, `import_slice2.py`, `import_slice3.py` | update files, review and held-back lists in `world-data/` (gitignored) |
 | Dry-run them | `import_dryrun.py` | two worlds in `acore_world_dryrun` (`elscratch_*`, `elstep_*`), `world-data/slices/<newest>/dry-run.md` |
 
 Nothing here writes Everlake's own databases. The import (docs/forever-import.md) is written as ordinary update files,
@@ -181,6 +181,41 @@ while the creature still has no loot table but ours. The corrections file links 
 `LootID` is still 0 with the `VerifiedBuild` it was written against, and our table is there; once the fork links its
 own, the correction does nothing and our table is left unused.
 
+## Import, slice 3: trainers and vendors
+
+`import_slice3.py` writes slice 3: spells a trainer teaches on live Forever that its trainer list lacks
+(`trainer_spell`), and items a vendor sells that its stock lacks (`npc_vendor`), for the gaps `gap_report.py` lists
+(`trainer_spells_missing`, `trainers_unlinked`, `vendor_items_missing`, `vendors_no_stock`).
+
+- `sql/world/YYYY_MM_DD_NN_world_everlake_import_slice3.sql`, numbered after the other slices' files of that date;
+  no corrections file (every vendor here already has its vendor flag);
+- `slices/slice3/manifest.json`, `review.md` (profession ranks) and `held-back.md`.
+
+The source is EG Link's newest trainer or vendor window that lists anything, the one the gap report reads too
+(`gap_report.newest_windows`: the highest build, live over beta on a tie; a beta window's row says so in its note). A
+window lists what the NPC offers, so one is enough.
+
+- Trainer spells go into the list the creature uses. A list several creatures share gets a spell only when no other
+  creature on it was seen without it in a window at least as new.
+- `MoneyCost` is the price at Neutral or Friendly (EG Link's `costs` are per standing; those two match the fork's
+  prices), or one seen only at Honored and above turned back with the game's discount (10, 15, 20%) when exact.
+- `ReqLevel` is the newest non-zero level any window shows for the spell (a window shows 0 when its player already
+  knew it); a class spell every window shows at 0 is held back unless the fork teaches it at level 0 too (weapon skills). `ReqSkillRank` is
+  EG Link's. `ReqSkillLine` is the line the fork's own rows use for that skill name.
+  `ReqAbility1..3` are what EG Link says the spell needs known first (`abilities`), or the rank before it, each found by
+  name in the same window, and a rank before it must be on the list too.
+- Held back or on the review list: profession ranks (Apprentice ... Artisan: the plan has them checked by hand first),
+  pet training (the fork's trainers teach no pet spells), spells not in Forever's client spell tables (item-history,
+  used only as a check), a skill name the fork never uses, no price, a creature with no trainer list (it needs a gossip
+  option: hand work).
+- Vendor items go after the vendor's last slot in the window's order, with no stock limit and `ExtendedCost` 0. Held
+  back: items that cost more than money (the `ItemExtendedCost` id isn't recorded), limited stock (no restock time),
+  items not in the client's item list, and a vendor whose stock another vendor lists.
+
+The import file adds a row only where it is missing, never again once added (a row the fork removes stays removed), a
+trainer spell only while a creature uses the list, and a vendor item only while the vendor doesn't already sell the item
+at another price.
+
 ## Dry run (every slice)
 
 `import_dryrun.py` runs every file in the data folder (`--data`, a clone of wow-everlake-world-data or `world-data/`)
@@ -195,5 +230,5 @@ recorded key was a fork row, that new rows point at existing creatures, objects,
 lists and that every new loot table is some creature's, that running the files again (directly, and through the
 updater) changes nothing, also after each slice's simulated fork changes (run last, so they change the stepped world),
 and that the gap report on the result has each gap of the slices' categories closed or listed with its reason and
-nothing new (loot gaps count per drop). The report goes to the newest slice's folder (`--report SLICE` for another).
+nothing new (loot, trainer-spell and vendor-item gaps count per item of an NPC). The report goes to the newest slice's folder (`--report SLICE` for another).
 `--skip-scratch` runs only the stepped run (a few minutes instead of the release load).
