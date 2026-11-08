@@ -198,6 +198,7 @@ SQL
 # image is in auth.updates; after AUTH_UPDATES_WAIT seconds (default 600) start anyway and say which are missing.
 wait_for_auth_updates() {
     local f have waited=0 limit="${AUTH_UPDATES_WAIT:-600}" list=""
+    [[ "$limit" =~ ^[0-9]+$ ]] || { echo "[entrypoint] AUTH_UPDATES_WAIT must be a number of seconds, got '$limit': using 600"; limit=600; }
     local -a names=()
     for f in /src/TrinityCore/sql/custom/auth/*.sql; do
         [ -e "$f" ] || continue

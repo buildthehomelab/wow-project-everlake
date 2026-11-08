@@ -2,6 +2,8 @@
 # (docs/era-data.md). Same image and world database as realm 1, its own characters and hotfix databases
 # (characters2, hotfixes2: scripts/realm2-setup.sh), port 8095 and logs volume. Bots stay on realm 1.
 #   docker compose -f docker-compose.yml -f docker-compose.realm2.yml up -d worldserver2
+# After a new image (e.g. a core bump), recreate worldserver2 too: it is not part of a plain "docker compose up -d"
+# and reads the build list only when it starts, so until then it turns away clients of a new build.
 # The realm settings are the core's environment overrides (TC_ + the config key in upper snake case), so realm 1's
 # overrides/*.conf (game rules) apply here too.
 services:

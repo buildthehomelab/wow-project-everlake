@@ -39,15 +39,23 @@ fi
 
 cd "$OUT"
 if [ "${DBC_ONLY:-0}" = 1 ]; then
-    echo "[extract] === mapextractor, dbc and gt only (DBC_ONLY=1)"
-    mark="$(mktemp)"
-    "$BIN/mapextractor" -i "$SRC" -o "$OUT" -p "$PRODUCT" "${MAP_ARGS[@]}" -e 10
-    # mapextractor exits 0 even when it cannot open the CASC storage: check that it wrote new tables
-    if [ -z "$(find "$OUT/dbc" -name '*.db2' -newer "$mark" -print -quit 2>/dev/null)" ]; then
-        echo "[extract] ERROR: mapextractor wrote no dbc files, see the messages above."; exit 1
+    # mapextractor skips table files that already exist, so extract into an empty folder and swap it in afterwards
+    NEW="$OUT/.dbc-new"
+    echo "[extract] === mapextractor, dbc and gt only (DBC_ONLY=1), into $NEW"
+    rm -rf "$NEW" && mkdir -p "$NEW"
+    "$BIN/mapextractor" -i "$SRC" -o "$NEW" -p "$PRODUCT" "${MAP_ARGS[@]}" -e 10
+    # mapextractor exits 0 even when it cannot open the CASC storage
+    if [ -z "$(find "$NEW/dbc" -name '*.db2' -print -quit 2>/dev/null)" ] || [ ! -d "$NEW/gt" ]; then
+        echo "[extract] ERROR: mapextractor wrote no dbc or gt files, see the messages above. ./data is unchanged."
+        rm -rf "$NEW"; exit 1
     fi
-    rm -f "$mark"
-    echo "[extract] done:"
+    for d in dbc gt; do
+        rm -rf "$OUT/$d.old"
+        [ -d "$OUT/$d" ] && mv "$OUT/$d" "$OUT/$d.old"
+        mv "$NEW/$d" "$OUT/$d"
+    done
+    rm -rf "$NEW" "$OUT/dbc.old" "$OUT/gt.old"
+    echo "[extract] done (restart the worldservers to load the new tables):"
     du -sh "$OUT/dbc" "$OUT/gt" 2>/dev/null
     exit 0
 fi

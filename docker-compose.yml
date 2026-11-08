@@ -86,6 +86,7 @@ services:
       LOGIN_HOSTNAME: ${LOGIN_HOSTNAME:-trinity.actual.battle.net}
       CERT_FILE: ${CERT_FILE:-forever.cert.pem}
       KEY_FILE: ${KEY_FILE:-forever.key.pem}
+      AUTH_UPDATES_WAIT: ${AUTH_UPDATES_WAIT:-600}   # seconds to wait for worldserver's auth updates (build list)
     # bnetserver refuses to start if it cannot resolve the LoginREST hostname itself. It only checks that the name
     # resolves (it hands players the name, not an address), so inside the container it may point at itself.
     extra_hosts:
