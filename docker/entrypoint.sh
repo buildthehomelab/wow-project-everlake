@@ -99,6 +99,7 @@ configure_worldserver() {
     setkey "$f" LogsDir "\"$ROOT/logs\""
     setkey "$f" SourceDirectory '"/src/TrinityCore"'
     setkey "$f" MySQLExecutable '"/usr/bin/mysql"'
+    # no auth key is known for the Forever builds (70790, 70862): the core skips only the digest check
     setkey "$f" Network.SkipBuildAuthKeyCheck 1
     setkey "$f" Network.EnterEncryptedModeRegionGroup 8
     setkey "$f" Realm.CfgContentSetID 137
@@ -142,6 +143,9 @@ configure_bnetserver() {
     setkey "$f" LogsDir "\"$ROOT/logs\""
     setkey "$f" Realm.CfgContentSetID 137
     setkey "$f" Realm.SuperDistrictID 2
+    # The core's auth update 2026_11_07_00 moves the realms to 70862 (Battle.net's 2026-11-07 update, same game data).
+    # Clients still on 70790 (a frozen test copy, a player who hasn't updated) keep seeing and joining them.
+    setkey "$f" Realm.AlsoAcceptBuilds '"70790"'
     apply_overrides "$f" bnetserver
 }
 
@@ -188,6 +192,40 @@ SQL
     echo "[entrypoint] CLIENT_BUILD=${CLIENT_BUILD}: realm build override written (experimental)"
 }
 
+# bnetserver reads auth.build_info only when it starts, and the rows come from sql/custom/auth files that worldserver's
+# updater applies (bnetserver runs no updates). Started together, bnetserver could load the build list before e.g. the
+# 70862 row exists and turn those clients away until its next restart. So wait until every custom auth file in this
+# image is in auth.updates; after AUTH_UPDATES_WAIT seconds (default 600) start anyway and say which are missing.
+wait_for_auth_updates() {
+    local f have waited=0 limit="${AUTH_UPDATES_WAIT:-600}" list=""
+    [[ "$limit" =~ ^[0-9]+$ ]] || { echo "[entrypoint] AUTH_UPDATES_WAIT must be a number of seconds, got '$limit': using 600"; limit=600; }
+    local -a names=()
+    for f in /src/TrinityCore/sql/custom/auth/*.sql; do
+        [ -e "$f" ] || continue
+        # the CLIENT_BUILD file is written by worldserver's entrypoint in its own container, never in this one
+        [ "$f" = "$OVERRIDE_SQL" ] && continue
+        f="$(basename "$f")"
+        names+=("$f")
+        list="${list:+$list,}'${f//\'/\'\'}'"
+    done
+    [ "${#names[@]}" -gt 0 ] || return 0
+    echo "[entrypoint] waiting for worldserver to apply the ${#names[@]} custom auth updates (the build list)..."
+    until [ "$(mysql_q "SELECT COUNT(DISTINCT name) FROM auth.updates WHERE name IN ($list)" 2>/dev/null || echo 0)" = "${#names[@]}" ]; do
+        if [ "$waited" -ge "$limit" ]; then
+            echo "[entrypoint] WARNING: custom auth updates still missing after ${limit}s, starting anyway:"
+            for f in "${names[@]}"; do
+                have="$(mysql_q "SELECT COUNT(*) FROM auth.updates WHERE name = '${f//\'/\'\'}'" 2>/dev/null || echo 0)"
+                [ "$have" = 0 ] && echo "[entrypoint]   $f"
+            done
+            echo "[entrypoint] Restart bnetserver once worldserver has applied them, or clients of a new build are refused."
+            return 0
+        fi
+        sleep 5
+        waited=$((waited + 5))
+    done
+    echo "[entrypoint] custom auth updates applied (${#names[@]})"
+}
+
 # The realm row is created by the auth updates that worldserver applies on its first start.
 update_realmlist() {
     echo "[entrypoint] waiting for realm ${REALM_ID} in auth.realmlist (worldserver creates it on first start)..."
@@ -215,6 +253,7 @@ case "${1:-worldserver}" in
         check_certs
         wait_for_mysql
         update_realmlist
+        wait_for_auth_updates
         exec "$ROOT/bin/bnetserver" -c "$ETC/bnetserver.conf" "$@"
         ;;
     *)

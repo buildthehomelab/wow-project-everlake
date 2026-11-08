@@ -357,7 +357,7 @@ gate2_report() {
 test1_report() {
     # Test 1 (docs/era-data.md): what the client did with the Death Knight and Monk rows, read from the game folder.
     local game="$1" mark="$SUPPORT/test1.mark" f n
-    say "test1: game folder $game, build $(game_build "$game") (the server takes 1.60.1.70790 only)"
+    say "test1: game folder $game, build $(game_build "$game") (the server takes 1.60.1.70862 and 70790)"
     say "test1: addon EverlakeTest1 $( [ -f "$game/Interface/AddOns/EverlakeTest1/EverlakeTest1.lua" ] && echo installed || echo MISSING: run test1-addon)"
     say "test1: started $(stat -f '%Sm' "$mark" 2>/dev/null || echo '(no mark: run test1-addon first)')"
     say "test1: hotfixes from our pushes (9540020-9540029 classes and spells, 9540010-9540015 talent tree, 9540030+ visuals) per table and result:"

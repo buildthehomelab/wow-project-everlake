@@ -317,7 +317,8 @@ errors show where.
 - A Death Knight rune display (our own addon), and a guard for the `RuneFrame` error in the mainline player frame.
 - WotLK rune types (Blood, Frost, Unholy, Death) for the Classic → WotLK ruleset: core work.
 - Acherus (map 609) for the DK start, like map 530.
-- The client build moves on (70840 and 70862 are out); the server accepts only 70790.
+- The client build moves on (70840 and 70862 are out). From core `2ae1313e` on, the server takes 70862 and 70790 (pinned
+  2026-11-08); the Test 1 kit's rows were copied from 70790 tables.
 
 ## Tests 4 to 6, run early: switching realms (2026-11-07)
 
