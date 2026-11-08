@@ -62,6 +62,8 @@ every import is checked against the newest fork world first, and anything the fo
    - every new row points at things that exist (givers and enders, loot items, trainer spells, models, maps, factions);
    - no id or spawn guid collides with the fork's, and re-running the files changes nothing;
    - the gap report on the result shows the slice's gaps gone and nothing new.
+   - the two dry runs end with the same world: a difference means files whose order differs between a new realm and
+     the live one, fixed by a new file.
 4. **Review**: the files and the dry-run report go up as a pull request. A person reads the corrections and the close
    calls and merges.
 5. **Deploy to the PTR realm**, play and bot it; then the Forever realm.
