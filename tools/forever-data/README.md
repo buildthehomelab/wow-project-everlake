@@ -246,6 +246,48 @@ the commonest respawn and wandering of the fork's NPCs of its classification on 
 The import file adds a spawn only while the fork has no spawn of the same NPC or object within 40 yards but ours, and
 never again once added.
 
+## Import, slice 5: new NPCs and objects
+
+`import_slice5.py --maps DIR` writes slice 5: templates for NPCs and objects Forever uses that the world lacks
+(`missing_npcs`, `objects_missing`), with everything they need to stand in the world: `creature_template`,
+`creature_template_difficulty`, `creature_template_model`, `creature_classic_level` (the fork's own level table, which
+it fills for its own Forever NPCs), the new merchants' `npc_vendor` stock, `gameobject_template`,
+`gameobject_questitem` and a chest's `gameobject_loot_template`, and their spawns (`creature`, `gameobject`).
+
+The user's decisions (2026-11-08):
+
+- Only what also gets a spawn, by slice 4's rule (a forever-db point a live sighting confirms within 40 yards, with a
+  height). Of 1,213 NPCs and 178 objects with no template, only a few dozen were ever seen live; the rest is beta,
+  Classic or event data and is held back. Slice 6 brings in the NPCs its quests need.
+- An NPC's faction: no public source records one. It is the commonest faction of the fork's NPCs of the same creature
+  type spawned within 60 yards that react to a player of the side EG Link's players were as they saw it, both ways
+  (`Reactions`, following TrinityCore with starting reputations: how the player sees the NPC, as the client colours it,
+  and whether the NPC attacks the player), preferring a shared first name (Razormane, Spitelash) and then the exact
+  reaction (neutral, friendly). A hostile NPC may take another type's faction, never a critter's. Tested on 1,474 fork
+  NPCs EG Link players saw: whether the fork's own faction attacks matches what players saw for all of them; the guess
+  attacks (or not) as the fork NPC's own faction does every time it picks, picks the exact faction 61% (friendly) to
+  68% (hostile) of the time, and nothing for 8%, which is held back. The nearest fork NPC of that faction (of the same
+  type where there is one) lends speeds, attack times and immunity to players and NPCs.
+- A unique NPC (elite, rare or boss, titled, offering a service, or with every point within 60 yards of the others)
+  with several points goes to the review list, as in slice 4: it may be one NPC wandering or on a patrol.
+- Services as EG Link's players saw them, with the stock EG Link recorded (`import_slice3.vendors`); gossip only when
+  nothing else. Training needs a trainer list and a gossip option (hand work): the trainer flag is left off and the NPC
+  goes on the review list.
+
+Template values come from EG Link's creature and object details, the client's own query data (of a live build, else a
+beta build, said so): names, titles, types, classification, models (checked against Forever's client
+`CreatureDisplayInfo` and `GameObjectDisplayInfo`, pinned from wago.tools), health and power multipliers, type flags,
+movement, kill credits, cursors; an object's whole template. Levels are EG Link's live levels, else forever-db's.
+Damage and armour modifiers 1 and `unit_flags2` 2048, as the fork's own Forever NPCs. A chest's loot, when the fork
+has none: its quest items at 100% for players on the quest (as the fork's quest chests), other items at their share of
+EG Link's openings once there are 50 (fewer: review list). No equipment, scripts or loot for the NPCs: their loot comes
+with a slice 2 run once the templates are in. Spawns as slice 4's new NPCs; guids continue after slice 4's.
+
+Every row goes in only while the template is ours (`everlake_import_rows` names it under this file, and it still has
+`VerifiedBuild` 0 as written; the build its details came from is in the note) and never again once added: where the
+fork adds the NPC or object first, or takes it over with a sniffed template, nothing of ours goes in next to it. An NPC
+or object the fork already spawns without a template is held back. NPCs offering a service stand still.
+
 ## Dry run (every slice)
 
 `import_dryrun.py` runs every file in the data folder (`--data`, a clone of wow-everlake-world-data or `world-data/`)
@@ -257,8 +299,10 @@ all of ours: nothing is deployed yet). It checks that both end with the same wor
 corrections are unchanged (rows added = keys recorded, rows removed or changed = the corrections'; a table with no
 primary key, like `creature_loot_template`, is compared under its first index with duplicates counted), that no
 recorded key was a fork row, that new rows point at existing creatures, objects, quests, client items and reference
-lists and that every new loot table is some creature's, that running the files again (directly, and through the
+lists, that every new loot table is some creature's (a new chest's loot some chest's), that new templates' models are in
+Forever's client and each new template has a spawn, that running the files again (directly, and through the
 updater) changes nothing, also after each slice's simulated fork changes (run last, so they change the stepped world),
 and that the gap report on the result has each gap of the slices' categories closed or listed with its reason and
-nothing new (loot, trainer-spell and vendor-item gaps count per item of an NPC). The report goes to the newest slice's folder (`--report SLICE` for another).
+nothing new (loot, trainer-spell and vendor-item gaps count per item of an NPC; a decision on `npc/*` covers all of
+an NPC's items). The report goes to the newest slice's folder (`--report SLICE` for another).
 `--skip-scratch` runs only the stepped run (a few minutes instead of the release load).

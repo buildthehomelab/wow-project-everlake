@@ -49,7 +49,7 @@ FOREVER_DB_TABLES = ("npc", "object", "quest", "quest_start", "quest_end", "ques
                      "spawn", "item", "item_source", "ui_map", "mechanic", "step")
 WAGO_TABLES = ("AreaTable", "AreaPOI", "GameObjects", "Light", "LightParams", "SoundAmbience", "TaxiNodes", "TaxiPath",
                "TaxiPathNode", "ZoneIntroMusicTable", "ZoneMusic", "Faction", "FactionTemplate", "SoundKit", "SoundKitEntry",
-               "UiMap", "UiMapAssignment", "Map")
+               "UiMap", "UiMapAssignment", "Map", "CreatureDisplayInfo", "GameObjectDisplayInfo")
 
 SOURCES = {
     "eg-link": {
@@ -481,9 +481,11 @@ def main():
         if only is None or name in only:
             pin_repo(name, source, manifest)
             save(manifest)
-    if only is not None:              # pin_sources.py --only NAME,NAME: just those GitHub sources (or live-hotfixes)
+    if only is not None:              # pin_sources.py --only NAME,NAME: just those GitHub sources (or live-hotfixes, wago)
         if "live-hotfixes" in only:
             pin_live_hotfixes(manifest)
+        if "wago" in only:
+            pin_wago(manifest)
         write_credits()
         save(manifest)
         return

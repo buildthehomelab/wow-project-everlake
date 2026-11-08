@@ -109,6 +109,35 @@ class Grid:
         return out
 
 
+class Heights:
+    """A point's height, or why it has none (rule 3): forever-db's (CMaNGOS) where it has one, else Everlake's terrain,
+    except in dungeons and battlegrounds, in water, over a hole, or next to a fork spawn that stands off the ground."""
+
+    def __init__(self, ground, spawns, map_type):
+        self.ground, self.spawns, self.map_type = ground, spawns, map_type
+
+    def __call__(self, m, x, y, z):
+        """(z, how) or (None, why)."""
+        ground, spawns, map_type = self.ground, self.spawns, self.map_type
+        if z is not None:
+            return z, "height forever-db (CMaNGOS)"
+        if map_type.get(m) != 0:
+            return None, "no height, and the map is a dungeon or battleground (the terrain doesn't hold its floors)"
+        if ground.tile(m, x, y) is None:
+            return None, "no height, and Everlake's maps have no terrain tile there"
+        g = ground.ground(m, x, y)
+        if g is None:
+            return None, "no height, and the terrain has a hole there (a cave mouth or a building)"
+        w = ground.water(m, x, y)
+        if w is not None and w > g + 1:
+            return None, "no height, and the point is in water"
+        off = [round(v - g, 1) for _, _, v in spawns.near(m, x, y, BUILDING_YARDS) if abs(v - g) > BUILDING_OFF]
+        if off:
+            return None, (f"no height, and a fork spawn within {BUILDING_YARDS} yards stands off the ground (a building, bridge or "
+                          f"cave: {off[0]:+} yards)")
+        return round(g, 2), "height Everlake terrain"
+
+
 def live_sightings(sources, cur):
     """(kind, id) -> Grid of positions live Forever players recorded: EG Link npcs.json (npcs, objects, approached) and
     creatures.json (deaths, combat log) of every live build, and loot windows."""
@@ -242,25 +271,7 @@ def main():
 
     sl = {"adds": collections.defaultdict(list), "review": [], "held": [], "outcomes": collections.defaultdict(dict)}
 
-    def height(m, x, y, z):
-        """(z, how) or (None, why)."""
-        if z is not None:
-            return z, "height forever-db (CMaNGOS)"
-        if map_type.get(m) != 0:
-            return None, "no height, and the map is a dungeon or battleground (the terrain doesn't hold its floors)"
-        if ground.tile(m, x, y) is None:
-            return None, "no height, and Everlake's maps have no terrain tile there"
-        g = ground.ground(m, x, y)
-        if g is None:
-            return None, "no height, and the terrain has a hole there (a cave mouth or a building)"
-        w = ground.water(m, x, y)
-        if w is not None and w > g + 1:
-            return None, "no height, and the point is in water"
-        off = [round(v - g, 1) for _, _, v in spawns.near(m, x, y, BUILDING_YARDS) if abs(v - g) > BUILDING_OFF]
-        if off:
-            return None, (f"no height, and a fork spawn within {BUILDING_YARDS} yards stands off the ground (a building, bridge or "
-                          f"cave: {off[0]:+} yards)")
-        return round(g, 2), "height Everlake terrain"
+    height = Heights(ground, spawns, map_type)
 
     def confirmed(kind, i, ps):
         """forever-db points a live sighting confirms, one per spot."""
