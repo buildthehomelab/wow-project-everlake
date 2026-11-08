@@ -14,6 +14,7 @@
 #   ./everlake-client.sh test1-ui                   (Test 1 UI: gate2 copy from the server's build, its files, the addon)
 #   ./everlake-client.sh fix-owner                  (gives the Everlake folder back to you after a run with sudo)
 #   ./everlake-client.sh switch <account email> [game folder]  (gate 5 realm switch test: guided, sends a report)
+#   ./everlake-client.sh reports <address | server>  (where check, test1 and switch send reports and screenshots)
 #   ./everlake-client.sh cdn <address[:port] | server>  (where gate2 gets the patched build; default: the server, 8087)
 #   ./everlake-client.sh china-undead [CDN address[:port]]  (China Undead test: gate2 copy + files; docs/china-undead.md)
 #   ./everlake-client.sh china-mode on|off [game folder]  (the client's own China setting, overrideArchive)
@@ -33,8 +34,9 @@
 #   keypatch.c). See docs/client-connection.md.
 # play: starts the forwarder, asks for your Everlake password, logs in to the server and hands the game a login
 #       ticket (login.py, the way Battle.net does it), then starts the copy with the server key patch.
-# check: prints everything that has to be right for the game to reach the server, and sends the report to the
-#        server (report-drop service, port 8099) so nobody has to copy it by hand.
+# check: prints everything that has to be right for the game to reach the server, and sends the report, with the
+#        screenshots taken since the last check, to the report drop (scripts/report-drop.py, port 8099; the game
+#        server unless the reports command named another machine), so nobody has to copy anything by hand.
 # undo: stops the forwarder, removes the hosts entry, the CA trust and the copy.
 # gate2 (docs/custom-files.md, experiment 1): makes a test game folder in Application Support from APFS clones
 #       (instant, no extra disk space; the Battle.net install is never changed) whose .build.info points at the
@@ -108,6 +110,32 @@ setup_hosts() {
 }
 
 server_addr() { cat "$SERVER_FILE" 2>/dev/null || true; }
+
+# Where reports and screenshots go (scripts/report-drop.py, port 8099): EVERLAKE_REPORTS, else what the reports command
+# saved, else the game server.
+REPORTS_FILE="$SUPPORT/reports.txt"
+report_addr() { local a="${EVERLAKE_REPORTS:-$(cat "$REPORTS_FILE" 2>/dev/null || true)}"; echo "${a:-$(server_addr)}"; }
+
+# send_shots <name> <work folder> <game folder> <find time test...>: the newest 12 screenshots matching the test, from
+# the game folder's Screenshots and the Desktop, each sent as a JPEG at most 1600 pixels wide (macOS screenshots are
+# large PNGs; the report drop takes up to 2 MB).
+send_shots() {
+    local name="$1" work="$2" game="$3" f small n=0
+    shift 3
+    rm -rf "$work"; mkdir -p "$work"
+    { find "$game/Screenshots" "$HOME/Desktop" -maxdepth 1 -type f "$@" \
+        \( -iname "*.jpg" -o -iname "*.png" -o -iname "*.tga" \) 2>/dev/null || true; } | sort | tail -n 12 | while read -r f; do
+        n=$((n + 1))
+        small="$work/$(basename "${f%.*}").jpg"
+        sips -s format jpeg -s formatOptions 70 -Z 1600 "$f" --out "$small" >/dev/null 2>&1 && [ -s "$small" ] && f="$small"
+        if [ "$(stat -f %z "$f")" -lt 2000000 ]; then
+            curl -s -m 30 -T "$f" "http://$(report_addr):8099/$name-shot-$n-$(basename "$f" | tr -c 'A-Za-z0-9._\n-' _)" >/dev/null \
+                && say "sent $(basename "$f")" || say "could not send $(basename "$f")"
+        else
+            say "$(basename "$f") is over 2 MB, not sent"
+        fi
+    done
+}
 
 # Where the patched build (tools/tact/cdn.py) is served, as address[:port]: EVERLAKE_CDN, else what the cdn command
 # saved, else the game server's cdn service (docker-compose.yml, port 8087). A missing port means 80.
@@ -500,23 +528,16 @@ switch_test() {
     report="$SWITCH/report.txt"
     { switch_report "$game" 2>&1 || echo "[everlake] switch report stopped early (exit $?)"; } > "$report"
     say "logins the addon checked: $(grep -a -c '"verdict"] = "OK"' "$report" || true) OK, $(grep -a -c '"verdict"] = "MIXED"' "$report" || true) MIXED"
-    if curl -s -m 20 -T "$report" "http://$addr:8099/switch-$(hostname -s)" >/dev/null; then
+    if curl -s -m 20 -T "$report" "http://$(report_addr):8099/switch-$(hostname -s)" >/dev/null; then
         say "report sent to the server ($report)"
     else
         say "report NOT sent (saved in $report)"
     fi
     for f in 1-after-run1 2-after-run2; do
         [ -f "$SWITCH/$f/DBCache.bin" ] && curl -s -m 30 -T "$SWITCH/$f/DBCache.bin" \
-            "http://$addr:8099/switch-dbcache-$f-$(hostname -s).bin" >/dev/null && say "sent the hotfix cache after ${f#*-}"
+            "http://$(report_addr):8099/switch-dbcache-$f-$(hostname -s).bin" >/dev/null && say "sent the hotfix cache after ${f#*-}"
     done
-    { find "$game/Screenshots" "$HOME/Desktop" -maxdepth 1 -type f -newer "$SWITCH/mark" \
-        \( -iname "*.jpg" -o -iname "*.png" -o -iname "*.tga" \) 2>/dev/null || true; } | sort | tail -n 12 | while read -r f; do
-        n=$((n + 1))
-        small="$SWITCH/$(basename "${f%.*}").jpg"
-        sips -s format jpeg -s formatOptions 70 -Z 1600 "$f" --out "$small" >/dev/null 2>&1 && [ -s "$small" ] && f="$small"
-        curl -s -m 30 -T "$f" "http://$addr:8099/switch-shot-$n-$(basename "$f" | tr -c 'A-Za-z0-9._\n-' _)" >/dev/null \
-            && say "sent $(basename "$f")" || say "could not send $(basename "$f")"
-    done
+    send_shots switch "$SWITCH/shots" "$game" -newer "$SWITCH/mark"
     say "done. Thanks!"
 }
 
@@ -634,14 +655,28 @@ case "$cmd" in
             --args -launcherlogin -config "$WTF_NAME"
         say "first realm login can fail with 'server identity check failed': click Reconnect"
         ;;
+    reports)
+        # where check, test1 and switch send reports and screenshots: "server" = the game server again
+        [ $# -ge 1 ] || die "usage: $0 reports <address | server>"
+        mkdir -p "$SUPPORT"
+        if [ "$1" = server ]; then rm -f "$REPORTS_FILE"; else echo "$1" > "$REPORTS_FILE"; fi
+        nc -z -G 3 "$(report_addr)" 8099 2>/dev/null && say "reports go to $(report_addr), and it answers" \
+            || say "reports go to $(report_addr), but nothing answers on port 8099 there (is report-drop running?)"
+        ;;
     check)
         # Prints everything that has to be right, saves it and sends it to the server's report drop (port 8099).
         REPORT="$SUPPORT/check.txt"; mkdir -p "$SUPPORT"
         # a failing step must not stop the report from being sent
         { do_check "$@" 2>&1 || echo "[everlake] check stopped early (exit $?)"; } | tee "$REPORT"
-        addr="$(server_addr)"
+        addr="$(report_addr)"
         if [ -n "$addr" ] && curl -s -m 5 -T "$REPORT" "http://$addr:8099/check-$(hostname -s)" >/dev/null; then
-            say "report sent to the server"
+            say "report sent to $addr"
+            # and the screenshots taken since the last check (the first time: the last 2 hours)
+            MARK_FILE="$SUPPORT/check-shots.mark"; touch "$SUPPORT/check-shots.next"
+            if [ -f "$MARK_FILE" ]; then since=(-newer "$MARK_FILE"); else since=(-mmin -120); fi
+            G="$(find_game "${1:-}" 2>/dev/null || true)"
+            send_shots check "$SUPPORT/check-shots" "${G:-$HOME/none}" "${since[@]}"
+            mv "$SUPPORT/check-shots.next" "$MARK_FILE"
         else
             say "report NOT sent (saved in $REPORT)"
         fi
@@ -754,7 +789,7 @@ case "$cmd" in
         LOG="$SUPPORT/install.txt"
         if python3 "$HERE/casc_local.py" install "$DATA" "$FILES" > "$LOG" 2>&1; then OK=1; else OK=0; fi
         cat "$LOG"
-        curl -s -m 10 -T "$LOG" "http://$(server_addr):8099/install-$(hostname -s)" >/dev/null && say "output sent to the server" || true
+        curl -s -m 10 -T "$LOG" "http://$(report_addr):8099/install-$(hostname -s)" >/dev/null && say "output sent to the server" || true
         [ "$OK" = 1 ] || die "install failed (nothing half-done: index files are only replaced after every check)"
         say "done. Undo with: $0 gate2-uninstall"
         ;;
@@ -765,7 +800,7 @@ case "$cmd" in
             T="$(find_game gate2 2>/dev/null)" && { say "test folder: $(dirname "$T")/Data"; python3 "$HERE/casc_local.py" inspect "$(dirname "$T")/Data" 2>&1 || true; }
             R="$(find_game "" 2>/dev/null)" && { say "real install: $(dirname "$R")/Data"; python3 "$HERE/casc_local.py" inspect "$(dirname "$R")/Data" 2>&1 || true; }
         } | tee "$REPORT"
-        if [ -n "$ADDR" ] && curl -s -m 10 -T "$REPORT" "http://$ADDR:8099/inspect-$(hostname -s)" >/dev/null; then
+        if [ -n "$(report_addr)" ] && curl -s -m 10 -T "$REPORT" "http://$(report_addr):8099/inspect-$(hostname -s)" >/dev/null; then
             say "report sent to the server"
         else
             say "report NOT sent (saved in $REPORT)"
@@ -801,23 +836,10 @@ case "$cmd" in
         GAME="$(find_game "${1:-}")" || die "game folder not found"
         REPORT="$SUPPORT/test1.txt"; mkdir -p "$SUPPORT"
         { test1_report "$GAME" 2>&1 || echo "[everlake] test1 report stopped early (exit $?)"; } | tee "$REPORT"
-        addr="$(server_addr)"
+        addr="$(report_addr)"
         if [ -n "$addr" ] && curl -s -m 10 -T "$REPORT" "http://$addr:8099/test1-$(hostname -s)" >/dev/null; then
-            say "report sent to the server"
-            n=0
-            SHOTS="$SUPPORT/test1-shots"; rm -rf "$SHOTS"; mkdir -p "$SHOTS"
-            test1_shots "$GAME" | while read -r f; do
-                    n=$((n + 1))
-                    # macOS screenshots are large PNGs: send a JPEG at most 1600 pixels wide instead
-                    small="$SHOTS/$(basename "${f%.*}").jpg"
-                    sips -s format jpeg -s formatOptions 70 -Z 1600 "$f" --out "$small" >/dev/null 2>&1 && [ -s "$small" ] && f="$small"
-                    if [ "$(stat -f %z "$f")" -lt 2000000 ]; then
-                        curl -s -m 30 -T "$f" "http://$addr:8099/test1-shot-$n-$(basename "$f" | tr -c 'A-Za-z0-9._\n-' _)" >/dev/null \
-                            && say "sent $(basename "$f")" || say "could not send $(basename "$f")"
-                    else
-                        say "$(basename "$f") is over 2 MB, not sent"
-                    fi
-                done
+            say "report sent to $addr"
+            send_shots test1 "$SUPPORT/test1-shots" "$GAME" -newer "$SUPPORT/test1.mark"
         else
             say "report NOT sent (saved in $REPORT)"
         fi
