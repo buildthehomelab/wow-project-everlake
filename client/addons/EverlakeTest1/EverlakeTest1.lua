@@ -225,7 +225,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         record("session", "loaded")
     elseif event == "PLAYER_LOGIN" then
         C_Timer.After(3, function()
-            local lines = snapshot("login")
+            snapshot("login")
             local _, classFile = UnitClass("player")
             say(("%s logged in as %s. %d errors so far. Type /el1 for a snapshot, /el1 talents for the talent frame.")
                 :format(v(UnitName("player")), v(classFile), #db.errors))

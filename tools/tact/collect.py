@@ -16,7 +16,6 @@ that aren't shipped. Writes <dir>/<FileDataID> for every file to add and <dir>/f
 """
 import argparse
 import os
-import re
 import sqlite3
 import struct
 import sys

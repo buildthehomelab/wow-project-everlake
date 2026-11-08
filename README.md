@@ -83,6 +83,17 @@ Battle.net (and Battle.net quit, so it can't update the game) and Apple's comman
 
 Not tested yet. Windows: not written yet.
 
+## Checks
+
+CI (`.github/workflows/ci.yml`) runs on every pull request. It does not compile the core.
+
+- `tools/ci/check-patches.sh [commit]`: `docker/patches` still apply, to the pinned core and to the forever-bots
+  core. When you bump `TC_COMMIT`, run this first. When the bots core changes, bump the commit in the workflow too.
+- `tools/ci/check-repo.sh`: the core pin is the same in the Dockerfile, `docker-compose.yml` and `.env.example`,
+  and the `sql/everlake` file names follow the `YYYY_MM_DD_NN_<database>_<what>.sql` pattern with no number used twice.
+- shellcheck, ruff (bug rules only), luacheck for `client/addons`, `docker compose config`, and a clang build of
+  `client/macos/keypatch.c` with the Mac client's Python parsed on 3.9.
+
 ## Credits
 
 - [advocaite/TrinityCore](https://github.com/advocaite/TrinityCore) `forever` branch, GPL-2.0: the server core
