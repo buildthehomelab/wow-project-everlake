@@ -10,8 +10,8 @@ release (the `tc_*` tables here); every other source is a view of the live game.
 | Load each source | `load_sources.py` | `src_<source>` tables + `src_pins` |
 | Load the fork's world | `load_tc.py` | `tc_<table>` (TrinityCore layout): the release plus the fork's `sql/updates` and `sql/custom` world files, run as Everlake's worldserver runs them; `tc_updates` lists every update file in it |
 | What Everlake's world lacks | `gap_report.py [--zone NAME] [--world SCHEMA.PREFIX]` | `reports/everlake-gaps.md` + `.json` |
-| Write an import slice | `import_slice1.py` | update files, review and held-back lists in `world-data/` (gitignored) |
-| Dry-run it | `import_dryrun.py` | two worlds in `acore_world_dryrun` (`elscratch_*`, `elstep_*`), `world-data/slice1/dry-run.md` |
+| Write an import slice | `import_slice1.py`, `import_slice2.py` | update files, review and held-back lists in `world-data/` (gitignored) |
+| Dry-run them | `import_dryrun.py` | two worlds in `acore_world_dryrun` (`elscratch_*`, `elstep_*`), `world-data/slices/<newest>/dry-run.md` |
 
 Nothing here writes Everlake's own databases. The import (docs/forever-import.md) is written as ordinary update files,
 generated here and kept in their own GPL-3.0 repository, because several sources are GPL-3.0 (Polestar's tables,
@@ -104,8 +104,8 @@ points along patrol paths.
   and progress (`quest_request_items`) and completion (`quest_offer_reward`) texts where the world has no row;
 - `sql/world/YYYY_MM_DD_01_world_everlake_import_slice1_corrections.sql`: changes to fork rows: other givers or enders,
   an empty quest text filled in;
-- `slice1/manifest.json` (every decision), `slice1/review.md` (close calls, kept out of the files) and
-  `slice1/held-back.md` (rows that need something we don't have, with why).
+- `slices/slice1/manifest.json` (every decision), `review.md` (close calls, kept out of the files) and
+  `held-back.md` (rows that need something we don't have, with why).
 
 How it decides:
 
@@ -135,12 +135,65 @@ can't make a re-run fail) and then acts only on the corrections that passed; a r
 nothing. Files carry no timestamps: the same pins give the same bytes, and the
 generator refuses to overwrite a file whose content changed (`--replace` only before it is deployed).
 
-`import_dryrun.py` then runs both dry runs by the fork's updater rules (`custom_sql.UpdatePlan`, through the same
-`load_tc.py` code) in `acore_world_dryrun`, touching only tables named `elscratch_*` and `elstep_*` (`--drop` removes
-them afterwards): from scratch (the release, every fork file and ours in name order) and stepped (the fork world as
-`tc_*` holds it, then ours). It checks that both end with the same world, that fork rows outside the corrections are
-unchanged (rows added = keys recorded, rows removed or changed = the corrections'), that no recorded key was a fork row,
-that new rows point at existing creatures, objects and quests, that running the files again (directly, and through the
-updater) changes nothing, also after a simulated fork change (run last, so it changes the stepped world), and that
-the gap report on the result has each slice-1 gap closed or listed with its reason
-and nothing new. `--skip-scratch` runs only the stepped run (about two minutes instead of the release load).
+## Import, slice 2: loot
+
+`import_slice2.py` writes slice 2: drops live Forever shows that the world's creature loot tables lack, and new loot
+tables for creatures with none. It works on exactly the gaps `gap_report.py` lists (`loot_items_missing`,
+`npcs_no_loot`), running the report itself (`--gaps FILE` reuses one).
+
+- `sql/world/YYYY_MM_DD_NN_world_everlake_import_slice2.sql`: `creature_loot_template` rows, numbered after the files
+  already in the folder for that date (slice 1's 00 and 01, so 02);
+- `sql/world/YYYY_MM_DD_NN+1_world_everlake_import_slice2_corrections.sql`: each new table linked to its creature
+  (`creature_template_difficulty.LootID` of its open-world row, a fork row);
+- `slices/slice2/manifest.json`, `review.md` (drops seen once) and `held-back.md`.
+
+Which drops go in (the user's decisions of 2026-11-08):
+
+- Only where a Forever source shows the NPC drops it: EG Link's kill loot (`wowf/<build>/npc:<id>[|quest][|group]`;
+  `|spell` keys are skinning, gathering and pick-pocketing and don't count) or a QuestieTrace sighting (QuestieDB's
+  `foreverItemTraces.lua`, `npcDrops_add`). forever-db's `item_source` rows are built from pfQuest (VMaNGOS) and
+  CMaNGOS alone (Polestar's `forge-data` publish step), so they are Classic data. The user chose (2026-11-08) to add a
+  drop only they show with its Classic chance anyway, marked `classic` (`--classic-only hold` holds them back).
+- Every row's note (in `everlake_import_rows`, and the comment beside the row in the file) says where its chance comes
+  from: `eg-link 7/120` (drops/kills, `on quest` for a quest drop) or `classic forever-db 12.5% (pfQuest/CMaNGOS)`, so
+  a reviewer can tell the Classic rows apart and a later Forever recording can replace them. The dry-run report counts
+  both.
+- The chance is EG Link's, drops / loot windows summed over every build (beta included), when the NPC has 50 or more
+  recorded kills; for a quest drop, over the kills made on a quest. Otherwise it is forever-db's Classic chance, marked
+  `classic`. With neither, the drop is held back.
+- A drop EG Link saw once goes to the review list.
+- Every row: `ItemType` 0, `GroupId` 0 (rolled on its own, so the fork's groups keep their odds), `LootMode` 1, one of
+  the item. A drop EG Link saw in stacks over one is held back (no source records the range); so is an item missing
+  from Forever's client item list (forever-db's `item`).
+- `QuestRequired` 1 for a quest item (the client's flag, as forever-db lists it) that EG Link saw drop only on a quest,
+  or that only Classic data shows, when a quest in the world asks for it. A quest item no quest in the world asks for
+  is held back: with `QuestRequired` it would never drop, without it everyone would get it. EG Link files a whole kill
+  under `|quest` when the looter was on any quest, so an ordinary item seen only there (cloth, water) stays an
+  ordinary drop.
+- A loot table several creatures share gets a drop only when every one of them shows it.
+- New tables take the id 900,000,000 + the creature's entry: the fork's loot ids follow its creature entries (below
+  10 million, which the generator checks), so ours can't collide with one and a re-run reuses the same id.
+
+The import file adds a drop only where the table lacks it, the item doesn't already drop through one of the table's
+reference lists (two levels deep), a creature still uses the table, and the drop was never added before: a row we
+added that a later fork file removes stays removed (`everlake_import_rows` remembers it). A new table's rows go in only
+while the creature still has no loot table but ours. The corrections file links a table only while the creature's
+`LootID` is still 0 with the `VerifiedBuild` it was written against, and our table is there; once the fork links its
+own, the correction does nothing and our table is left unused.
+
+## Dry run (every slice)
+
+`import_dryrun.py` runs every file in the data folder (`--data`, a clone of wow-everlake-world-data or `world-data/`)
+together: the files in `sql/world/` must be exactly the ones the slices' manifests (`slices/<slice>/manifest.json`)
+name. It runs both dry runs by the fork's updater rules (`custom_sql.UpdatePlan`, through the same `load_tc.py` code)
+in `acore_world_dryrun`, touching only tables named `elscratch_*` and `elstep_*` (`--drop` removes them afterwards):
+from scratch (the release, every fork file and ours in name order) and stepped (the fork world as `tc_*` holds it, then
+all of ours: nothing is deployed yet). It checks that both end with the same world, that fork rows outside the
+corrections are unchanged (rows added = keys recorded, rows removed or changed = the corrections'; a table with no
+primary key, like `creature_loot_template`, is compared under its first index with duplicates counted), that no
+recorded key was a fork row, that new rows point at existing creatures, objects, quests, client items and reference
+lists and that every new loot table is some creature's, that running the files again (directly, and through the
+updater) changes nothing, also after each slice's simulated fork changes (run last, so they change the stepped world),
+and that the gap report on the result has each gap of the slices' categories closed or listed with its reason and
+nothing new (loot gaps count per drop). The report goes to the newest slice's folder (`--report SLICE` for another).
+`--skip-scratch` runs only the stepped run (a few minutes instead of the release load).
