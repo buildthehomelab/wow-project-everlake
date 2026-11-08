@@ -9,16 +9,18 @@ Everlake (the Forever realm) runs the TrinityCore `forever` fork with its world 
 which load_tc.py keeps in acore_forever as the tc_* tables. Live Forever is every other loaded source (load_sources.py),
 weighed by source_weights.py. Reads only; writes the two report files.
 
-What it lists, per zone:
+What it lists, per zone (the full list is CATEGORIES below):
 - quests Forever has and the world release doesn't, split into seen in the live game (EG Link at a live build,
   QuestieTrace, ForeverDB "seen") and known only from client or beta data;
 - quests whose name, givers or enders differ from what the sources agree on, and quests with no giver or no text;
 - NPCs Forever spawns or uses that have no template, NPCs with a template but no spawn, and extra spawn spots;
-- vendors whose stock the world lacks (EG Link's recorded stock against npc_vendor).
+- vendors whose stock the world lacks (EG Link's recorded stock against npc_vendor);
+- objects missing or never spawned, NPCs whose loot lacks recorded drops, trainers missing spells, quests with no
+  objective rows, missing reward items or no progress or completion text.
 
-Not applied: the fork's sql/custom world files the release doesn't already hold (its updates table, kept by load_tc.py as
-tc_updates, lists the ones it does); Everlake's worldserver applies them on top. Every gap whose id those files write or
-change is marked "custom SQL touches it", so it can be checked rather than trusted.
+load_tc.py applies the fork's sql/custom world files on top of the release, as Everlake's worldserver does, and lists
+them in tc_updates. A custom file that isn't applied yet (pinned after the last load_tc.py run) is not in tc_* : every gap
+whose key rows such a file writes or changes is marked "custom SQL touches it", so it can be checked rather than trusted.
 """
 import argparse
 import collections
@@ -55,6 +57,17 @@ CATEGORIES = [
     ("extra_spots", "Extra spawn spots"),
     ("vendors_no_stock", "Vendors with no stock in the world"),
     ("vendor_items_missing", "Vendors missing some items"),
+    ("objects_missing", "Objects Forever spawns or uses, no template in the world"),
+    ("objects_not_spawned", "Objects with a template, never spawned"),
+    ("npcs_no_loot", "NPCs with recorded drops and no loot table"),
+    ("loot_items_missing", "NPCs whose loot table lacks recorded drops"),
+    ("trainers_unlinked", "Trainers with no trainer list in the world"),
+    ("trainer_spells_missing", "Trainers missing spells"),
+    ("quests_no_objectives", "Quests with no objective rows in the world"),
+    ("quest_rewards_missing", "Quests missing reward items"),
+    ("quests_no_progress_text", "Quests with no progress text in the world"),
+    ("quests_no_completion_text", "Quests with no completion text in the world"),
+    ("flight_masters_unflagged", "Flight masters not flagged as one"),
 ]
 
 
@@ -119,7 +132,7 @@ class Zones:
         return counts.most_common(1)[0][0] if counts else None
 
 
-KEY_COLUMNS = {"entry", "id", "quest", "questid", "creatureid"}
+KEY_COLUMNS = {"entry", "id", "quest", "questid", "creatureid", "trainerid"}
 QUEST_ID_TABLES = {"quest_template", "quest_template_addon", "quest_offer_reward", "quest_request_items", "quest_details",
                    "quest_template_classic_level", "quest_classic_level", "quest_classic_money"}     # tables whose ID is a quest id
 FIRST_KEY = {**{t: "id" for t in QUEST_ID_TABLES}, "creature_template": "entry", "creature_template_addon": "entry", "npc_vendor": "entry",
@@ -195,6 +208,9 @@ def main():
         return any(qid in ids for (t, col), ids in mentions.items()
                    if (t in QUEST_ID_TABLES and col == "id") or (t.startswith("quest_") and col == "questid")
                    or (t.endswith(("queststarter", "questender")) and col == "quest"))
+
+    def touched(table_cols, i):
+        return any(i in mentions.get(tc, ()) for tc in table_cols)
 
     def npc_touched(nid):
         return any(nid in ids for (t, col), ids in mentions.items()
@@ -370,6 +386,185 @@ def main():
             elif want - tc_stock[nid]:
                 found[zone]["vendor_items_missing"].append(dict(item, items=sorted(want - tc_stock[nid]), build=stock[nid][0]))
 
+    # ---- the rest of the world: objects, loot, trainers, quest objectives, rewards and texts, flight masters
+    def tc_spawns(table, ids):
+        out = collections.defaultdict(list)
+        for r in candidates.rows(cur, f"SELECT id, map, position_x, position_y FROM {F}.tc_{table} WHERE id IN ({candidates.ids_sql(ids)})"):
+            out[r["id"]].append((r["map"], float(r["position_x"]), float(r["position_y"])))
+        return out
+
+    def zone_of(own, world, quests=()):
+        z = zones.main(own or world or ())
+        if z is None:
+            z = next((quest_zone[q] for q in sorted(quests) if quest_zone.get(q)), 0)
+        return z
+
+    # objects Forever spawns, or uses as quest givers and enders
+    obj_points, obj_quests, obj_names = collections.defaultdict(set), collections.defaultdict(set), {}
+    for r in candidates.rows(cur, f"SELECT data FROM {F}.src_forever_db WHERE tbl = 'spawn' "
+                                  f"AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.kind')) = 'object'"):
+        d = j(r["data"])
+        if candidates.as_int(d.get("id")) is not None and d.get("map") is not None and d.get("x") is not None:
+            obj_points[int(d["id"])].add((int(d["map"]), float(d["x"]), float(d["y"])))
+    for r in candidates.rows(cur, f"SELECT id AS quest, JSON_EXTRACT(data, '$.id') AS obj FROM {F}.src_forever_db "
+                                  f"WHERE tbl IN ('quest_start', 'quest_end') AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.kind')) = 'object'"):
+        if candidates.as_int(r["obj"]) is not None and r["quest"] in quest_zone:
+            obj_quests[candidates.as_int(r["obj"])].add(r["quest"])
+    obj_ids = set(obj_points) | set(obj_quests)
+    for r in candidates.rows(cur, f"SELECT id, JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')) AS name FROM {F}.src_forever_db "
+                                  f"WHERE tbl = 'object' AND id IN ({candidates.ids_sql(obj_ids)})"):
+        obj_names[r["id"]] = r["name"]
+    tc_obj = {r["entry"]: r["name"] for r in candidates.rows(cur, f"SELECT entry, name FROM {F}.tc_gameobject_template "
+                                                                    f"WHERE entry IN ({candidates.ids_sql(obj_ids)})")}
+    tc_obj_points = tc_spawns("gameobject", obj_ids)
+    skipped_test_objects = 0
+    for oid in sorted(obj_ids):
+        title = obj_names.get(oid) or tc_obj.get(oid)
+        if title and TEST_NAME.search(str(title)):
+            skipped_test_objects += 1
+            continue
+        zone = zone_of(obj_points.get(oid), tc_obj_points.get(oid), obj_quests.get(oid, ()))
+        item = {"object": oid, "name": title, "spots": len(obj_points.get(oid, ())), "quests": sorted(obj_quests.get(oid, ())),
+                "custom_sql": touched((("gameobject_template", "entry"), ("gameobject", "id")), oid)}
+        if oid not in tc_obj:
+            found[zone]["objects_missing"].append(item)
+        elif obj_points.get(oid) and not tc_obj_points.get(oid):
+            found[zone]["objects_not_spawned"].append(item)
+
+    # NPCs: loot (forever-db drop lists, EG Link kill records), trainers (EG Link), flight masters (EG Link)
+    drops = collections.defaultdict(set)
+    for r in candidates.rows(cur, f"SELECT JSON_EXTRACT(data, '$.id') AS npc, JSON_EXTRACT(data, '$.item') AS item FROM {F}.src_forever_db "
+                                  f"WHERE tbl = 'item_source' AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.kind')) = 'npc'"):
+        if candidates.as_int(r["npc"]) is not None and candidates.as_int(r["item"]) is not None:
+            drops[candidates.as_int(r["npc"])].add(candidates.as_int(r["item"]))
+    for r in candidates.rows(cur, f"SELECT k, JSON_EXTRACT(data, '$.items') AS items FROM {F}.src_eg_link WHERE tbl = 'loot'"):
+        m = re.search(r"/npc:(\d+)", r["k"] or "")
+        if "|spell:" in (r["k"] or ""):
+            continue                     # skinning, gathering or pick-pocketing loot, not what the kill drops
+        items = j(r["items"]) if r["items"] else None
+        if m and isinstance(items, dict):
+            drops[int(m.group(1))] |= {int(i) for i in items if str(i).isdigit()}
+    teach = {}
+    for r in candidates.rows(cur, f"SELECT id, JSON_UNQUOTE(JSON_EXTRACT(data, '$._build')) AS build, JSON_EXTRACT(data, '$.services') AS services "
+                                  f"FROM {F}.src_eg_link WHERE tbl = 'trainers' AND id IS NOT NULL"):
+        services = j(r["services"]) if r["services"] else None
+        spells = {int(k) for k in services if str(k).isdigit()} if isinstance(services, dict) else set()
+        b = build_no(r["build"])
+        if spells and (r["id"] not in teach or b >= teach[r["id"]][0]):
+            teach[r["id"]] = (b, spells)
+    flight = {r["id"] for r in candidates.rows(cur, f"SELECT DISTINCT id FROM {F}.src_eg_link WHERE tbl = 'flights' AND id IS NOT NULL")}
+    more = (set(drops) | set(teach) | flight) - set(tc_npc) - npc_ids
+    tc_npc.update({r["entry"]: r["name"] for r in candidates.rows(cur, f"SELECT entry, name FROM {F}.tc_creature_template "
+                                                                         f"WHERE entry IN ({candidates.ids_sql(more)})")})
+    for nid, pts in tc_spawns("creature", more - set(tc_points)).items():
+        tc_points[nid] = pts
+    fdb_npc = {r["id"]: r["name"] for r in candidates.rows(cur, f"SELECT id, JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')) AS name "
+                                                               f"FROM {F}.src_forever_db WHERE tbl = 'npc' AND id IN ({candidates.ids_sql(more)})")}
+    with_tpl = {n for n in set(drops) | set(teach) | flight if n in tc_npc}
+    loot_id = {}
+    for r in candidates.rows(cur, f"SELECT Entry, DifficultyID, LootID FROM {F}.tc_creature_template_difficulty "
+                                  f"WHERE LootID > 0 AND Entry IN ({candidates.ids_sql(set(drops) & with_tpl)}) ORDER BY DifficultyID DESC"):
+        if r["DifficultyID"] == 0 or r["Entry"] not in loot_id:
+            loot_id[r["Entry"]] = r["LootID"]          # the open-world row when there is one, else a dungeon difficulty
+    direct, links = collections.defaultdict(set), collections.defaultdict(set)     # loot id -> items / reference ids
+    for r in candidates.rows(cur, f"SELECT Entry, ItemType, Item FROM {F}.tc_creature_loot_template "
+                                  f"WHERE Entry IN ({candidates.ids_sql({v for v in loot_id.values() if v})})"):
+        if r["ItemType"] in (0, 1):     # 2 currency, 3 tracking quest: not item drops
+            (links if r["ItemType"] == 1 else direct)[r["Entry"]].add(r["Item"])
+    ref_items, ref_links, todo = collections.defaultdict(set), collections.defaultdict(set), {x for v in links.values() for x in v}
+    loaded = set()
+    while todo - loaded:                      # reference lists can name further reference lists
+        batch = todo - loaded
+        loaded |= batch
+        for r in candidates.rows(cur, f"SELECT Entry, ItemType, Item FROM {F}.tc_reference_loot_template WHERE Entry IN ({candidates.ids_sql(batch)})"):
+            if r["ItemType"] == 1:
+                ref_links[r["Entry"]].add(r["Item"])
+                todo.add(r["Item"])
+            elif r["ItemType"] == 0:
+                ref_items[r["Entry"]].add(r["Item"])
+
+    def loot_items(lid):
+        got, stack, seen = set(direct.get(lid, ())), list(links.get(lid, ())), set()
+        while stack:
+            x = stack.pop()
+            if x not in seen:
+                seen.add(x)
+                got |= ref_items.get(x, set())
+                stack.extend(ref_links.get(x, ()))
+        return got
+
+    trainer_of = collections.defaultdict(set)
+    for r in candidates.rows(cur, f"SELECT CreatureID, TrainerID FROM {F}.tc_creature_trainer WHERE CreatureID IN ({candidates.ids_sql(teach)})"):
+        trainer_of[r["CreatureID"]].add(r["TrainerID"])
+    taught = collections.defaultdict(set)
+    for r in candidates.rows(cur, f"SELECT TrainerId, SpellId FROM {F}.tc_trainer_spell "
+                                  f"WHERE TrainerId IN ({candidates.ids_sql({t for v in trainer_of.values() for t in v})})"):
+        taught[r["TrainerId"]].add(r["SpellId"])
+    flags = {r["entry"]: int(r["npcflag"]) for r in candidates.rows(cur, f"SELECT entry, npcflag FROM {F}.tc_creature_template "
+                                                                       f"WHERE entry IN ({candidates.ids_sql(flight)})")}
+    for nid in sorted(with_tpl):
+        title = tc_npc.get(nid) or fdb_npc.get(nid)
+        if title and TEST_NAME.search(str(title)):
+            continue
+        zone = zone_of(points.get(nid), tc_points.get(nid), quest_npcs.get(nid, ()))
+        item = {"npc": nid, "name": title, "custom_sql": npc_touched(nid)}
+        if nid in drops:
+            lid = loot_id.get(nid)
+            if not lid:
+                found[zone]["npcs_no_loot"].append(dict(item, items=sorted(drops[nid])))
+            elif drops[nid] - loot_items(lid):
+                found[zone]["loot_items_missing"].append(dict(item, items=sorted(drops[nid] - loot_items(lid)), loot_id=lid,
+                                                              custom_sql=item["custom_sql"] or touched((("creature_loot_template", "entry"),), lid)))
+        if nid in teach:
+            lists = trainer_of.get(nid, set())
+            touched_trainer = item["custom_sql"] or touched((("creature_trainer", "creatureid"),), nid) \
+                or any(touched((("trainer_spell", "trainerid"), ("trainer", "id")), t) for t in lists)
+            if not lists:
+                found[zone]["trainers_unlinked"].append(dict(item, spells=len(teach[nid][1]), custom_sql=touched_trainer))
+            else:
+                short = teach[nid][1] - set().union(*(taught[t] for t in lists))
+                if short:
+                    found[zone]["trainer_spells_missing"].append(dict(item, items=sorted(short), build=teach[nid][0], custom_sql=touched_trainer))
+        if nid in flight and not flags.get(nid, 0) & 8192:
+            found[zone]["flight_masters_unflagged"].append(item)
+
+    # quests the world has: objectives, reward items, progress and completion text
+    world_q = {qid for qid in quest_zone if qid in tc_q}
+    with_obj = {r["QuestID"] for r in candidates.rows(cur, f"SELECT DISTINCT QuestID FROM {F}.tc_quest_objectives WHERE QuestID IN ({candidates.ids_sql(world_q)})")}
+    want_obj = set()
+    for r in candidates.rows(cur, f"SELECT id, data FROM {F}.src_eg_link WHERE tbl = 'objectives' AND id IN ({candidates.ids_sql(world_q)})"):
+        d = j(r["data"])
+        if isinstance(d, dict) and any(k.isdigit() and isinstance(v, dict) and v.get("type") for k, v in d.items()):
+            want_obj.add(r["id"])
+    want_obj |= {r["id"] for r in candidates.rows(cur, f"SELECT DISTINCT id FROM {F}.src_forever_db WHERE tbl = 'quest_objective' AND id IN ({candidates.ids_sql(world_q)})")}
+    rewards = collections.defaultdict(set)
+    for r in candidates.rows(cur, f"SELECT id, JSON_EXTRACT(data, '$.id') AS item FROM {F}.src_forever_db WHERE tbl = 'quest_reward' "
+                                  f"AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.kind')) IN ('item', 'choice') AND id IN ({candidates.ids_sql(world_q)})"):
+        if candidates.as_int(r["item"]):
+            rewards[r["id"]].add(candidates.as_int(r["item"]))
+    cols = ", ".join([f"RewardItem{i}" for i in range(1, 5)] + [f"RewardChoiceItemID{i}" for i in range(1, 7)])
+    world_rewards = {r["ID"]: {v for k, v in r.items() if k != "ID" and v} for r in candidates.rows(
+        cur, f"SELECT ID, {cols} FROM {F}.tc_quest_template WHERE ID IN ({candidates.ids_sql(rewards)})")}
+    text_kinds = collections.defaultdict(set)
+    for r in candidates.rows(cur, f"SELECT id, JSON_KEYS(data) AS keys_ FROM {F}.src_eg_link WHERE tbl = 'texts.enUS' AND id IN ({candidates.ids_sql(world_q)})"):
+        text_kinds[r["id"]] |= set(j(r["keys_"]) or ())
+    progress = {r["ID"]: (r["CompletionText"] or "").strip() for r in candidates.rows(
+        cur, f"SELECT ID, CompletionText FROM {F}.tc_quest_request_items WHERE ID IN ({candidates.ids_sql(text_kinds)})")}
+    completion = {r["ID"]: (r["RewardText"] or "").strip() for r in candidates.rows(
+        cur, f"SELECT ID, RewardText FROM {F}.tc_quest_offer_reward WHERE ID IN ({candidates.ids_sql(text_kinds)})")}
+    names = {qid: tc_q[qid]["LogTitle"] for qid in world_q}
+    for qid in sorted(world_q):
+        zone = quest_zone[qid]
+        item = {"quest": qid, "name": names[qid], "evidence": sorted(evidence[qid]), "custom_sql": quest_touched(qid)}
+        if qid in want_obj and qid not in with_obj:
+            found[zone]["quests_no_objectives"].append(item)
+        if rewards.get(qid) and rewards[qid] - world_rewards.get(qid, set()):
+            found[zone]["quest_rewards_missing"].append(dict(item, items=sorted(rewards[qid] - world_rewards.get(qid, set()))))
+        if "progress" in text_kinds.get(qid, ()) and not progress.get(qid):
+            found[zone]["quests_no_progress_text"].append(item)
+        if "complete" in text_kinds.get(qid, ()) and not completion.get(qid):
+            found[zone]["quests_no_completion_text"].append(item)
+
     # ---- write
     labels = {r["source"]: r["label"] for r in candidates.rows(cur, f"SELECT source, label FROM {F}.src_pins")}
     by_name = {}
@@ -382,7 +577,7 @@ def main():
             slot[cat].extend(items)
     totals = {cat: sum(len(z.get(cat, [])) for z in by_name.values()) for cat, _ in CATEGORIES}
     report = {"made": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "pins": labels,
-              "custom_sql": custom, "skipped_test_quests": skipped_test, "skipped_test_npcs": skipped_test_npcs, "totals": totals,
+              "custom_sql": custom, "skipped_test_quests": skipped_test, "skipped_test_npcs": skipped_test_npcs, "skipped_test_objects": skipped_test_objects, "totals": totals,
               "zones": {z: {c: v for c, v in cats.items()} for z, cats in sorted(by_name.items())}}
     os.makedirs(args.out, exist_ok=True)
     with open(os.path.join(args.out, "everlake-gaps.json"), "w") as handle:
@@ -414,9 +609,9 @@ def markdown(report):
 
     out = ["# Everlake world vs live Forever", "",
            f"Made by tools/forever-data/gap_report.py at {report['made']}. Everlake's world = the TrinityCore fork's world "
-           f"release in acore_forever (tc_* tables, {cell(report['pins'].get('tc-release', '?'))}); the fork's sql/custom world "
-           f"files the release doesn't already hold ({len((report['custom_sql'] or {}).get('files', []))} at "
-           f"{cell(str((report['custom_sql'] or {}).get('label', 'not pinned'))[:10])}) are not applied; gaps whose id they touch say so. "
+           f"release with the fork's sql/custom world files applied, as Everlake's worldserver does (tc_* tables, "
+           f"{cell(report['pins'].get('tc-release', '?'))}). Custom files pinned since then and not yet applied: "
+           f"{len((report['custom_sql'] or {}).get('files', []))}; gaps whose rows they touch say so. "
            f"Live Forever = every other source: " + ", ".join(f"{k} {cell(str(v)[:12])}" for k, v in sorted(report["pins"].items())
                                                           if k != "tc-release") + ".", "",
            f"{report['skipped_test_quests']} test or unused quests and {report['skipped_test_npcs']} NPCs (names like <UNUSED>, [DNT], "
@@ -435,17 +630,26 @@ def markdown(report):
     ranked = sorted(report["zones"].items(), key=lambda kv: -sum(len(v) for v in kv[1].values()))
     for zone, cats in ranked:
         out.append(f"| {cell(zone)} | " + " | ".join(str(len(cats.get(c, []))) for c, _ in short) + " |")
+    rest = [("objects_missing", "Objects missing"), ("objects_not_spawned", "Objects not spawned"), ("npcs_no_loot", "No loot table"),
+            ("loot_items_missing", "Loot short"), ("trainers_unlinked", "Trainer no list"), ("trainer_spells_missing", "Trainer spells"),
+            ("quests_no_objectives", "No objectives"), ("quest_rewards_missing", "Rewards short"),
+            ("quests_no_progress_text", "No progress text"), ("quests_no_completion_text", "No completion text"),
+            ("flight_masters_unflagged", "Flight master flag")]
+    out += ["", "The rest of the world:", "", "| Zone | " + " | ".join(s for _, s in rest) + " |", "|---" * (len(rest) + 1) + "|"]
+    for zone, cats in sorted(report["zones"].items(), key=lambda kv: -sum(len(kv[1].get(c, [])) for c, _ in rest)):
+        if any(cats.get(c) for c, _ in rest):
+            out.append(f"| {cell(zone)} | " + " | ".join(str(len(cats.get(c, []))) for c, _ in rest) + " |")
     out += ["", "## Examples", "", f"Up to {EXAMPLES} per kind, live first; everlake-gaps.json has every one.", ""]
     for cat, label in CATEGORIES:
         items = [dict(i, zone=z) for z, cats in report["zones"].items() for i in cats.get(cat, [])]
         if not items:
             continue
-        items.sort(key=lambda i: (not (set(i.get("evidence", [])) & LIVE_EVIDENCE), i.get("quest") or i.get("npc")))
+        items.sort(key=lambda i: (not (set(i.get("evidence", [])) & LIVE_EVIDENCE), i.get("quest") or i.get("npc") or i.get("object")))
         out += [f"### {label} ({len(items)})", ""]
         for i in items[:EXAMPLES]:
-            what = f"quest {i['quest']}" if "quest" in i else f"NPC {i['npc']}"
+            what = f"quest {i['quest']}" if "quest" in i else f"object {i['object']}" if "object" in i else f"NPC {i['npc']}"
             extra = []
-            for key in ("world", "forever", "givers", "spots", "sells", "items", "evidence"):
+            for key in ("world", "forever", "givers", "spots", "sells", "items", "spells", "loot_id", "evidence"):
                 if i.get(key) not in (None, [], 0):
                     v = i[key]
                     extra.append(f"{key}: {len(v)} items" if key == "items" and isinstance(v, list) and len(v) > 6 else f"{key}: {v}")
