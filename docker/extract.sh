@@ -11,6 +11,7 @@
 #   EXTRACT_MMAPS=1 also generates mmaps (long; only needed with MMAP_PATHFINDING=1)
 #   MMAPS_ONLY=1  only the navigation meshes (mmaps) the bots and MMAP_PATHFINDING=1 need, from the maps and vmaps
 #                 already in the data folder (long; no download)
+#   MMAP_THREADS  threads for mmaps_generator (default: every core; fewer on a host that also runs a realm)
 #   DBC_ONLY=1    only dbc and gt (mapextractor -e 10), for a client update that changes table contents but no map
 #                 files (e.g. 70790 -> 70862); maps, vmaps and mmaps stay as they are
 #
@@ -27,7 +28,7 @@ if [ "${MMAPS_ONLY:-0}" = 1 ]; then
     [ -d "$OUT/maps" ] && [ -d "$OUT/vmaps" ] || { echo "[extract] ERROR: mmaps need maps and vmaps first (run the extractor once without MMAPS_ONLY)"; exit 1; }
     echo "[extract] === mmaps_generator only (long)"
     cd "$OUT"
-    "$BIN/mmaps_generator" --threads "$(nproc)"
+    "$BIN/mmaps_generator" --threads "${MMAP_THREADS:-$(nproc)}"
     echo "[extract] done:"; du -sh "$OUT/mmaps"
     exit 0
 fi
@@ -101,7 +102,7 @@ cd "$OUT" && rm -rf "$OUT/.work"
 
 if [ "${EXTRACT_MMAPS:-0}" = 1 ]; then
     echo "[extract] === mmaps_generator (long)"
-    "$BIN/mmaps_generator" --threads "$(nproc)"
+    "$BIN/mmaps_generator" --threads "${MMAP_THREADS:-$(nproc)}"
 fi
 
 echo "[extract] done:"

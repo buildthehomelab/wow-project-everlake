@@ -114,6 +114,7 @@ services:
       EXTRACT_MMAPS: ${EXTRACT_MMAPS:-0}
       DBC_ONLY: ${DBC_ONLY:-0}
       MMAPS_ONLY: ${MMAPS_ONLY:-0}
+      MMAP_THREADS: ${MMAP_THREADS:-}
       SKIP_MAPS: ${SKIP_MAPS:-0}
     volumes:
       - "${WOW_DIR:-./wow-not-set}:/wow:ro"

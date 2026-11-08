@@ -1,0 +1,58 @@
+# The PTR ("Everlake PTR", realm id 73): the test realm every change reaches before a live realm
+# (designs/everlake-plan.md, "Realm names and a PTR"). Same login server as the live realms, but its own image tag and
+# its own databases: world_ptr and hotfixes_ptr (copies of realm 1's, refreshed by scripts/ptr-setup.sh), characters_ptr
+# (its own characters) and playerbot_ptr (its own bots). Port 8097, the Hardcore ruleset card (content set 140, the one
+# card no live realm uses; the card still reads "Hardcore"), GM accounts only (allowedSecurityLevel 3) until the opt-in
+# switch from the plan exists.
+#
+# Set up once: scripts/ptr-setup.sh dbs, then scripts/ptr-setup.sh realm. Then either
+#   docker compose -f docker-compose.yml -f docker-compose.ptr.yml up -d worldserver-ptr
+# or, beside the running TrueNAS app: docker-compose.ptr-app.yml.
+#
+# A new build goes to the PTR first: build it as the "ptr" tag (EVERLAKE_IMAGE_TAG=ptr docker compose build worldserver)
+# and restart the PTR; once it is good, tag that image "latest" (docker tag everlake-trinitycore:ptr
+# everlake-trinitycore:latest) and restart the live realms.
+services:
+  worldserver-ptr:
+    image: everlake-trinitycore:${PTR_IMAGE_TAG:-ptr}
+    pull_policy: never   # local image, built with EVERLAKE_IMAGE_TAG=ptr
+    command: ["worldserver"]
+    networks: [everlake]
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-UTC}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-trinity}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MMAP_PATHFINDING: "1"   # the bots walk on the navigation meshes (data/mmaps)
+      CLIENT_BUILD: ${CLIENT_BUILD:-}
+      PLAYERBOT_DB: playerbot_ptr   # the entrypoint loads the bots' schema into it on the first start
+      TC_REALM_ID: "73"
+      TC_WORLD_SERVER_PORT: "8097"
+      TC_REALM_CFG_CONTENT_SET_ID: "140"
+      TC_WORLD_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};world_ptr"
+      TC_CHARACTER_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};characters_ptr"
+      TC_HOTFIX_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};hotfixes_ptr"
+      # The bots: their own database and account names (the login database is shared with the live realms), and
+      # few of them. Everything else is the module's defaults, as on the live realm.
+      TC_PLAYERBOT_SHARED_DATABASE: "playerbot_ptr"
+      TC_PLAYERBOT_ACCOUNT_PREFIX: "PBPTR_"
+      TC_PLAYERBOT_WORLD_MAX_BOTS: "40"
+      TC_PLAYERBOT_WORLD_BOTS_PER_PLAYER: "40"
+      TC_PLAYERBOT_WORLD_CITY_BOTS: "15"
+      TC_PLAYERBOT_WORLD_ZONE_BOTS: "15"
+      TC_PLAYERBOT_WORLD_START_ZONE_BOTS: "10"
+      TC_PLAYERBOT_WORLD_POOL_MAX: "120"
+    stdin_open: true
+    tty: true
+    stop_grace_period: 2m
+    ports:
+      - "8097:8097"
+    volumes:
+      - ${DATA_DIR:-./data}:/opt/trinitycore/data:ro
+      - ./overrides:/opt/trinitycore/overrides:ro
+      - logs-ptr:/opt/trinitycore/logs
+
+volumes:
+  logs-ptr:

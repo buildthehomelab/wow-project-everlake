@@ -156,24 +156,27 @@ configure_playerbots() {
     fi
 }
 
-# The bots' shared database (`playerbot`, Playerbot.SharedDatabase): docker/mysql-init creates it on a new MySQL
-# volume, docker/mysql-init/02-playerbot.sh on an existing one. Its schema and static data (names, templates, dungeon
+# The bots' shared database (PLAYERBOT_DB, default `playerbot`; the worldserver's Playerbot.SharedDatabase must name the
+# same one): docker/mysql-init creates `playerbot` on a new MySQL volume, docker/mysql-init/02-playerbot.sh on an
+# existing one, scripts/ptr-setup.sh the PTR's `playerbot_ptr`. Its schema and static data (names, templates, dungeon
 # routes) are loaded here once, as the TrinityCore user; the module applies its own migrations (sql/playerbot_v2) when
 # worldserver starts. Bots also need the navigation meshes (mmaps) and MMAP_PATHFINDING=1, or they stand still.
 prepare_playerbot_db() {
-    local sql=/src/TrinityCore/sql/playerbot_shared
+    local sql=/src/TrinityCore/sql/playerbot_shared db="${PLAYERBOT_DB:-playerbot}"
     [ -f "$sql/playerbot_shared_schema.sql" ] || return 0
     # SHOW DATABASES lists only the databases this user has rights on
-    if ! mysql_q "SHOW DATABASES LIKE 'playerbot'" | grep -q playerbot; then
-        echo "[entrypoint] ERROR: database 'playerbot' is missing or not granted to ${DB_USER}."
-        echo "[entrypoint] Existing MySQL volume: run docker/mysql-init/02-playerbot.sh once (README, Bots)."
+    if [ "$(mysql_q "SHOW DATABASES LIKE '$db'")" != "$db" ]; then
+        echo "[entrypoint] ERROR: database '$db' is missing or not granted to ${DB_USER}."
+        echo "[entrypoint] Existing MySQL volume: run docker/mysql-init/02-playerbot.sh once (README, Bots); PTR: scripts/ptr-setup.sh."
         exit 1
     fi
-    if [ "$(mysql_q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='playerbot'")" = "0" ]; then
-        echo "[entrypoint] loading the playerbot schema and static data (once)..."
-        MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" < "$sql/playerbot_shared_schema.sql"
-        MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" playerbot < "$sql/playerbot_shared_data.sql"
-        echo "[entrypoint] playerbot database ready"
+    if [ "$(mysql_q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$db'")" = "0" ]; then
+        echo "[entrypoint] loading the bots' schema and static data into $db (once)..."
+        # the schema file names its database (CREATE DATABASE / USE `playerbot`): load it under ours
+        sed -E "s/^(CREATE DATABASE .*|USE )\`playerbot\`/\1\`$db\`/" "$sql/playerbot_shared_schema.sql" \
+            | MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER"
+        MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" "$db" < "$sql/playerbot_shared_data.sql"
+        echo "[entrypoint] $db ready"
     fi
     if [ "${MMAP_PATHFINDING:-0}" != 1 ] || [ ! -d "$ROOT/data/mmaps" ]; then
         echo "[entrypoint] WARNING: bots need mmaps in the data folder and MMAP_PATHFINDING=1, or they cannot walk (README, Bots)."

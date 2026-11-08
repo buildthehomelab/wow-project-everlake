@@ -1,0 +1,21 @@
+# The PTR (docker-compose.ptr.yml) as its own TrueNAS custom app, so the running "everlake" app is never edited.
+# It joins the everlake app's network, where MySQL answers as "mysql", and reads this folder's .env (DB_PASSWORD,
+# DATA_DIR: give DATA_DIR as an absolute path when this folder is not the live app's).
+# Apps -> Discover Apps -> Custom App -> Install via YAML, name e.g. everlake-ptr:
+#   include:
+#     - /mnt/NVME/docker/everlake-ptr/docker-compose.ptr-app.yml
+# Databases and the realm row first: scripts/ptr-setup.sh dbs, then scripts/ptr-setup.sh realm. The network is the
+# everlake app's (project ix-everlake); another project name: EVERLAKE_NETWORK=<project>_everlake in .env.
+services:
+  worldserver-ptr:
+    extends:
+      file: docker-compose.ptr.yml
+      service: worldserver-ptr
+
+networks:
+  everlake:
+    name: ${EVERLAKE_NETWORK:-ix-everlake_everlake}
+    external: true
+
+volumes:
+  logs-ptr:

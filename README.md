@@ -94,6 +94,15 @@ The bots need three things the server didn't before:
 The first start with bots creates the bots' accounts and characters in the background, which takes a while; bot log
 lines go to `logs/Playerbot.log`.
 
+### PTR
+
+The PTR (realm 73, "Everlake PTR", port 8097) is where a new build runs before a live realm: its own image tag `ptr`,
+its own `world_ptr`, `hotfixes_ptr`, `characters_ptr` and `playerbot_ptr` databases, few bots, GM accounts only
+(`docker-compose.ptr.yml`, `docker-compose.ptr-app.yml`, `scripts/ptr-setup.sh`). A change goes:
+
+1. `EVERLAKE_IMAGE_TAG=ptr docker compose build worldserver`, restart the PTR, try it.
+2. Good: `docker tag everlake-trinitycore:ptr everlake-trinitycore:latest`, restart the live realms.
+
 ## Play from a Mac
 
 Connecting needs three things on the player's Mac: a hosts entry for the login server, the CA certificate trusted,
