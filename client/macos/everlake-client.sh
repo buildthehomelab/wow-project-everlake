@@ -14,6 +14,9 @@
 #   ./everlake-client.sh test1-ui                   (Test 1 UI: gate2 copy from the server's build, its files, the addon)
 #   ./everlake-client.sh fix-owner                  (gives the Everlake folder back to you after a run with sudo)
 #   ./everlake-client.sh switch <account email> [game folder]  (gate 5 realm switch test: guided, sends a report)
+#   ./everlake-client.sh cdn <address | server>      (where gate2 gets the patched build: another Mac, or the server)
+#   ./everlake-client.sh china-undead [CDN address]   (China Undead test: gate2 copy + files; docs/china-undead.md)
+#   ./everlake-client.sh china-mode on|off [game folder]  (the client's own China setting, overrideArchive)
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -106,6 +109,11 @@ setup_hosts() {
 
 server_addr() { cat "$SERVER_FILE" 2>/dev/null || true; }
 
+# Where the patched build (tools/tact/cdn.py, port 80) runs: EVERLAKE_CDN, else the address the cdn command saved, else
+# the game server. It can be another machine than the game server (2026-11-08: game on Patronus, CDN on a Mac).
+CDN_FILE="$SUPPORT/cdn.txt"
+cdn_addr() { local a="${EVERLAKE_CDN:-$(cat "$CDN_FILE" 2>/dev/null || true)}"; echo "${a:-$(server_addr)}"; }
+
 # true when the login name is our own, not a *.actual.battle.net one: the client then needs the login-name patch
 custom_portal() { case "$PORTAL" in *.actual.battle.net) return 1 ;; *) return 0 ;; esac; }
 
@@ -153,7 +161,8 @@ start_forward() {
     local addr="$1" pid="" port missing
     shift
     stop_forward
-    # extra ports (gate2 adds 80, the CDN) on top of forward.py's default 1119 8081 8085 8086 8095
+    # extra ports (gate2 adds 80, the CDN, as 80@<cdn address> when it runs elsewhere) on top of forward.py's default
+    # 1119 8081 8085 8086 8095
     # (8086 = realm 1 on a host that already runs Evermore on 8085, 8095 = realm 2)
     set -- 1119 8081 8085 8086 8095 "$@"
     FORWARD_PID_FILE="$FORWARD_PID" nohup python3 "$HERE/forward.py" "$addr" "$@" > "$FORWARD_LOG" 2>&1 &
@@ -163,7 +172,8 @@ start_forward() {
         [ -s "$FORWARD_PID" ] || continue   # forward.py writes its pid once every port listens
         pid="$(tr -dc '0-9' < "$FORWARD_PID")"
         missing=""
-        for port in "$@"; do [ "$(port_listener "$port")" = "$pid" ] || missing="$missing $port"; done
+        # a port may name its own machine (80@<cdn address>): the listener is still the local port
+        for port in "$@"; do [ "$(port_listener "${port%%@*}")" = "$pid" ] || missing="$missing ${port%%@*}"; done
         [ -z "$missing" ] && { say "forwarder running on ports $* (log: $FORWARD_LOG)"; return 0; }
     done
     cat "$FORWARD_LOG" >&2
@@ -597,8 +607,8 @@ case "$cmd" in
         [ "$HERE/keypatch.c" -nt "$DYLIB" ] && build_dylib
         BLOCK=""
         if [ -f "$(dirname "$GAME")/.everlake-gate2" ]; then
-            say "gate2 test folder: the game's CDN is the server's port 80"
-            start_forward "$ADDR" 80
+            say "gate2 test folder: the game's CDN is port 80 on $(cdn_addr)"
+            start_forward "$ADDR" "80@$(cdn_addr)"
             # pin our build: the game must not learn about a newer live build from Blizzard's version service
             BLOCK="patch.battle.net,version.battle.net"
             say "gate2: Blizzard's version service blocked for the game ($BLOCK)"
@@ -630,13 +640,48 @@ case "$cmd" in
             say "report NOT sent (saved in $REPORT)"
         fi
         ;;
+    cdn)
+        # where gate2 gets the patched build: "server" = the game server again
+        [ $# -ge 1 ] || die "usage: $0 cdn <address | server>"
+        mkdir -p "$SUPPORT"
+        if [ "$1" = server ]; then rm -f "$CDN_FILE"; else echo "$1" > "$CDN_FILE"; fi
+        say "gate2 CDN: $(cdn_addr)"
+        nc -z -G 3 "$(cdn_addr)" 80 2>/dev/null && say "port 80 answers" || say "port 80 does NOT answer there (is tools/tact/cdn.py running?)"
+        ;;
+    china-mode)
+        # The client's own China setting (overrideArchive): on, it reads Blizzard's China copies of the files, for
+        # every character it shows. Only changes this Mac's game folder config (WTF/Everlake.wtf).
+        case "${1:-}" in on) v=1 ;; off) v=0 ;; *) die "usage: $0 china-mode on|off [game folder]" ;; esac
+        GAME="$(find_game "${2:-}")" || die "game folder not found"
+        W="$GAME/WTF/$WTF_NAME"; [ -f "$W" ] || die "no $W: run setup first"
+        { grep -v -E '^SET overrideArchive ' "$W" || true; echo "SET overrideArchive \"$v\""; } > "$W.tmp" && mv "$W.tmp" "$W"
+        say "overrideArchive $v in $W (takes effect at the next start of the game)"
+        ;;
+    china-undead)
+        # China Undead test (docs/china-undead.md): a gate2 test copy from the patched build with the China bodies,
+        # its files in local storage, and the client's China setting off so only our new choices show the China body.
+        if pgrep -f "$COPY_NAME/Contents/MacOS" >/dev/null 2>&1; then die "quit the game first"; fi
+        if [ -n "${1:-}" ]; then "$0" cdn "$1" || die "cdn failed"; fi
+        curl -sf -m 10 "http://$(cdn_addr)/everlake/build.json" | grep -q '"95450001"' \
+            || die "the CDN at $(cdn_addr) doesn't serve the China Undead build (file 95450001): is the new cdn.py running?"
+        "$0" gate2 || die "gate2 failed"
+        "$0" gate2-install || die "gate2-install failed"
+        "$0" china-mode off gate2 || die "china-mode failed"
+        say "ready. Next:"
+        say "  1. $0 play <account email> gate2"
+        say "     Create an Undead (male and female), Skin Type: try \"China\" and \"China (B)\" next to Bony."
+        say "     Screenshots of each, at creation and in the world. Then log in with it and look at it with and without gear."
+        say "  2. for comparison, Blizzard's own China look: $0 china-mode on gate2, play again, then china-mode off gate2"
+        say "  3. $0 check gate2  (sends the logs to the server)"
+        ;;
     gate2)
         GAME="$(find_game "${1:-}")" || die "game folder not found"
         [ -d "$GAME/$COPY_NAME" ] || die "no game copy: run setup first"
-        ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
+        [ -n "$(server_addr)" ] || die "no server address saved: run setup first"
+        ADDR="$(cdn_addr)"   # the patched build's CDN (the server unless the cdn command named another machine)
         ROOT="$(dirname "$GAME")"; FLAVOR="$(basename "$GAME")"
         [ -d "$ROOT/Data" ] && [ -f "$ROOT/.build.info" ] || die "no Data folder or .build.info in $ROOT"
-        nc -z -G 3 "$ADDR" 80 2>/dev/null || die "the server's CDN (port 80) is not reachable: start tools/tact/cdn.py there"
+        nc -z -G 3 "$ADDR" 80 2>/dev/null || die "the CDN at $ADDR (port 80) is not reachable: start tools/tact/cdn.py there"
         KEYS="$(curl -sf -m 10 "http://$ADDR/everlake/build.json" \
             | python3 -c 'import json,sys; b=json.load(sys.stdin); print(b["build_key"], b["cdn_key"])')" \
             || die "could not read the build keys from the server's CDN"
@@ -685,7 +730,7 @@ case "$cmd" in
             python3 "$HERE/casc_local.py" undo "$DATA"
             exit 0
         fi
-        ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
+        ADDR="$(cdn_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
         FILES="$SUPPORT/gate2-files"; rm -rf "$FILES"; mkdir -p "$FILES"
         curl -sf -m 10 "http://$ADDR/everlake/build.json" \
             | python3 -c 'import json,sys; [print(k) for k in json.load(sys.stdin).get("local_files", {})]' > "$FILES/list.txt" \
@@ -700,7 +745,7 @@ case "$cmd" in
         LOG="$SUPPORT/install.txt"
         if python3 "$HERE/casc_local.py" install "$DATA" "$FILES" > "$LOG" 2>&1; then OK=1; else OK=0; fi
         cat "$LOG"
-        curl -s -m 10 -T "$LOG" "http://$ADDR:8099/install-$(hostname -s)" >/dev/null && say "output sent to the server" || true
+        curl -s -m 10 -T "$LOG" "http://$(server_addr):8099/install-$(hostname -s)" >/dev/null && say "output sent to the server" || true
         [ "$OK" = 1 ] || die "install failed (nothing half-done: index files are only replaced after every check)"
         say "done. Undo with: $0 gate2-uninstall"
         ;;
@@ -720,7 +765,7 @@ case "$cmd" in
     gate2-addon)
         # (re)install the prefetch addon in the existing test folder, without making the folder again
         GAME="$(find_game gate2)" || die "no gate2 test folder: run gate2 first"
-        ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
+        ADDR="$(cdn_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup first"
         gate2_addon "$GAME" "$ADDR"
         ;;
     test1-ui)
