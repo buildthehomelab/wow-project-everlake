@@ -1,7 +1,7 @@
 # China Undead (test)
 
 Goal: an Undead character can pick the China look (no exposed bones) in the character creator and at the barber,
-while every other Undead keeps the normal look. Status: first test run 2026-11-08 (body draws, black); second test "China (C)" black too; third test "Normal body" built, not run.
+while every other Undead keeps the normal look. Status: first test run 2026-11-08 (body draws, black); second test "China (C)" black too; third test "Normal body" black too; test 4 "Fresh for everyone" built, not run.
 
 ## What Blizzard ships
 
@@ -88,6 +88,37 @@ Fresh's parts.
   drawn like the rest of the character (no skinned model).
 
 Server only: run the SQL, restart the app. Mini: nothing to reinstall, play again.
+
+## Result 3 (2026-11-08): "Normal body" is black too
+
+Blizzard's own model as a skinned model draws black as well: any skinned-model body draws black on this character,
+so the skinned-model route is closed. (Still no Skin Color option in Forever's Undead creator.)
+
+## What the China model really is
+
+Measured on the HD models (skin 00, triangles):
+
+| | male | female |
+|---|---|---|
+| Normal body (geoset 0) | 736 | 752 |
+| Bony pieces 2901 / 3001 / 1901 | 1,438 / 914 / 576 | 1,168 / 760 / 444 |
+| **Fresh pieces 2902 / 3002 / 1902**, in the normal model | 724 / 362 / 296 | 512 / 426 / 124 |
+| China body (geoset 0) | 1,452 | 2,654 |
+| Fresh pieces in the China model | identical | identical |
+| Jaw choices | normal: 1,074-1,436 each; China: all 1,250 (the "Intact" jaw) | China: tiny, the face is in the body |
+
+So the China model is Blizzard's **Fresh** pieces, an intact jaw for every jaw choice, and a fuller body mesh. The
+normal model already has the Fresh pieces: retail's Skin Type **Fresh** switches them in. Forever hides that
+choice behind requirement 4975 (OverrideArchive 1 = only with the China setting on).
+
+**Test 4, Fresh for everyone** (push 9570003, `sql/everlake/2026_11_08_03_hotfixes_undead_fresh.sql`): Fresh
+(6529 male, 6526 female) sent again with Bony's requirement 55. It also removes the skinned-model tests (pushes
+9570000-9570002). Server data only, nothing to rebuild or reinstall.
+
+To compare: Fresh + Jaw Features "Intact" on one character, and Blizzard's China model through `china-mode on gate2`.
+If Fresh is close enough, the option is done with Blizzard's own art. If the China body's extra cover matters, the
+next step is a merged model: the China body as geoset 2903 in Blizzard's model (a third Skin Type value), the
+normal body moved from geoset 0 to 2901, and the jaw choices made to depend on it (RelatedChrCustomizationChoiceID).
 
 ## What each result means
 
