@@ -36,8 +36,7 @@ jobs:
         run: |
           docker compose --env-file .env.example -f docker-compose.yml config -q
           docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.realm2.yml config -q
-          docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.ptr.yml config -q
-          EVERLAKE_NETWORK=ci docker compose --env-file .env.example -f docker-compose.ptr-app.yml config -q
+          docker compose --env-file .env.example -f docker-compose.ptr.yml config -q
           docker compose --env-file .env.example -f docker-compose.realm2-app.yml config -q
 
   mac-client:

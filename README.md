@@ -38,7 +38,7 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 
 | What | Value |
 |---|---|
-| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) `everlake` @ `d4fcfa58` (2026-11-08): advocaite's `forever` @ `2ae1313e` plus `forever-bots` (the bot module) |
+| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `2ae1313e` (advocaite's `forever`, 2026-11-08), bots off. The PTR builds `3d775757` (fork `everlake` with the bots, PR #4) |
 | Client | WoW Forever **1.60.1.70862**; 1.60.1.70790 clients are also let in (`Realm.AlsoAcceptBuilds`) |
 | World DB | `forever-tdb-2026-10-14` release of the same repository |
 
@@ -76,8 +76,8 @@ bnetaccount create mail@example.com Password
 
 ### Bots
 
-The image builds the WoW Forever Bots module (`src/modules/PlayerbotV2` in the core fork) and switches it on with the
-module's own defaults: up to 250 world bots (around players, in towns and at start zones), the auction house bot,
+`PLAYERBOTS=1` (with a core commit that has the module, `src/modules/PlayerbotV2`: the fork's `everlake` branch) builds
+the WoW Forever Bots into the image, switched on with the module's own defaults: up to 250 world bots (around players, in towns and at start zones), the auction house bot,
 raid bots and dungeon finder fill. Change any setting in `overrides/playerbot.conf` (`Key = Value` lines, read after
 the defaults); the keys are in the module's `playerbot.conf.dist` and `zz-forever-bots.conf`. Realm 2 runs no world,
 auction house or dungeon finder bots.
@@ -96,12 +96,14 @@ lines go to `logs/Playerbot.log`.
 
 ### PTR
 
-The PTR (realm 73, "Everlake PTR", port 8097) is where a new build runs before a live realm: its own image tag `ptr`,
-its own `world_ptr`, `hotfixes_ptr`, `characters_ptr` and `playerbot_ptr` databases, few bots, GM accounts only
-(`docker-compose.ptr.yml`, `docker-compose.ptr-app.yml`, `scripts/ptr-setup.sh`). A change goes:
+The PTR (realm 73, "Everlake PTR", port 8097) is where a new build runs before a live realm: its own image, its own
+`world_ptr`, `hotfixes_ptr`, `characters_ptr` and `playerbot_ptr` databases, few bots, GM accounts only. It is a
+TrueNAS app of its own from this folder (`docker-compose.ptr.yml`), and does everything itself when it starts: builds
+its image (bots on) if it's missing, sets up its databases and realm row (`scripts/ptr-setup.sh init`), builds the
+mmaps if there are none, then starts its worldserver. Nothing runs on the host but `git pull`.
 
-1. `EVERLAKE_IMAGE_TAG=ptr docker compose build worldserver`, restart the PTR, try it.
-2. Good: `docker tag everlake-trinitycore:ptr everlake-trinitycore:latest`, restart the live realms.
+1. `git pull`, then start (or restart) the `everlake-ptr` app, and try it.
+2. Good: `EVERLAKE_IMAGE_TAG=ptr-<core commit>` in `.env` (and the Bots steps above), then restart the live apps.
 
 ## Play from a Mac
 

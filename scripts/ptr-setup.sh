@@ -1,7 +1,9 @@
 #!/bin/bash
-# The PTR's databases and realm row (docker-compose.ptr.yml). Uses the running MySQL container of the Everlake app;
-# the live realms keep running.
+# The PTR's databases and realm row (docker-compose.ptr.yml). The live realms keep running.
+# The PTR app runs "init" by itself before its worldserver starts (service ptr-init, MYSQL_HOST set: MySQL over the
+# app network). By hand on the host it uses the running MySQL container instead (docker exec).
 #
+#   scripts/ptr-setup.sh init      dbs, then realm (what the PTR app runs on every start; safe to repeat)
 #   scripts/ptr-setup.sh dbs       world_ptr and hotfixes_ptr as copies of realm 1's world and hotfixes, and the empty
 #                                  characters_ptr and playerbot_ptr (worldserver fills them on the PTR's first start).
 #                                  A database that exists is left as it is.
@@ -12,7 +14,8 @@
 #                                  name = 'Forever Hardcore', flag = 3, port = 8085, allowedSecurityLevel = 0 WHERE id = 73;
 #   scripts/ptr-setup.sh status    the PTR's databases, its realm row, and the accounts that may enter it
 #
-# MYSQL_CONTAINER: the MySQL container (default: the one of the compose project ix-everlake, else everlake).
+# MYSQL_HOST + MYSQL_ROOT_PASSWORD: connect over the network (inside the PTR app).
+# MYSQL_CONTAINER: otherwise, the MySQL container (default: the one of the compose project ix-everlake, else everlake).
 # DB_USER: the TrinityCore user (default: DB_USER from .env, else trinity).
 set -euo pipefail
 
@@ -23,18 +26,28 @@ if [ -z "${DB_USER:-}" ] && [ -f "$ENV_FILE" ]; then
 fi
 DB_USER="${DB_USER:-trinity}"
 
-find_mysql() {
-    local p c
-    for p in ix-everlake everlake; do
-        c="$(docker ps --filter "label=com.docker.compose.project=$p" --filter label=com.docker.compose.service=mysql --format '{{.Names}}' | head -1)"
-        [ -n "$c" ] && { echo "$c"; return; }
-    done
-}
-MYSQL_CONTAINER="${MYSQL_CONTAINER:-$(find_mysql)}"
-[ -n "$MYSQL_CONTAINER" ] || { echo "[ptr] ERROR: no running Everlake MySQL container (set MYSQL_CONTAINER)"; exit 1; }
-
-root_sql() { docker exec -i "$MYSQL_CONTAINER" sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$@" 2>&1 | { grep -v "Using a password" || true; }' sh "$@"; }
-root_dump() { docker exec "$MYSQL_CONTAINER" sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --skip-lock-tables --no-tablespaces --routines --triggers "$1" 2>/dev/null' sh "$1"; }
+DUMP_OPTS=(--single-transaction --skip-lock-tables --no-tablespaces --routines --triggers --set-gtid-purged=OFF)
+if [ -n "${MYSQL_HOST:-}" ]; then
+    : "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set with MYSQL_HOST}"
+    WHERE="MySQL at $MYSQL_HOST"
+    root_sql() { MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -h"$MYSQL_HOST" -uroot "$@"; }
+    root_dump() { MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqldump -h"$MYSQL_HOST" -uroot "${DUMP_OPTS[@]}" "$1"; }
+    ptr_running() { return 1; }   # inside the PTR app, init runs before its worldserver
+else
+    find_mysql() {
+        local p c
+        for p in ix-everlake everlake; do
+            c="$(docker ps --filter "label=com.docker.compose.project=$p" --filter label=com.docker.compose.service=mysql --format '{{.Names}}' | head -1)"
+            [ -n "$c" ] && { echo "$c"; return; }
+        done
+    }
+    MYSQL_CONTAINER="${MYSQL_CONTAINER:-$(find_mysql)}"
+    [ -n "$MYSQL_CONTAINER" ] || { echo "[ptr] ERROR: no running Everlake MySQL container (set MYSQL_CONTAINER)"; exit 1; }
+    WHERE="MySQL container $MYSQL_CONTAINER"
+    root_sql() { docker exec -i "$MYSQL_CONTAINER" sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$@" 2>&1 | { grep -v "Using a password" || true; }' sh "$@"; }
+    root_dump() { docker exec "$MYSQL_CONTAINER" sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" "$@" "$0" 2>/dev/null' "$1" "${DUMP_OPTS[@]}"; }
+    ptr_running() { docker ps --filter label=com.docker.compose.service=worldserver-ptr --format '{{.Names}}' | grep -q .; }
+fi
 db_exists() { root_sql -N -e "SHOW DATABASES LIKE '$1'" | grep -qx "$1"; }
 create_db() {
     root_sql -e "CREATE DATABASE IF NOT EXISTS \`$1\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -46,10 +59,12 @@ copy_db() {  # copy_db <from> <to>: <to> must not exist
     root_dump "$1" | root_sql "$2"
     echo "[ptr] $2: $(root_sql -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '$2'") tables"
 }
-ptr_running() { docker ps --filter label=com.docker.compose.service=worldserver-ptr --format '{{.Names}}' | grep -q .; }
-
-echo "[ptr] MySQL container: $MYSQL_CONTAINER, TrinityCore user: $DB_USER"
+echo "[ptr] $WHERE, TrinityCore user: $DB_USER"
 case "${1:-}" in
+    init)
+        bash "$0" dbs
+        bash "$0" realm
+        ;;
     dbs)
         for pair in world:world_ptr hotfixes:hotfixes_ptr; do
             if db_exists "${pair#*:}"; then echo "[ptr] ${pair#*:} exists already: left as it is (refresh copies it again)"; continue; fi
@@ -74,7 +89,7 @@ case "${1:-}" in
                 p.timezone = r1.timezone, p.allowedSecurityLevel = 3, p.gamebuild = r1.gamebuild,
                 p.Region = r1.Region, p.Battlegroup = r1.Battlegroup, p.contentSetId = 140
             WHERE p.id = 73;"
-        "$0" status
+        bash "$0" status
         ;;
     status)
         root_sql -e "SELECT id, name, port, flag, allowedSecurityLevel, contentSetId, gamebuild FROM auth.realmlist WHERE id IN (70, 71, 73);"

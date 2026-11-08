@@ -41,7 +41,8 @@ services:
     build:
       context: .
       args:
-        TC_COMMIT: ${TC_COMMIT:-d4fcfa58b71be15b9949634b5721e862a299df6b}
+        TC_COMMIT: ${TC_COMMIT:-2ae1313e9f89ba34103fee1400dc3d4222efd8c4}
+        PLAYERBOTS: ${PLAYERBOTS:-0}
         BUILD_JOBS: ${BUILD_JOBS:-4}
         WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-}
     image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-latest}
