@@ -31,7 +31,9 @@
 #   Our own login name: EVERLAKE_LOGIN_HOST=login.realm.example.com ./everlake-client.sh setup <server address> none
 #   The name is remembered for play. With a real certificate for it there is no CA to trust ("none"), and play has the
 #   key patch also lift the client's rule that login names end in .actual.battle.net (FOREVER_ANY_PORTAL in
-#   keypatch.c). See docs/client-connection.md.
+#   keypatch.c). See docs/client-connection.md. Such a name is in public DNS, so there is no hosts entry and no
+#   forwarder: the game reaches it directly, as it already reaches the realm (a public address needs no Local Network
+#   permission). The server address is then only where check, classic1 and switch look; the login name will do.
 # play: starts the forwarder, asks for your Everlake password, logs in to the server and hands the game a login
 #       ticket (login.py, the way Battle.net does it), then starts the copy with the server key patch.
 # check: prints everything that has to be right for the game to reach the server, and sends the report, with the
@@ -103,6 +105,12 @@ setup_hosts() {
     echo "$addr" > "$SERVER_FILE"
     if grep -q "$MARK" /etc/hosts; then
         sudo sed -i '' "/$MARK/d" /etc/hosts
+    fi
+    if custom_portal; then
+        # our own login name is in public DNS: the game goes there directly, no hosts entry, no forwarder
+        sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder 2>/dev/null || true
+        say "hosts: no entry needed, $PORTAL is reached directly (server address for checks: $addr)"
+        return 0
     fi
     printf '%s\t%s\t%s\n' 127.0.0.1 "$PORTAL" "$MARK" | sudo tee -a /etc/hosts >/dev/null
     sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder 2>/dev/null || true
@@ -650,7 +658,11 @@ do_check() {
     say "game copy: $( [ -n "$GAME" ] && [ -d "$GAME/$COPY_NAME" ] && echo present || echo MISSING)"
     say "keypatch.dylib: $( [ -f "$DYLIB" ] && echo present || echo MISSING)"
     say "login name: $PORTAL$(custom_portal && echo " (our own name: login-name patch on)")"
-    say "hosts entry: $(grep "$MARK" /etc/hosts || echo MISSING)"
+    if custom_portal; then
+        say "hosts entry: $(grep "$MARK" /etc/hosts || echo "none (right: $PORTAL is reached directly)")"
+    else
+        say "hosts entry: $(grep "$MARK" /etc/hosts || echo MISSING)"
+    fi
     say "resolves to: $(dscacheutil -q host -a name "$PORTAL" | awk '/ip_address/{print $2}' | tr '\n' ' ')"
     addr="$(server_addr)"
     say "server address: ${addr:-NOT SAVED (run setup again)}"
@@ -730,7 +742,8 @@ case "$cmd" in
         [ -f "$DYLIB" ] || die "no keypatch.dylib: run setup first"
         custom_portal || [ -f "$SUPPORT/forever_root_ca.crt" ] || die "no copy of the CA certificate: run setup again"
         ADDR="$(server_addr)"; [ -n "$ADDR" ] || die "no server address saved: run setup again"
-        grep "$MARK" /etc/hosts | grep -q '^127\.0\.0\.1' || die "hosts entry is not 127.0.0.1: run setup again"
+        custom_portal || grep "$MARK" /etc/hosts | grep -q '^127\.0\.0\.1' || die "hosts entry is not 127.0.0.1: run setup again"
+        custom_portal && grep -q "$MARK" /etc/hosts && die "an old hosts entry still points $PORTAL at this Mac: run setup again"
         # a newer keypatch.c (git pull) is built before it's used
         [ "$HERE/keypatch.c" -nt "$DYLIB" ] && build_dylib
         BLOCK=""
@@ -740,6 +753,8 @@ case "$cmd" in
             # pin our build: the game must not learn about a newer live build from Blizzard's version service
             BLOCK="patch.battle.net,version.battle.net"
             say "gate2: Blizzard's version service blocked for the game ($BLOCK)"
+        elif custom_portal; then
+            stop_forward   # an old forwarder is not needed: the game reaches $PORTAL and the realms directly
         else
             start_forward "$ADDR"
         fi
