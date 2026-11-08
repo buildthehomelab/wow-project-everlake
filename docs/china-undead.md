@@ -32,24 +32,27 @@ Pieces:
 |---|---|
 | China models + their 7 skin files each as new FileDataIDs 95450001-95450016 (SFID repointed) | `tools/looks/china_undead.py` |
 | Hotfix rows: 4 choices, 52 elements, 4 skinned models (in `hotfix_blob`, the core has no table for them), push 9570000 | `tools/looks/china_undead_sql.py` → `sql/everlake/2026_11_08_00_hotfixes_china_undead.sql` |
-| Patched build = the Test 1 UI build (map 530 + UI) plus the 16 China files | `tools/tact/patch.py --files-from` |
-| Mac mini: CDN on another machine than the game server, the test copy, the China setting | `everlake-client.sh cdn`, `china-undead`, `china-mode on/off` |
+| Patched build: Blizzard's plus the 16 China files, served by the `cdn` service (port 8087) | `scripts/cdn-build.sh`, `docker-compose.yml` |
+| Mac mini: the CDN's address (default: the server, 8087), the test copy, the China setting | `everlake-client.sh cdn`, `china-undead`, `china-mode on/off` |
 
 The skinned-model record bytes follow layout 4C32AA8A: CollectionsFileDataID int32, GeosetType uint8, GeosetID,
 Modifier, Flags int32, no ID (the table's IDs are non-inline).
 
 ## Running it
 
-Server (realm database `hotfixes`), then restart the worldserver:
+Server, in the checkout that holds `.env`:
+
+1. The hotfix rows into the realm database `hotfixes` (`sql/everlake/2026_11_08_00_hotfixes_china_undead.sql`), then
+   restart the worldserver.
+2. The patched build: `docker compose run --rm cdn-build` (`scripts/cdn-build.sh`: the China files, then
+   `patch.py` into `CDN_DIR`; the first run downloads Blizzard's indexes, about 3-4 minutes). Then restart the app
+   so the `cdn` service starts; it serves the build on `CDN_PORT` (8087) and passes everything else to Blizzard.
+   Later builds need no restart.
+
+Mac mini (the CDN defaults to the game server's port 8087):
 
 ```sh
-mysql hotfixes < sql/everlake/2026_11_08_00_hotfixes_china_undead.sql
-```
-
-Mac mini:
-
-```sh
-./client/macos/everlake-client.sh china-undead <address of the Mac running cdn.py>
+./client/macos/everlake-client.sh china-undead
 ./client/macos/everlake-client.sh play <account email> gate2
 ```
 

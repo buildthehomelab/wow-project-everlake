@@ -14,8 +14,8 @@
 #   ./everlake-client.sh test1-ui                   (Test 1 UI: gate2 copy from the server's build, its files, the addon)
 #   ./everlake-client.sh fix-owner                  (gives the Everlake folder back to you after a run with sudo)
 #   ./everlake-client.sh switch <account email> [game folder]  (gate 5 realm switch test: guided, sends a report)
-#   ./everlake-client.sh cdn <address | server>      (where gate2 gets the patched build: another Mac, or the server)
-#   ./everlake-client.sh china-undead [CDN address]   (China Undead test: gate2 copy + files; docs/china-undead.md)
+#   ./everlake-client.sh cdn <address[:port] | server>  (where gate2 gets the patched build; default: the server, 8087)
+#   ./everlake-client.sh china-undead [CDN address[:port]]  (China Undead test: gate2 copy + files; docs/china-undead.md)
 #   ./everlake-client.sh china-mode on|off [game folder]  (the client's own China setting, overrideArchive)
 #
 # setup (asks for your password once, for the hosts file):
@@ -109,10 +109,16 @@ setup_hosts() {
 
 server_addr() { cat "$SERVER_FILE" 2>/dev/null || true; }
 
-# Where the patched build (tools/tact/cdn.py, port 80) runs: EVERLAKE_CDN, else the address the cdn command saved, else
-# the game server. It can be another machine than the game server (2026-11-08: game on Patronus, CDN on a Mac).
+# Where the patched build (tools/tact/cdn.py) is served, as address[:port]: EVERLAKE_CDN, else what the cdn command
+# saved, else the game server's cdn service (docker-compose.yml, port 8087). A missing port means 80.
 CDN_FILE="$SUPPORT/cdn.txt"
-cdn_addr() { local a="${EVERLAKE_CDN:-$(cat "$CDN_FILE" 2>/dev/null || true)}"; echo "${a:-$(server_addr)}"; }
+cdn_addr() {
+    local a="${EVERLAKE_CDN:-$(cat "$CDN_FILE" 2>/dev/null || true)}"
+    if [ -n "$a" ]; then echo "$a"; elif [ -n "$(server_addr)" ]; then echo "$(server_addr):8087"; fi
+}
+# host and port of an address[:port]
+addr_host() { echo "${1%%:*}"; }
+addr_port() { case "$1" in *:*) echo "${1##*:}" ;; *) echo 80 ;; esac; }
 
 # true when the login name is our own, not a *.actual.battle.net one: the client then needs the login-name patch
 custom_portal() { case "$PORTAL" in *.actual.battle.net) return 1 ;; *) return 0 ;; esac; }
@@ -645,8 +651,10 @@ case "$cmd" in
         [ $# -ge 1 ] || die "usage: $0 cdn <address | server>"
         mkdir -p "$SUPPORT"
         if [ "$1" = server ]; then rm -f "$CDN_FILE"; else echo "$1" > "$CDN_FILE"; fi
-        say "gate2 CDN: $(cdn_addr)"
-        nc -z -G 3 "$(cdn_addr)" 80 2>/dev/null && say "port 80 answers" || say "port 80 does NOT answer there (is tools/tact/cdn.py running?)"
+        C="$(cdn_addr)"
+        say "gate2 CDN: $C"
+        nc -z -G 3 "$(addr_host "$C")" "$(addr_port "$C")" 2>/dev/null && say "it answers" \
+            || say "it does NOT answer (on the server: docker compose run --rm cdn-build, then restart the app)"
         ;;
     china-mode)
         # The client's own China setting (overrideArchive): on, it reads Blizzard's China copies of the files, for
@@ -663,7 +671,7 @@ case "$cmd" in
         if pgrep -f "$COPY_NAME/Contents/MacOS" >/dev/null 2>&1; then die "quit the game first"; fi
         if [ -n "${1:-}" ]; then "$0" cdn "$1" || die "cdn failed"; fi
         curl -sf -m 10 "http://$(cdn_addr)/everlake/build.json" | grep -q '"95450001"' \
-            || die "the CDN at $(cdn_addr) doesn't serve the China Undead build (file 95450001): is the new cdn.py running?"
+            || die "the CDN at $(cdn_addr) doesn't serve the China Undead build (file 95450001): run cdn-build on the server"
         "$0" gate2 || die "gate2 failed"
         "$0" gate2-install || die "gate2-install failed"
         "$0" china-mode off gate2 || die "china-mode failed"
@@ -681,7 +689,8 @@ case "$cmd" in
         ADDR="$(cdn_addr)"   # the patched build's CDN (the server unless the cdn command named another machine)
         ROOT="$(dirname "$GAME")"; FLAVOR="$(basename "$GAME")"
         [ -d "$ROOT/Data" ] && [ -f "$ROOT/.build.info" ] || die "no Data folder or .build.info in $ROOT"
-        nc -z -G 3 "$ADDR" 80 2>/dev/null || die "the CDN at $ADDR (port 80) is not reachable: start tools/tact/cdn.py there"
+        nc -z -G 3 "$(addr_host "$ADDR")" "$(addr_port "$ADDR")" 2>/dev/null \
+            || die "the CDN at $ADDR is not reachable (server: docker compose run --rm cdn-build, then restart the app)"
         KEYS="$(curl -sf -m 10 "http://$ADDR/everlake/build.json" \
             | python3 -c 'import json,sys; b=json.load(sys.stdin); print(b["build_key"], b["cdn_key"])')" \
             || die "could not read the build keys from the server's CDN"
