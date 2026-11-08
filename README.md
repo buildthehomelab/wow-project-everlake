@@ -38,7 +38,7 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 
 | What | Value |
 |---|---|
-| Core | [advocaite/TrinityCore](https://github.com/advocaite/TrinityCore/tree/forever) `forever` @ `2ae1313e` (2026-11-08) |
+| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `2ae1313e` (advocaite's `forever`, 2026-11-08), bots off. The PTR builds `3d775757` (fork `everlake` with the bots, PR #4) |
 | Client | WoW Forever **1.60.1.70862**; 1.60.1.70790 clients are also let in (`Realm.AlsoAcceptBuilds`) |
 | World DB | `forever-tdb-2026-10-14` release of the same repository |
 
@@ -62,6 +62,7 @@ cp .env.example .env               # set the passwords
 ./scripts/gen-certs.sh             # your own CA + server certificate (never share certs/ca/*.key)
 docker compose build               # compiles TrinityCore, takes a while
 docker compose run --rm extractor  # game data from Blizzard's CDN into ./data
+EXTRACT_MMAPS=1 docker compose run --rm extractor  # or this instead: also the bots' navigation meshes (long)
 docker compose up -d
 docker compose logs -f worldserver # the first start imports the database
 ```
@@ -72,6 +73,37 @@ Create an account from the worldserver console:
 docker compose attach worldserver   # leave with Ctrl+P, Ctrl+Q
 bnetaccount create mail@example.com Password
 ```
+
+### Bots
+
+`PLAYERBOTS=1` (with a core commit that has the module, `src/modules/PlayerbotV2`: the fork's `everlake` branch) builds
+the WoW Forever Bots into the image, switched on with the module's own defaults: up to 250 world bots (around players, in towns and at start zones), the auction house bot,
+raid bots and dungeon finder fill. Change any setting in `overrides/playerbot.conf` (`Key = Value` lines, read after
+the defaults); the keys are in the module's `playerbot.conf.dist` and `zz-forever-bots.conf`. Realm 2 runs no world,
+auction house or dungeon finder bots.
+
+The bots need three things the server didn't before:
+
+1. **Their database** (`playerbot`). A new MySQL volume gets it from `docker/mysql-init`; on an existing one, once:
+   `docker compose exec mysql bash /docker-entrypoint-initdb.d/02-playerbot.sh`. worldserver fills it on its next start.
+2. **Navigation meshes** (`data/mmaps`), from the maps and vmaps already extracted:
+   `MMAPS_ONLY=1 docker compose run --rm extractor` (long: tens of minutes on many cores).
+3. **`MMAP_PATHFINDING=1`** in `.env`, so worldserver loads them. Without 2 and 3 the bots stand still, and
+   worldserver says so at start.
+
+The first start with bots creates the bots' accounts and characters in the background, which takes a while; bot log
+lines go to `logs/Playerbot.log`.
+
+### PTR
+
+The PTR (realm 73, "Everlake PTR", port 8097) is where a new build runs before a live realm: its own image, its own
+`world_ptr`, `hotfixes_ptr`, `characters_ptr` and `playerbot_ptr` databases, few bots, GM accounts only. It is a
+TrueNAS app of its own from this folder (`docker-compose.ptr.yml`), and does everything itself when it starts: builds
+its image (bots on) if it's missing, sets up its databases and realm row (`scripts/ptr-setup.sh init`), builds the
+mmaps if there are none, then starts its worldserver. Nothing runs on the host but `git pull`.
+
+1. `git pull`, then start (or restart) the `everlake-ptr` app, and try it.
+2. Good: `EVERLAKE_IMAGE_TAG=ptr-<core commit>` in `.env` (and the Bots steps above), then restart the live apps.
 
 ## Play from a Mac
 

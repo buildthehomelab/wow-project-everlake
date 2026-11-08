@@ -1,0 +1,107 @@
+# The PTR ("Everlake PTR", realm id 73): the test realm every change reaches before a live realm
+# (designs/everlake-plan.md, "Realm names and a PTR"). Same login server and MySQL as the live realms, but its own
+# image and databases: world_ptr and hotfixes_ptr (copies of realm 1's), characters_ptr (its own characters) and
+# playerbot_ptr (its own bots). Port 8097, the Hardcore ruleset card (content set 140, the one card no live realm uses;
+# the card still reads "Hardcore"), GM accounts only (allowedSecurityLevel 3) until the opt-in switch from the plan
+# exists.
+#
+# A TrueNAS custom app of its own beside the running "everlake" app, from the same folder; it never edits that app.
+# Everything that needs Docker happens inside this app, so nobody runs docker or sudo on the host:
+#   - worldserver-ptr's image is built from this folder when it is missing, with the bots on. Its tag names the core
+#     commit, so a new PTR_TC_COMMIT is built on the next start (that start takes as long as the build).
+#   - ptr-init sets up the databases and the realm row (scripts/ptr-setup.sh init, MySQL's root over the network)
+#   - ptr-mmaps builds the bots' navigation meshes into the data folder when there are none yet
+#   - worldserver-ptr starts once both have finished
+# Apps -> Discover Apps -> Custom App -> Install via YAML, name everlake-ptr:
+#   include:
+#     - /mnt/NVME/docker/everlake/docker-compose.ptr.yml
+# It reads this folder's .env (DB_PASSWORD, MYSQL_ROOT_PASSWORD, DB_USER, DATA_DIR). Network: the everlake app's
+# (project ix-everlake); another project name: EVERLAKE_NETWORK=<project>_everlake in .env.
+#
+# A tried PTR image goes live without a rebuild: EVERLAKE_IMAGE_TAG=ptr-<core commit> in .env, then restart the live
+# apps (and the bots' database and MMAP_PATHFINDING=1 for the live realm first: README, Bots).
+services:
+  ptr-init:
+    image: mysql:8.0
+    networks: [everlake]
+    restart: "no"
+    entrypoint: ["bash", "/ptr/scripts/ptr-setup.sh", "init"]
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      DB_USER: ${DB_USER:-trinity}
+    volumes:
+      - ./scripts:/ptr/scripts:ro
+
+  ptr-mmaps:
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-3d77575743c2037170fde63fe42cd1dd45366fda}
+    pull_policy: never   # built by worldserver-ptr
+    restart: "no"
+    entrypoint: ["/usr/local/bin/extract.sh"]
+    user: "${HOST_UID:-0}:${HOST_GID:-0}"
+    environment:
+      MMAPS_ONLY: "1"
+      MMAP_THREADS: ${PTR_MMAP_THREADS:-24}   # the live realms run beside it
+    volumes:
+      - ${DATA_DIR:-./data}:/opt/trinitycore/data
+      - ./docker/extract.sh:/usr/local/bin/extract.sh:ro
+
+  worldserver-ptr:
+    build:
+      context: .
+      args:
+        # core fork commit: everlake (forever + forever-bots) + Playerbot.AccountPrefix (wow-trinitycore-everlake PR #4)
+        TC_COMMIT: ${PTR_TC_COMMIT:-3d77575743c2037170fde63fe42cd1dd45366fda}
+        PLAYERBOTS: "1"
+        BUILD_JOBS: ${PTR_BUILD_JOBS:-32}
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-3d77575743c2037170fde63fe42cd1dd45366fda}
+    command: ["worldserver"]
+    networks: [everlake]
+    restart: unless-stopped
+    depends_on:
+      ptr-init:
+        condition: service_completed_successfully
+      ptr-mmaps:
+        condition: service_completed_successfully
+    environment:
+      TZ: ${TZ:-UTC}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-trinity}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MMAP_PATHFINDING: "1"   # the bots walk on the navigation meshes
+      CLIENT_BUILD: ${CLIENT_BUILD:-}
+      PLAYERBOT_DB: playerbot_ptr   # the entrypoint loads the bots' schema into it on the first start
+      TC_REALM_ID: "73"
+      TC_WORLD_SERVER_PORT: "8097"
+      TC_REALM_CFG_CONTENT_SET_ID: "140"
+      TC_WORLD_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};world_ptr"
+      TC_CHARACTER_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};characters_ptr"
+      TC_HOTFIX_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};hotfixes_ptr"
+      # The bots: their own database and account names (the login database is shared with the live realms), and
+      # few of them. Everything else is the module's defaults.
+      TC_PLAYERBOT_SHARED_DATABASE: "playerbot_ptr"
+      TC_PLAYERBOT_ACCOUNT_PREFIX: "PBPTR_"
+      TC_PLAYERBOT_WORLD_MAX_BOTS: "40"
+      TC_PLAYERBOT_WORLD_BOTS_PER_PLAYER: "40"
+      TC_PLAYERBOT_WORLD_CITY_BOTS: "15"
+      TC_PLAYERBOT_WORLD_ZONE_BOTS: "15"
+      TC_PLAYERBOT_WORLD_START_ZONE_BOTS: "10"
+      TC_PLAYERBOT_WORLD_POOL_MAX: "120"
+    stdin_open: true
+    tty: true
+    stop_grace_period: 2m
+    ports:
+      - "8097:8097"
+    volumes:
+      - ${DATA_DIR:-./data}:/opt/trinitycore/data:ro
+      - ./overrides:/opt/trinitycore/overrides:ro
+      - logs-ptr:/opt/trinitycore/logs
+
+networks:
+  everlake:
+    name: ${EVERLAKE_NETWORK:-ix-everlake_everlake}
+    external: true
+
+volumes:
+  logs-ptr:

@@ -1,4 +1,5 @@
-# Everlake server image: TrinityCore "forever" branch (advocaite/TrinityCore) for the WoW Forever client.
+# Everlake server image: our core fork (buildthehomelab/wow-trinitycore-everlake, branch everlake: advocaite's "forever"
+# plus the WoW Forever Bots module and the changes we took, see its docs/upstream-prs.md) for the WoW Forever client.
 # Based on jibay442/forever_docker (GPL-2.0). The core is pinned to one commit so the server, the frozen client
 # build and the extracted data always match; bump TC_COMMIT on purpose, never by accident.
 #
@@ -17,8 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libmysqlclient-dev libssl-dev libbz2-dev libreadline-dev libncurses-dev libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
 
-ARG TC_REPO=https://github.com/advocaite/TrinityCore.git
-# forever branch 2026-11-08: client 1.60.1.70862 (realms on 70862; bnetserver and the worldservers also let 70790 in, docker/entrypoint.sh)
+ARG TC_REPO=https://github.com/buildthehomelab/wow-trinitycore-everlake.git
+# The live realms: forever 2026-11-08 (2ae1313e, the fork's base): client 1.60.1.70862 (realms on 70862; bnetserver and
+# the worldservers also let 70790 in, docker/entrypoint.sh). The PTR builds a newer fork commit with the bots
+# (docker-compose.ptr.yml); a commit goes live only after the PTR.
 ARG TC_COMMIT=2ae1313e9f89ba34103fee1400dc3d4222efd8c4
 RUN git init -q /src/TrinityCore \
     && git -C /src/TrinityCore remote add origin "${TC_REPO}" \
@@ -34,6 +37,9 @@ RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; echo "applying $p"; g
 
 # BUILD_JOBS: lower it on small machines (GCC needs ~2 GB RAM per job on the biggest files)
 ARG BUILD_JOBS=4
+# PLAYERBOTS=1: the WoW Forever Bots module (src/modules/PlayerbotV2; the core commit must have it, as the fork's
+# everlake branch does since PR #2). Off for the live realms until a bots build has run on the PTR.
+ARG PLAYERBOTS=0
 # TOOLS=1: also build mapextractor / vmap4extractor / vmap4assembler / mmaps_generator
 ARG TOOLS=1
 WORKDIR /src/TrinityCore/build
@@ -41,6 +47,7 @@ RUN cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/opt/trinitycore \
         -DTOOLS=${TOOLS} \
+        -DBUILD_PLAYERBOT_V2=${PLAYERBOTS} \
         -DWITH_WARNINGS=0 \
     && make -j"${BUILD_JOBS}" \
     && make install

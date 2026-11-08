@@ -42,6 +42,7 @@ services:
       context: .
       args:
         TC_COMMIT: ${TC_COMMIT:-2ae1313e9f89ba34103fee1400dc3d4222efd8c4}
+        PLAYERBOTS: ${PLAYERBOTS:-0}
         BUILD_JOBS: ${BUILD_JOBS:-4}
         WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-}
     image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-latest}
@@ -113,6 +114,8 @@ services:
       CASC_REGION: ${CASC_REGION:-us}
       EXTRACT_MMAPS: ${EXTRACT_MMAPS:-0}
       DBC_ONLY: ${DBC_ONLY:-0}
+      MMAPS_ONLY: ${MMAPS_ONLY:-0}
+      MMAP_THREADS: ${MMAP_THREADS:-}
       SKIP_MAPS: ${SKIP_MAPS:-0}
     volumes:
       - "${WOW_DIR:-./wow-not-set}:/wow:ro"
