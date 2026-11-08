@@ -1,7 +1,7 @@
 # China Undead (test)
 
 Goal: an Undead character can pick the China look (no exposed bones) in the character creator and at the barber,
-while every other Undead keeps the normal look. Status: test built 2026-11-08, not run.
+while every other Undead keeps the normal look. Status: first test run 2026-11-08 (body draws, black); second test "China (C)" built, not run.
 
 ## What Blizzard ships
 
@@ -58,6 +58,19 @@ Mac mini (the CDN defaults to the game server's port 8087):
 
 Then: Undead, Skin Type, China / China (B); screenshots at creation and in the world, with and without gear. For
 comparison, Blizzard's own China look: `china-mode on gate2`, play, `china-mode off gate2`.
+
+## Result 1 (2026-11-08): the body draws, but black
+
+On the Mac mini, "China (B)" (male and female) drew the China body over the normal one: no bones, no holes, gear on
+top. But it was **black**: a skinned model doesn't get the character's skin (texture type 1). Retail's own
+add-on models (Mechagnome parts, Demon Hunter horns) name their textures (type 0) instead. Also seen: a blue and
+white checker on the ground at the feet, cause unknown (it may not belong to these choices).
+
+**Second test, "China (C)"** (push 9570001, `sql/everlake/2026_11_08_01_hotfixes_china_undead_c.sql`): the same
+body, with the China copy of skin colour 0's body texture named in the model (models 95450017 male / 95450019
+female, textures 95450018 / 95450020). If it draws textured, the whole option needs one such model per skin colour
+(13), chosen with RelatedChrCustomizationChoiceID on the skin colour choice. Server: run that SQL, restart the
+worldserver, `docker compose run --rm cdn-build`. Mini: `china-undead` again (the build changed), then play.
 
 ## What each result means
 
