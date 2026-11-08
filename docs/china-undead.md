@@ -1,7 +1,7 @@
 # China Undead (test)
 
 Goal: an Undead character can pick the China look (no exposed bones) in the character creator and at the barber,
-while every other Undead keeps the normal look. Status: first test run 2026-11-08 (body draws, black); second test "China (C)" built, not run.
+while every other Undead keeps the normal look. Status: first test run 2026-11-08 (body draws, black); second test "China (C)" black too; third test "Normal body" built, not run.
 
 ## What Blizzard ships
 
@@ -71,6 +71,23 @@ body, with the China copy of skin colour 0's body texture named in the model (mo
 female, textures 95450018 / 95450020). If it draws textured, the whole option needs one such model per skin colour
 (13), chosen with RelatedChrCustomizationChoiceID on the skin colour choice. Server: run that SQL, restart the
 worldserver, `docker compose run --rm cdn-build`. Mini: `china-undead` again (the build changed), then play.
+
+## Result 2 (2026-11-08): China (C) is black too
+
+The named texture changed nothing: the China body is black whatever texture it gets. Also: Forever's Undead
+creator shows **no Skin Color option** (the retail data has one; something hides it).
+
+**Third test, "Normal body"** (push 9570002, `sql/everlake/2026_11_08_02_hotfixes_china_undead_normal_body.sql`,
+no new files): Blizzard's own Undead model (959310 / 997378, bones inline, unchanged) attached the same way, with
+Fresh's parts.
+
+- **Textured** (looks like a normal Undead): skinned bodies work; the China model's borrowed skeleton (SKID chunk, no
+  bones of its own) is what draws black. Next: give the China model its bones inline, or put the China body into
+  Blizzard's model as extra geosets.
+- **Black**: any skinned body draws black on this character. Next: the China body as geosets of Blizzard's model,
+  drawn like the rest of the character (no skinned model).
+
+Server only: run the SQL, restart the app. Mini: nothing to reinstall, play again.
 
 ## What each result means
 
