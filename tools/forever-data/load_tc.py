@@ -52,6 +52,123 @@ def statements(stream):
             yield table, sql
 
 
+def load_release(conn, cur, archive, target):
+    """Run the release's world dump into tables named target(table). Returns ({table: insert statements}, skipped tables)."""
+    listing = subprocess.run(["7zz", "l", "-ba", archive], check=True, capture_output=True, text=True).stdout
+    world = next(line.split()[-1] for line in listing.splitlines() if "_world_" in line and line.endswith(".sql"))
+    proc = subprocess.Popen(["7zz", "e", "-so", archive, world], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    counts, skipped = {}, set()
+    for table, sql in statements(proc.stdout):
+        if SKIP.search(table):
+            skipped.add(table)
+            continue
+        sql = IDENT.sub(lambda m: f"{m.group(1)} `{target(m.group(2))}`", sql, count=1)
+        cur.execute(sql)
+        if sql.startswith("INSERT"):
+            counts[table] = counts.get(table, 0) + 1
+            if sum(counts.values()) % 200 == 0:
+                conn.commit()
+        elif sql.startswith("CREATE"):
+            counts.setdefault(table, 0)
+    conn.commit()
+    if proc.wait() != 0:
+        raise SystemExit("7zz failed reading " + world + "; the old tables are untouched")
+    return counts, skipped
+
+
+def read_update_files(sources, custom_pin):
+    """({file name: bytes}, {file name: path}) of the fork's sql/updates/world and sql/custom/world files."""
+    raw, paths = {}, {}
+    for sub in ("updates", "custom"):
+        root = os.path.join(sources, custom_pin["folder"], "sql", sub, "world")
+        for dirpath, _, names in os.walk(root):
+            for f in names:
+                if f.endswith(".sql"):
+                    if f in raw:            # the fork's updater stops on this too
+                        raise SystemExit(f"update file {f} is in two update folders; the old tables are untouched")
+                    with open(os.path.join(dirpath, f), "rb") as handle:
+                        raw[f] = handle.read()
+                    paths[f] = os.path.relpath(os.path.join(dirpath, f), os.path.join(sources, custom_pin["folder"]))
+    return raw, paths
+
+
+def apply_update_files(conn, cur, raw, paths, mapping, skipped_tables, held, state):
+    """Apply update files as the fork's updater does (custom_sql.UpdatePlan), every table name pointed through `mapping`
+    (which must hold "updates", the list the updater keeps). Statements on tables in `skipped_tables` only (locale,
+    website) are left out. A file that fails or names a table outside `mapping` stops the run (SystemExit) with nothing
+    of that file committed. Returns what happened to each file."""
+    texts = {f: b.decode("utf-8") for f, b in raw.items()}
+    updates = mapping["updates"]
+    plan, applied = custom_sql.UpdatePlan(held, raw), []
+    for name in sorted(raw):
+        mode, why = plan.step(name, paths[name], raw[name])
+        normalized = custom_sql.file_hashes(raw[name])[0]
+        if mode == "skip":
+            continue
+        if mode == "rename":
+            cur.execute(f"UPDATE `{updates}` SET name = %s WHERE name = %s", (name, why))
+            applied.append({"file": name, "mode": "renamed from " + why})
+            continue
+        if mode == "rehash":
+            cur.execute(f"UPDATE `{updates}` SET hash = %s WHERE name = %s", (normalized, name))
+            applied.append({"file": name, "mode": "rehashed" + (f" ({why})" if why else "")})
+            continue
+        done, dropped = 0, 0
+        for statement in custom_sql.statements(texts[name]):
+            sql, uses_skipped, problems = custom_sql.retarget(statement, mapping, skipped_tables)
+            if custom_sql.drops_missing_only(statement, problems, mapping):
+                dropped += 1            # DROP TABLE IF EXISTS of tables this world never had: a no-op
+                continue
+            if problems:
+                conn.rollback()
+                raise SystemExit(f"update file {name}: {', '.join(sorted(problems))} not allowed here (only the world's own "
+                                 f"tables); nothing run, the old tables are untouched.\n{statement[:400]}")
+            if uses_skipped:
+                if any(f"`{v}`" in sql for v in mapping.values()):
+                    conn.rollback()     # it would also change a loaded table: leaving it out would lose that
+                    raise SystemExit(f"update file {name} joins a table that isn't loaded (locale) with one that is; "
+                                     f"the old tables are untouched.\n{statement[:400]}")
+                dropped += 1            # only locale or website tables, which are not loaded here
+                continue
+            source = custom_sql.prepared_source(sql)
+            if source is not None:      # PREPARE x FROM @v: check the statement it would run, now that it is known
+                if re.fullmatch(r"@\w+", source.strip()):
+                    cur.execute(f"SELECT {source.strip()}")
+                elif re.fullmatch(r"'(?:[^'\\]|\\.|'')*'", source.strip(), re.S):
+                    cur.execute("SELECT " + source.strip())
+                else:
+                    conn.rollback()
+                    raise SystemExit(f"update file {name}: PREPARE from something other than a variable or a string; "
+                                     f"the old tables are untouched.\n{statement[:400]}")
+                value = cur.fetchone()[0]
+                value = value.decode("utf-8", "replace") if isinstance(value, (bytes, bytearray)) else value
+                bad = custom_sql.check_prepared(value, set(mapping.values()))
+                if bad:
+                    conn.rollback()
+                    raise SystemExit(f"update file {name} prepares a statement that is not allowed ({', '.join(sorted(bad))}); "
+                                     f"the old tables are untouched.\n{str(value)[:400]}")
+            try:
+                cur.execute(sql)
+            except Exception as error:  # noqa: BLE001 - stop: the world must equal Everlake's or not change
+                conn.rollback()
+                raise SystemExit(f"update file {name} failed ({error}); the old tables are untouched.\n{sql[:400]}")
+            done += 1
+        conn.commit()
+        plan.applied(name, paths[name])
+        cur.execute(f"INSERT INTO `{updates}` (name, hash, state, timestamp, speed) VALUES (%s, %s, %s, UTC_TIMESTAMP(), 0) "
+                    "ON DUPLICATE KEY UPDATE hash = VALUES(hash)", (name, normalized, held.get(name, ("", state))[1]))
+        applied.append({"file": name, "mode": "applied" + (f" ({why})" if why else ""), "statements": done, "left_out": dropped})
+    conn.commit()
+    return applied
+
+
+def updates_state(cur, updates):
+    """The state new update rows get: CUSTOM where the updates table knows it, else RELEASED (older dumps)."""
+    cur.execute("SELECT column_type FROM information_schema.columns WHERE table_schema = DATABASE() "
+                "AND table_name = %s AND column_name = 'state'", (updates,))
+    return "CUSTOM" if "'CUSTOM'" in (cur.fetchone() or ("",))[0] else "RELEASED"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--sources", default=SOURCES)
@@ -73,10 +190,7 @@ def main():
     if row and row[0] == label and not args.force:
         print(f"tc-release: already loaded at {label}")
         return
-    listing = subprocess.run(["7zz", "l", "-ba", archive], check=True, capture_output=True, text=True).stdout
-    world = next(line.split()[-1] for line in listing.splitlines() if "_world_" in line and line.endswith(".sql"))
-    proc = subprocess.Popen(["7zz", "e", "-so", archive, world], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    started, counts, skipped = time.time(), {}, set()
+    started = time.time()
     with conn.cursor() as cur:
         cur.execute("SET SESSION foreign_key_checks = 0, unique_checks = 0")
         # a failed run leaves its half-built tables behind: start clean (the live tc_* tables are never touched here)
@@ -84,105 +198,21 @@ def main():
                     "AND (table_name LIKE 'tc\\_%\\_\\_new' OR table_name LIKE 'tc\\_%\\_\\_old')")
         for (stale,) in cur.fetchall():
             cur.execute(f"DROP TABLE IF EXISTS `{stale}`")
-        for table, sql in statements(proc.stdout):
-            if SKIP.search(table):
-                skipped.add(table)
-                continue
-            sql = IDENT.sub(lambda m: f"{m.group(1)} `tc_{m.group(2)}__new`", sql, count=1)
-            cur.execute(sql)
-            if sql.startswith("INSERT"):
-                counts[table] = counts.get(table, 0) + 1
-                if sum(counts.values()) % 200 == 0:
-                    conn.commit()
-            elif sql.startswith("CREATE"):
-                counts.setdefault(table, 0)
-        conn.commit()
+        counts, skipped = load_release(conn, cur, archive, lambda t: f"tc_{t}__new")
         dump_tables = set(counts)
-        if proc.wait() != 0:
-            raise SystemExit("7zz failed reading " + world + "; the old tc_ tables are untouched")
         applied = []
         if custom_pin:
-            cur.execute("SELECT column_type FROM information_schema.columns WHERE table_schema = DATABASE() "
-                        "AND table_name = 'tc_updates__new' AND column_name = 'state'")
-            state = "CUSTOM" if "'CUSTOM'" in (cur.fetchone() or ("",))[0] else "RELEASED"   # older dumps have no CUSTOM state
+            state = updates_state(cur, "tc_updates__new")
             cur.execute("SELECT name, hash, state FROM `tc_updates__new`")
             held = {r[0]: (r[1] or "", r[2]) for r in cur.fetchall()}
             # the fork's updater (custom_sql.UpdatePlan): every file of sql/updates/world and sql/custom/world, in name order
-            raw, paths = {}, {}
-            for sub in ("updates", "custom"):
-                root = os.path.join(args.sources, custom_pin["folder"], "sql", sub, "world")
-                for dirpath, _, names in os.walk(root):
-                    for f in names:
-                        if f.endswith(".sql"):
-                            if f in raw:            # the fork's updater stops on this too
-                                raise SystemExit(f"update file {f} is in two update folders; the old tc_ tables are untouched")
-                            with open(os.path.join(dirpath, f), "rb") as handle:
-                                raw[f] = handle.read()
-                            paths[f] = os.path.relpath(os.path.join(dirpath, f), os.path.join(args.sources, custom_pin["folder"]))
-            texts = {f: b.decode("utf-8") for f, b in raw.items()}
-            created = {t: tmp for t, tmp in custom_sql.created_tables(texts.values()).items() if not SKIP.search(t)}
+            raw, paths = read_update_files(args.sources, custom_pin)
+            created = {t: tmp for t, tmp in custom_sql.created_tables(b.decode("utf-8") for b in raw.values()).items()
+                       if not SKIP.search(t)}
             mapping = {t: f"tc_{t}__new" for t in set(counts) | {t for t, temporary in created.items() if not temporary}}
             mapping.update({t: f"tc_{t}__tmp" for t, temporary in created.items() if temporary})
             skipped_tables = {t for t in skipped if t != "updates_include"}
-            plan = custom_sql.UpdatePlan(held, raw)
-            for name in sorted(raw):
-                mode, why = plan.step(name, paths[name], raw[name])
-                normalized = custom_sql.file_hashes(raw[name])[0]
-                if mode == "skip":
-                    continue
-                if mode == "rename":
-                    cur.execute("UPDATE `tc_updates__new` SET name = %s WHERE name = %s", (name, why))
-                    applied.append({"file": name, "mode": "renamed from " + why})
-                    continue
-                if mode == "rehash":
-                    cur.execute("UPDATE `tc_updates__new` SET hash = %s WHERE name = %s", (normalized, name))
-                    applied.append({"file": name, "mode": "rehashed" + (f" ({why})" if why else "")})
-                    continue
-                done, dropped = 0, 0
-                for statement in custom_sql.statements(texts[name]):
-                    sql, uses_skipped, problems = custom_sql.retarget(statement, mapping, skipped_tables)
-                    if custom_sql.drops_missing_only(statement, problems, mapping):
-                        dropped += 1            # DROP TABLE IF EXISTS of tables this world never had: a no-op
-                        continue
-                    if problems:
-                        conn.rollback()
-                        raise SystemExit(f"update file {name}: {', '.join(sorted(problems))} not allowed here (only the world's own "
-                                         f"tables); nothing run, the old tc_ tables are untouched.\n{statement[:400]}")
-                    if uses_skipped:
-                        if any(f"`{v}`" in sql for v in mapping.values()):
-                            conn.rollback()     # it would also change a loaded table: leaving it out would lose that
-                            raise SystemExit(f"update file {name} joins a table that isn't loaded (locale) with one that is; "
-                                             f"the old tc_ tables are untouched.\n{statement[:400]}")
-                        dropped += 1            # only locale or website tables, which are not loaded here
-                        continue
-                    source = custom_sql.prepared_source(sql)
-                    if source is not None:      # PREPARE x FROM @v: check the statement it would run, now that it is known
-                        if re.fullmatch(r"@\w+", source.strip()):
-                            cur.execute(f"SELECT {source.strip()}")
-                        elif re.fullmatch(r"'(?:[^'\\]|\\.|'')*'", source.strip(), re.S):
-                            cur.execute("SELECT " + source.strip())
-                        else:
-                            conn.rollback()
-                            raise SystemExit(f"update file {name}: PREPARE from something other than a variable or a string; "
-                                             f"the old tc_ tables are untouched.\n{statement[:400]}")
-                        value = cur.fetchone()[0]
-                        value = value.decode("utf-8", "replace") if isinstance(value, (bytes, bytearray)) else value
-                        bad = custom_sql.check_prepared(value, set(mapping.values()))
-                        if bad:
-                            conn.rollback()
-                            raise SystemExit(f"update file {name} prepares a statement that is not allowed ({', '.join(sorted(bad))}); "
-                                             f"the old tc_ tables are untouched.\n{str(value)[:400]}")
-                    try:
-                        cur.execute(sql)
-                    except Exception as error:  # noqa: BLE001 - stop: tc_* must equal Everlake's world or not change
-                        conn.rollback()
-                        raise SystemExit(f"update file {name} failed ({error}); the old tc_ tables are untouched.\n{sql[:400]}")
-                    done += 1
-                conn.commit()
-                plan.applied(name, paths[name])
-                cur.execute("INSERT INTO `tc_updates__new` (name, hash, state, timestamp, speed) VALUES (%s, %s, %s, UTC_TIMESTAMP(), 0) "
-                            "ON DUPLICATE KEY UPDATE hash = VALUES(hash)", (name, normalized, held.get(name, ("", state))[1]))
-                applied.append({"file": name, "mode": "applied" + (f" ({why})" if why else ""), "statements": done, "left_out": dropped})
+            applied = apply_update_files(conn, cur, raw, paths, mapping, skipped_tables, held, state)
             for t, temporary in created.items():
                 if not temporary and t not in counts:
                     counts[t] = 0       # a table the custom files make joins the swap

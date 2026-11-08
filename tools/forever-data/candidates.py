@@ -9,6 +9,9 @@ import json
 import re
 
 F = "acore_forever"
+# the world being compared: the fork's world as load_tc.py keeps it (acore_forever.tc_*), or another copy of it
+# (gap_report.py --world, the dry runs of import_slice1.py)
+WORLD = f"{F}.tc_"
 FOREVER_BUILD = 69800      # Forever beta and live builds start here; TrinityCore's retail rows carry 69497 and below
 TRACE_QUEST = "src/corrections/Forever/traces/foreverQuestTraces.lua:ForeverQuestTraces:Load"
 TRACE_NPC = "src/corrections/Forever/traces/foreverNpcTraces.lua:ForeverNpcTraces:Load"
@@ -120,7 +123,7 @@ def quests(cur, ids):
 
     # TrinityCore
     for r in rows(cur, f"SELECT t.ID, t.LogTitle, t.LogDescription, t.QuestDescription, t.QuestCompletionLog, t.VerifiedBuild, "
-                       f"l.QuestLevel, l.MinLevel FROM {F}.tc_quest_template t LEFT JOIN {F}.tc_quest_classic_level l ON l.ID = t.ID "
+                       f"l.QuestLevel, l.MinLevel FROM {WORLD}quest_template t LEFT JOIN {WORLD}quest_classic_level l ON l.ID = t.ID "
                        f"WHERE t.ID IN ({s})"):
         src = tc_source(r["VerifiedBuild"])
         add(r["ID"], "name", r["LogTitle"], src, r["VerifiedBuild"])
@@ -130,14 +133,14 @@ def quests(cur, ids):
             add(r["ID"], "level", r["QuestLevel"], src, r["VerifiedBuild"])
         if r["MinLevel"]:
             add(r["ID"], "min_level", r["MinLevel"], src, r["VerifiedBuild"])
-    builds = {r["ID"]: r["VerifiedBuild"] for r in rows(cur, f"SELECT ID, VerifiedBuild FROM {F}.tc_quest_template WHERE ID IN ({s})")}
+    builds = {r["ID"]: r["VerifiedBuild"] for r in rows(cur, f"SELECT ID, VerifiedBuild FROM {WORLD}quest_template WHERE ID IN ({s})")}
     for table, field in (("creature_queststarter", "quest_giver"), ("gameobject_queststarter", "quest_giver"),
                          ("creature_questender", "quest_ender"), ("gameobject_questender", "quest_ender")):
         kind = "npc" if table.startswith("creature") else "object"
         # the relation row's own build says whether it was sniffed; a re-sniffed quest can keep Classic givers
-        for r in rows(cur, f"SELECT id, quest, VerifiedBuild FROM {F}.tc_{table} WHERE quest IN ({s})"):
+        for r in rows(cur, f"SELECT id, quest, VerifiedBuild FROM {WORLD}{table} WHERE quest IN ({s})"):
             add(r["quest"], field, (kind, r["id"]), tc_source(r["VerifiedBuild"]), r["VerifiedBuild"])
-    for r in rows(cur, f"SELECT QuestID, Type, ObjectID FROM {F}.tc_quest_objectives WHERE QuestID IN ({s})"):
+    for r in rows(cur, f"SELECT QuestID, Type, ObjectID FROM {WORLD}quest_objectives WHERE QuestID IN ({s})"):
         kind = {0: "npc", 3: "npc", 1: "item", 2: "object"}.get(r["Type"], f"type{r['Type']}")
         add(r["QuestID"], "objective", (kind, r["ObjectID"]), tc_source(builds.get(r["QuestID"])), builds.get(r["QuestID"]))
 
@@ -236,7 +239,7 @@ def npcs(cur, ids):
             out[int(nid)][field].append((value, source, build))
 
     for r in rows(cur, f"SELECT t.entry, t.name, t.subname, t.faction, t.Classification, t.VerifiedBuild, l.level_min, l.level_max "
-                       f"FROM {F}.tc_creature_template t LEFT JOIN {F}.tc_creature_classic_level l ON l.entry = t.entry WHERE t.entry IN ({s})"):
+                       f"FROM {WORLD}creature_template t LEFT JOIN {WORLD}creature_classic_level l ON l.entry = t.entry WHERE t.entry IN ({s})"):
         src = tc_source(r["VerifiedBuild"])
         add(r["entry"], "name", r["name"], src, r["VerifiedBuild"])
         add(r["entry"], "subname", r["subname"], src, r["VerifiedBuild"])
@@ -245,7 +248,7 @@ def npcs(cur, ids):
         if r["level_min"]:
             add(r["entry"], "level", [r["level_min"], r["level_max"] or r["level_min"]], src, r["VerifiedBuild"])
     for r in rows(cur, f"SELECT CreatureID, GROUP_CONCAT(CreatureDisplayID ORDER BY Idx) AS displays, MAX(VerifiedBuild) AS vb "
-                       f"FROM {F}.tc_creature_template_model WHERE CreatureID IN ({s}) GROUP BY CreatureID"):
+                       f"FROM {WORLD}creature_template_model WHERE CreatureID IN ({s}) GROUP BY CreatureID"):
         add(r["CreatureID"], "model", [int(x) for x in r["displays"].split(",")], tc_source(r["vb"]), r["vb"])
     for r in rows(cur, f"SELECT id, data FROM {F}.src_forever_db WHERE tbl = 'npc' AND id IN ({s})"):
         d = j(r["data"])

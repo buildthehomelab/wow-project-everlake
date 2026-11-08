@@ -37,11 +37,11 @@ BATCH_BYTES = 4 << 20
 QUEST_TABLES = ("quest_start", "quest_end", "quest_objective", "quest_prereq", "quest_reward", "mechanic", "step", "note")
 
 
-def connect():
+def connect(database=None):
     import pymysql
     return pymysql.connect(host=os.environ.get("FOREVER_DB_HOST", "127.0.0.1"), port=int(os.environ.get("FOREVER_DB_PORT", 3306)),
                            user=os.environ["FOREVER_DB_USER"], password=os.environ["FOREVER_DB_PASS"],
-                           database=os.environ.get("FOREVER_DB_NAME", "acore_forever"), charset="utf8mb4",
+                           database=database or os.environ.get("FOREVER_DB_NAME", "acore_forever"), charset="utf8mb4",
                            autocommit=False, connect_timeout=30, read_timeout=600, write_timeout=600)
 
 

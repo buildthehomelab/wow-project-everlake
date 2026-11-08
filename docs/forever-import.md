@@ -4,7 +4,7 @@ Everlake's world is the TrinityCore `forever` fork's world release plus the fork
 on since that release: new quests, NPCs, loot and trainer spells that players see every day. This plan is how we bring
 that into Everlake's own world database, a little at a time, without breaking the fork's updates or the game.
 
-Nothing in this plan is built yet. The data side is: `tools/forever-data` pins the public Forever sources every day,
+Slice 1's generator and dry run are built (`import_slice1.py`, `import_dryrun.py`); the rest is not yet. The data side is: `tools/forever-data` pins the public Forever sources every day,
 loads them next to the fork's world (the release plus the fork's update files, in the same order and by the same re-run
 rules as Everlake's worldserver), and `gap_report.py` lists what is missing ([tools/forever-data/README.md](../tools/forever-data/README.md)).
 
@@ -47,7 +47,7 @@ every import is checked against the newest fork world first, and anything the fo
    every later custom file, the fork's included, and some of the fork's files can't run twice. A later fix is a new
    file. Each file is still safe to run again: it adds a row only where none exists, records the key of each row
    it actually inserts, with its own file name, in a small table of our own (`everlake_import_rows`), and deletes only
-   rows listed there under its own name. A key is recorded only when the row was missing, never from a fixed list, so
+   rows listed there under its own name (a corrections file may also remove the fork rows it names, under rule 2). A key is recorded only when the row was missing, never from a fixed list, so
    a re-run never lists a row the fork has since added.
 6. **PTR first.** Every import goes to the PTR realm first (a test realm with few bots, decided but not built yet), gets played and botted there, and only then goes to the Forever realm.
 
@@ -116,3 +116,7 @@ generated SQL lives in its own repository, `wow-everlake-world-data`, under GPL-
 4. **Read access to Everlake's live world database**, so the dry run can also compare against what is really there,
    not only against the world rebuilt here.
 5. **A ForeverDB.net API key** (theirs, free, needs a Battle.net login) for vendor stock beyond what EG Link saw.
+6. **Quest objective flags.** No public source records an objective's `Flags` and `Flags2`; sniffed Forever objectives
+   use 32 for nearly all and 0 or 1. Until that is decided, slice 1 holds every objective row back. Most quests with no
+   objectives (151 of 173 on 2026-11-08) also lack Forever's objective ids: they wait for EG Link to record them, or
+   for a decision to use an id block of our own.

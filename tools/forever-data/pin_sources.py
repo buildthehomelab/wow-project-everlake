@@ -105,6 +105,11 @@ SOURCES = {
         "keep": lambda p: p.startswith("data/") and (p.endswith(".jsonl") or p.endswith(".json")),
     },
 }
+# The fork world everything is compared against. FOREVER_TC_REPO / FOREVER_TC_REF switch it, e.g. to Everlake's own core
+# (buildthehomelab/wow-trinitycore-everlake, branch everlake) or to the exact commit Everlake's Dockerfile pins.
+if os.environ.get("FOREVER_TC_REPO") or os.environ.get("FOREVER_TC_REF"):
+    SOURCES["tc-forever"].update(repo=os.environ.get("FOREVER_TC_REPO") or SOURCES["tc-forever"]["repo"],
+                                 branch=os.environ.get("FOREVER_TC_REF") or SOURCES["tc-forever"]["branch"])
 TC_RELEASE = {"repo": "advocaite/TrinityCore", "tag_prefix": "forever-tdb-"}
 FOREVERDB_NET = "https://foreverdb.net/"
 CREDITS_EXTRA = (
