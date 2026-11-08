@@ -1,42 +1,53 @@
 #!/usr/bin/env python3
-"""Dry-runs an Everlake world import slice by the fork's updater rules, twice, and checks it (docs/forever-import.md,
+"""Dry-runs every Everlake world import file by the fork's updater rules, twice, and checks them (docs/forever-import.md,
 "How a run works").
 
-    import_dryrun.py                     dry-run slice1 from world-data/ (import_slice1.py's output)
-    import_dryrun.py --slice slice1 --data DIR
+    import_dryrun.py                     dry-run world-data/ (the import_slice*.py output)
+    import_dryrun.py --data DIR          a clone of wow-everlake-world-data
+    import_dryrun.py --report slice2     where the report goes (default: the newest slice)
     import_dryrun.py --skip-scratch      only the stepped run (quick; the report says the scratch run was skipped)
     import_dryrun.py --drop              remove the dry-run tables afterwards
 
+Every slice's files run together: <data>/sql/world holds them all, and <data>/slices/<slice>/manifest.json (or the
+older <data>/<slice>/manifest.json) says what each slice's files do. The files there must be exactly the ones the
+manifests name.
+
 Both runs build a world in the scratch schema acore_world_dryrun, as tables with their own prefix, so nothing else in
 that schema is touched (only tables named elscratch_* and elstep_* are created or dropped):
-- from scratch (elscratch_*): the fork's world release, then the fork's sql/updates and sql/custom world files and the
-  slice's files in file-name order, as a new realm builds it (custom_sql.UpdatePlan, the same code load_tc.py runs);
-- stepped (elstep_*): the deployed state, then the new files, as the realm will. Today the deployed state is the fork
-  world with no import files: acore_forever.tc_* with its updates list (load_tc.py's world). Every fork file must
-  then be skipped by the updater, or the deployed state isn't what tc_* says.
+- from scratch (elscratch_*): the fork's world release, then the fork's sql/updates and sql/custom world files and all
+  our files in file-name order, as a new realm builds it (custom_sql.UpdatePlan, the same code load_tc.py runs);
+- stepped (elstep_*): the deployed state, then the new files, as the realm will. Nothing is deployed yet, so the
+  deployed state is the fork world with no import files: acore_forever.tc_* with its updates list (load_tc.py's
+  world). Every fork file must then be skipped by the updater, or the deployed state isn't what tc_* says.
 
 Checks:
 - the two runs end with the same world (every table's rows; the updates list by name and hash);
 - every fork row outside the corrections is unchanged: per table, the rows added are exactly the keys in
-  everlake_import_rows, the rows removed or changed exactly those the corrections name;
+  everlake_import_rows, the rows removed or changed exactly those the corrections name (a table with no primary key,
+  like creature_loot_template, is compared by its first index's columns, duplicates included);
 - no recorded key was a fork row (no key collides), and every recorded key's row is there;
 - every new row points at things that exist: givers and enders are creature or gameobject templates, quests exist,
-  objectives' targets exist;
-- running the slice's files again changes nothing (run directly, and the updater skips them), and after a simulated
-  fork change (a quest's givers taken over, a corrected row re-sniffed, a removed giver put back) a re-run leaves the
-  fork's rows alone (this runs last and changes the stepped world);
-- the gap report on the stepped world: every item of the slice's categories is closed or on the review or held-back
-  list with its reason, and no category gains an item.
-Writes <data>/<slice>/dry-run.md and dry-run.json. Exit status 1 when a check fails.
+  objectives' targets exist, loot items are in Forever's client item list, reference lists exist, every new loot table
+  is some creature's, and every corrected row is there;
+- running the files again changes nothing (run directly, and the updater skips them), and after simulated fork changes
+  (each slice's own: a quest's givers taken over, a corrected row re-sniffed, a removed giver put back, a loot row we
+  added removed, a creature given its own loot table) a re-run leaves the fork's rows alone (this runs last and changes
+  the stepped world);
+- the gap report on the stepped world: every item of the slices' categories is closed or on the review or held-back
+  list with its reason, and no category gains an item. Loot gaps count per drop (npc/item), the rest per quest or NPC.
+Writes <slice folder>/dry-run.md and dry-run.json for the --report slice. Exit status 1 when a check fails.
 """
 import argparse
 import collections
 import datetime
+import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -49,8 +60,8 @@ from load_sources import SOURCES, connect  # noqa: E402
 DRYRUN = "acore_world_dryrun"
 FORK = "acore_forever"
 SCRATCH, STEP = "elscratch_", "elstep_"
-SLICE_CATEGORIES = ["quests_no_giver", "quests_giver_differs", "quests_no_ender", "quests_ender_differs", "quests_no_text",
-                    "quests_no_objectives", "quests_no_progress_text", "quests_no_completion_text"]
+# gap categories whose items are drops (npc/item), not whole NPCs
+PER_DROP = {"loot_items_missing", "npcs_no_loot"}
 # what each kind of recorded row must point at: (column, table it must be in, that table's key column)
 REFERENCES = {
     "creature_queststarter": [("id", "creature_template", "entry"), ("quest", "quest_template", "ID")],
@@ -111,6 +122,19 @@ def primary_key(cur, schema, table):
     return [r[0] for r in cur.fetchall()]
 
 
+def row_key(cur, schema, table):
+    """(key columns, unique?): the primary key, or for a table without one (TrinityCore's loot tables) the columns of
+    its first index, under which several rows may stand."""
+    pk = primary_key(cur, schema, table)
+    if pk:
+        return pk, True
+    cur.execute("SELECT index_name, column_name FROM information_schema.statistics WHERE table_schema = %s AND table_name = %s "
+                "ORDER BY index_name = 'idx_primary' DESC, index_name, seq_in_index", (schema, table))
+    got = cur.fetchall()
+    first = got[0][0] if got else None
+    return [c for i, c in got if i == first], False
+
+
 def row_sql(cols, alias=""):
     a = f"{alias}." if alias else ""
     return "MD5(CONCAT_WS(',', " + ", ".join(f"QUOTE({a}`{c}`)" for c in cols) + "))"
@@ -124,6 +148,11 @@ def fingerprint(cur, schema, table, cols):
     return int(n), int(s)
 
 
+def pad(key):
+    key = list(key)
+    return tuple(key + [0] * (4 - len(key)))
+
+
 def our_files(data):
     folder = os.path.join(data, "sql", "world")
     out = {}
@@ -133,6 +162,20 @@ def our_files(data):
             with open(os.path.join(folder, name), "rb") as handle:
                 out[name] = handle.read()
     return out
+
+
+def load_manifests(data):
+    """Every slice's manifest, in the order of its first file (the order the updater runs them): [(folder, manifest)]."""
+    paths = sorted(glob.glob(os.path.join(data, "slices", "*", "manifest.json")))
+    if not paths:
+        paths = sorted(glob.glob(os.path.join(data, "*", "manifest.json")))
+    out = []
+    for path in paths:
+        with open(path) as handle:
+            out.append((os.path.dirname(path), json.load(handle)))
+    if not out:
+        raise SystemExit(f"{data}: no slices/<slice>/manifest.json")
+    return sorted(out, key=lambda fm: min(f["name"] for f in fm[1]["files"]))
 
 
 def fork_mapping(cur, prefix, raw_all, skipped):
@@ -145,23 +188,32 @@ def fork_mapping(cur, prefix, raw_all, skipped):
     return mapping, {t for t in skipped if t != "updates_include"}
 
 
+def gap_keys(cat, item):
+    if cat in PER_DROP:
+        return {f"{item['npc']}/{i}" for i in item.get("items", ())}
+    return {str(item.get("quest") or item.get("npc") or item.get("object"))}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--slice", default="slice1")
+    ap.add_argument("--report", "--slice", dest="report", help="the slice whose folder gets the report (default: the newest)")
     ap.add_argument("--data", default=os.path.join(HERE, "world-data"))
     ap.add_argument("--sources", default=SOURCES)
     ap.add_argument("--skip-scratch", action="store_true")
     ap.add_argument("--drop", action="store_true")
     args = ap.parse_args()
-    with open(os.path.join(args.data, args.slice, "manifest.json")) as handle:
-        manifest = json.load(handle)
+    manifests = load_manifests(args.data)
+    slices = {m["slice"]: (folder, m) for folder, m in manifests}
+    report_slice = args.report or manifests[-1][1]["slice"]
+    if report_slice not in slices:
+        raise SystemExit(f"--report {report_slice}: the slices are {sorted(slices)}")
     with open(os.path.join(args.sources, "manifest.json")) as handle:
         current = json.load(handle)["current"]
     release, custom_pin = current["tc-release"], current["tc-forever"]
     ours = our_files(args.data)
-    names = {f["name"] for f in manifest["files"]}
+    names = {f["name"] for _, m in manifests for f in m["files"]}
     if set(ours) != names:
-        raise SystemExit(f"{args.data}/sql/world holds {sorted(ours)}, the manifest names {sorted(names)}")
+        raise SystemExit(f"{args.data}/sql/world holds {sorted(ours)}, the manifests name {sorted(names)}")
     fork_raw, fork_paths = load_tc.read_update_files(args.sources, custom_pin)
     clash = set(fork_raw) & set(ours)
     if clash:
@@ -172,7 +224,7 @@ def main():
     cur = conn.cursor()
     cur.execute("SET SESSION foreign_key_checks = 0, unique_checks = 0")
     checks, timings, runs = Checks(), {}, {}
-    print(f"dry run of {args.slice}: {', '.join(sorted(ours))}", flush=True)
+    print(f"dry run of {', '.join(slices)}: {', '.join(sorted(ours))}", flush=True)
 
     # the deployed state: the fork world (acore_forever.tc_*), copied
     started = time.time()
@@ -193,8 +245,8 @@ def main():
     fork_moved = [a for a in applied if a["file"] not in ours]
     checks.add("stepped run: the updater skips every fork file (the deployed state is the fork world)", not fork_moved,
                "; ".join(f"{a['file']} {a['mode']}" for a in fork_moved[:10]))
-    checks.add("stepped run: the updater applies each of our files once",
-               sorted(a["file"] for a in applied if a["file"] in ours and a["mode"] == "applied") == sorted(ours),
+    checks.add("stepped run: the updater applies each of our files once, in name order",
+               [a["file"] for a in applied if a["file"] in ours and a["mode"] == "applied"] == sorted(ours),
                json.dumps([a for a in applied if a["file"] in ours]))
 
     # from scratch: the release, then every file by the updater's rules
@@ -240,12 +292,13 @@ def main():
     for tbl, k1, k2, k3, k4, _ in recorded:
         added_expect[tbl].add((k1, k2, k3, k4))
     removed_expect, changed_expect = collections.defaultdict(set), collections.defaultdict(set)
-    for f in manifest["fixes"]:
+    all_fixes = [f for _, m in manifests for f in m["fixes"]]
+    for f in all_fixes:
         if f["kind"] == "relations":
             for d in f["delete"]:
                 removed_expect[d["table"]].add((d["id"], d["quest"], 0, 0))
-        else:
-            changed_expect[f["table"]].add(tuple(list(f["key"].values()) + [0] * (4 - len(f["key"]))))
+        else:               # in the table's key order: the manifest's keys are sorted by name
+            changed_expect[f["table"]].add(pad(f["key"][c] for c in row_key(cur, FORK, fork_tables[f["table"]])[0]))
     unexpected, per_table = [], {}
     for name, full in sorted(fork_tables.items()):
         cols = columns(cur, FORK, full)
@@ -263,18 +316,11 @@ def main():
             if extra != set(ours) or gone:
                 unexpected.append(f"updates: {sorted(extra)} added, {gone} gone")
             continue
-        pk = primary_key(cur, FORK, full)
-        if not pk or len(pk) > 4:
-            unexpected.append(f"{name} changed (no usable primary key to say how)")
+        key, unique = row_key(cur, FORK, full)
+        if not key or len(key) > 4:
+            unexpected.append(f"{name} changed (no usable key to say how)")
             continue
-        on = " AND ".join(f"t.`{k}` = s.`{k}`" for k in pk)
-        keys = ", ".join(f"s.`{k}`" for k in pk)
-        cur.execute(f"SELECT {keys} FROM `{STEP}{name}` s WHERE NOT EXISTS (SELECT 1 FROM `{FORK}`.`{full}` t WHERE {on})")
-        added = {tuple(list(r) + [0] * (4 - len(pk))) for r in cur.fetchall()}
-        cur.execute(f"SELECT {keys.replace('s.', 't.')} FROM `{FORK}`.`{full}` t WHERE NOT EXISTS (SELECT 1 FROM `{STEP}{name}` s WHERE {on})")
-        removed = {tuple(list(r) + [0] * (4 - len(pk))) for r in cur.fetchall()}
-        cur.execute(f"SELECT {keys} FROM `{STEP}{name}` s JOIN `{FORK}`.`{full}` t ON {on} WHERE {row_sql(cols, 's')} <> {row_sql(cols, 't')}")
-        changed = {tuple(list(r) + [0] * (4 - len(pk))) for r in cur.fetchall()}
+        added, removed, changed = diff_rows(cur, full, name, key, unique, cols)
         per_table[name] = {"added": len(added), "removed": len(removed), "changed": len(changed)}
         if added != added_expect.get(name, set()) or removed != removed_expect.get(name, set()) or changed != changed_expect.get(name, set()):
             unexpected.append(f"{name}: added {len(added)} (recorded {len(added_expect.get(name, ()))}), removed {len(removed)} "
@@ -287,49 +333,21 @@ def main():
     # keys: recorded rows are there, none was a fork row
     missing_rows, collisions = [], []
     for tbl, keys in sorted(added_expect.items()):
-        pk = primary_key(cur, FORK, fork_tables[tbl])
-        for key in keys:
-            where = " AND ".join(f"`{k}` = {int(v)}" for k, v in zip(pk, key))
+        key, _ = row_key(cur, FORK, fork_tables[tbl])
+        for k in keys:
+            where = " AND ".join(f"`{c}` = {int(v)}" for c, v in zip(key, k))
             cur.execute(f"SELECT COUNT(*) FROM `{STEP}{tbl}` WHERE {where}")
-            if not cur.fetchone()[0]:
-                missing_rows.append(f"{tbl} {key}")
+            if cur.fetchone()[0] != 1:
+                missing_rows.append(f"{tbl} {k}")
             cur.execute(f"SELECT COUNT(*) FROM `{FORK}`.`{fork_tables[tbl]}` WHERE {where}")
             if cur.fetchone()[0]:
-                collisions.append(f"{tbl} {key}")
-    checks.add("every recorded key's row is in the world", not missing_rows, ", ".join(missing_rows[:10]))
+                collisions.append(f"{tbl} {k}")
+    checks.add("every recorded key's row is in the world, once", not missing_rows, ", ".join(missing_rows[:10]))
     checks.add("no key collides with a fork row", not collisions, ", ".join(collisions[:10]))
     files_of = collections.Counter(r[5] for r in recorded)
     checks.add("every recorded row names one of our files", set(files_of) <= set(ours), str(dict(files_of)))
 
-    # references
-    broken = []
-    for tbl, refs in REFERENCES.items():
-        for col, target, tkey in refs:
-            pk = primary_key(cur, FORK, fork_tables[tbl])
-            on = " AND ".join(f"r.`k{n + 1}` = w.`{k}`" for n, k in enumerate(pk))
-            cur.execute(f"SELECT w.`{col}` FROM `{STEP}{isql.IMPORT_ROWS}` r JOIN `{STEP}{tbl}` w ON {on} "
-                        f"WHERE r.tbl = %s AND NOT EXISTS (SELECT 1 FROM `{STEP}{target}` x WHERE x.`{tkey}` = w.`{col}`)", (tbl,))
-            broken += [f"{tbl}.{col} {r[0]} (no {target})" for r in cur.fetchall()]
-    for f in manifest["fixes"]:          # the corrections' own rows: updates of a quest that must exist
-        if f["kind"] == "update":
-            cur.execute(f"SELECT COUNT(*) FROM `{STEP}quest_template` WHERE ID = %s", (f["quest"],))
-            if not cur.fetchone()[0]:
-                broken.append(f"fix {f['fix']}: quest {f['quest']} missing")
-    cur.execute(f"SELECT o.ID, o.Type, o.ObjectID FROM `{STEP}{isql.IMPORT_ROWS}` r JOIN `{STEP}quest_objectives` o ON r.k1 = o.ID "
-                "WHERE r.tbl = 'quest_objectives'")
-    for oid, otype, target in cur.fetchall():
-        table = {0: "creature_template", 3: "creature_template", 2: "gameobject_template"}.get(otype)
-        if table:
-            cur.execute(f"SELECT COUNT(*) FROM `{STEP}{table}` WHERE entry = %s", (target,))
-            if not cur.fetchone()[0]:
-                broken.append(f"objective {oid}: {table} {target} missing")
-        elif otype == 1:             # items live in the client's tables, not the world: forever-db's item list
-            cur.execute(f"SELECT COUNT(*) FROM `{FORK}`.src_forever_db WHERE tbl = 'item' AND id = %s", (target,))
-            if not cur.fetchone()[0]:
-                broken.append(f"objective {oid}: item {target} unknown to Forever's client data")
-        else:
-            broken.append(f"objective {oid}: type {otype} can't be checked here")
-    checks.add("every new row points at things that exist", not broken, "; ".join(broken[:20]))
+    checks.add("every new row points at things that exist", *references(cur, fork_tables, all_fixes))
 
     # running the files again changes nothing
     watched = sorted(set(added_expect) | set(removed_expect) | set(changed_expect) | {isql.IMPORT_ROWS})
@@ -358,63 +376,150 @@ def main():
     checks.add("... and the world stays the same", after2 == after)
 
     # the gap report on the stepped world against the fork world's
+    report_folder = slices[report_slice][0]
     gaps = {}
     for label, world in (("before", f"{FORK}.tc_"), ("after", f"{DRYRUN}.{STEP}")):
-        out = os.path.join(args.data, args.slice, "gaps-" + label)
+        out = os.path.join(tempfile.mkdtemp(prefix="everlake-dryrun-"), "gaps-" + label)     # not in the data folder
         subprocess.run([sys.executable, os.path.join(HERE, "gap_report.py"), "--world", world, "--out", out, "--sources", args.sources],
                        check=True, stdout=subprocess.DEVNULL)
         with open(os.path.join(out, "everlake-gaps.json")) as handle:
             report = json.load(handle)
+        shutil.rmtree(os.path.dirname(out))
         gaps[label] = {}
         for zone, cats in report["zones"].items():
             for cat, items in cats.items():
                 for i in items:
-                    gaps[label].setdefault(cat, set()).add(i.get("quest") or i.get("npc") or i.get("object"))
+                    gaps[label].setdefault(cat, set()).update(gap_keys(cat, i))
         gaps[label + "_totals"] = report["totals"]
-    outcomes = manifest["outcomes"]
+        gaps[label + "_counts"] = {c: len(v) for c, v in gaps[label].items()}
+    outcomes = collections.defaultdict(dict)
+    for _, m in manifests:
+        for cat, v in m["outcomes"].items():
+            outcomes[cat].update(v)
+    slice_categories = [c for _, m in manifests for c in m["outcomes"]]
+    slice_categories = list(dict.fromkeys(slice_categories))
     closed, left, unexplained, new = {}, {}, [], []
     for cat in gaps["before_totals"]:
         b, a = gaps["before"].get(cat, set()), gaps["after"].get(cat, set())
-        # a quest may move from "no giver" to "other givers" when only some of the vote's givers could be added
-        moved = {q for q in a - b if outcomes.get(cat, {}).get(str(q), "").split(":")[0] in ("review", "held back")}
+        # a quest may move from "no giver" to "other givers" when only some of the vote's givers could be added, and a
+        # drop from "no loot table" to "loot short" when its NPC got a table with other drops
+        moved = {q for q in a - b if outcomes.get(cat, {}).get(q, "").split(":")[0] in ("review", "held back")}
         if a - b - moved:
             new.append(f"{cat}: {sorted(a - b - moved)[:10]}")
-        if cat in SLICE_CATEGORIES:
+        if cat in slice_categories:
             closed[cat] = len(b - a)
             left[cat] = collections.Counter()
             for q in sorted(a):
-                why = outcomes.get(cat, {}).get(str(q), "")
+                why = outcomes.get(cat, {}).get(q, "")
                 kind = why.split(":")[0]
                 if kind in ("review", "held back", "kept"):
                     left[cat][kind] += 1
                 else:
                     unexplained.append(f"{cat} {q} ({why or 'no decision'})")
             for q in sorted(b - a):
-                if not outcomes.get(cat, {}).get(str(q), "").startswith(("added", "corrected")):
-                    unexplained.append(f"{cat} {q} closed without a decision ({outcomes.get(cat, {}).get(str(q))})")
-    checks.add("the gap report: each slice-1 gap is closed, or on the review or held-back list", not unexplained,
+                why = outcomes.get(cat, {}).get(q, "")
+                moved_to = re.match(r"moved to (\w+): ", why)
+                if moved_to:            # e.g. a drop of an NPC that got a loot table, still short: now "loot short"
+                    if q not in gaps["after"].get(moved_to.group(1), set()):
+                        unexplained.append(f"{cat} {q} said to move to {moved_to.group(1)}, but isn't there")
+                elif not why.startswith(("added", "corrected")):
+                    unexplained.append(f"{cat} {q} closed without a decision ({why or None})")
+    checks.add("the gap report: each gap of the slices' categories is closed, or on the review or held-back list", not unexplained,
                "; ".join(unexplained[:20]))
     checks.add("the gap report: no category gains an item", not new, "; ".join(new[:10]))
 
     # the fork changes our rows between two runs of our files (rule 5: the updater runs them again later)
-    simulate(cur, conn, manifest, ours, mapping, checks)
+    for _, m in manifests:
+        SIMULATIONS.get(m["slice"], lambda *a: None)(cur, conn, m, ours, mapping, checks)
 
     if args.drop:
         drop_prefix(cur, STEP)
         drop_prefix(cur, SCRATCH)
     conn.commit()
-    result = {"slice": args.slice, "made": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "files": manifest["files"], "world": manifest["world"], "checks": checks.items, "ok": checks.ok,
-              "scratch_run": not args.skip_scratch, "timings_s": timings, "tables_changed": per_table,
-              "recorded": dict(collections.Counter(r[0] for r in recorded)),
-              "gaps_before": gaps["before_totals"], "gaps_after": gaps["after_totals"], "closed": closed,
+    result = {"slices": list(slices), "report": report_slice,
+              "made": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "files": [f for _, m in manifests for f in m["files"]], "world": manifests[-1][1]["world"], "checks": checks.items,
+              "ok": checks.ok, "scratch_run": not args.skip_scratch, "timings_s": timings, "tables_changed": per_table,
+              "recorded": dict(collections.Counter(r[0] for r in recorded)), "categories": slice_categories,
+              "gaps_before": gaps["before_counts"], "gaps_after": gaps["after_counts"], "closed": closed,
               "left": {c: dict(v) for c, v in left.items()}}
-    with open(os.path.join(args.data, args.slice, "dry-run.json"), "w") as handle:
+    with open(os.path.join(report_folder, "dry-run.json"), "w") as handle:
         json.dump(result, handle, indent=1, sort_keys=True)
-    with open(os.path.join(args.data, args.slice, "dry-run.md"), "w") as handle:
-        handle.write(report_md(result, manifest))
-    print(f"wrote {os.path.join(args.data, args.slice, 'dry-run.md')}: {'all checks pass' if checks.ok else 'CHECKS FAILED'}")
+    with open(os.path.join(report_folder, "dry-run.md"), "w") as handle:
+        handle.write(report_md(result, [m for _, m in manifests]))
+    print(f"wrote {os.path.join(report_folder, 'dry-run.md')}: {'all checks pass' if checks.ok else 'CHECKS FAILED'}")
     sys.exit(0 if checks.ok else 1)
+
+
+def diff_rows(cur, full, name, key, unique, cols):
+    """The keys (padded to 4) of rows added, removed and changed in the stepped world against the fork's. A key of a
+    table without a unique key counts as changed when the rows under it differ in any way (one more, one less, one
+    different)."""
+    on = " AND ".join(f"t.`{k}` = s.`{k}`" for k in key)
+    keys = ", ".join(f"s.`{k}`" for k in key)
+    cur.execute(f"SELECT DISTINCT {keys} FROM `{STEP}{name}` s WHERE NOT EXISTS (SELECT 1 FROM `{FORK}`.`{full}` t WHERE {on})")
+    added = {pad(r) for r in cur.fetchall()}
+    cur.execute(f"SELECT DISTINCT {keys.replace('s.', 't.')} FROM `{FORK}`.`{full}` t WHERE NOT EXISTS (SELECT 1 FROM `{STEP}{name}` s WHERE {on})")
+    removed = {pad(r) for r in cur.fetchall()}
+    if unique:
+        cur.execute(f"SELECT {keys} FROM `{STEP}{name}` s JOIN `{FORK}`.`{full}` t ON {on} WHERE {row_sql(cols, 's')} <> {row_sql(cols, 't')}")
+        return added, removed, {pad(r) for r in cur.fetchall()}
+    bare = ", ".join(f"`{k}`" for k in key)
+
+    def groups(table):
+        cur.execute(f"SELECT {bare}, COUNT(*), SUM(CAST(CONV(SUBSTRING({row_sql(cols)}, 1, 15), 16, 10) AS UNSIGNED)) "
+                    f"FROM {table} GROUP BY {bare}")
+        return {pad(r[:len(key)]): (int(r[-2]), int(r[-1])) for r in cur.fetchall()}
+    a, b = groups(f"`{STEP}{name}`"), groups(f"`{FORK}`.`{full}`")
+    return added, removed, {k for k in set(a) & set(b) if a[k] != b[k]}
+
+
+def references(cur, fork_tables, fixes):
+    """(ok, detail): every recorded row's references, and every corrected row, are in the stepped world."""
+    broken = []
+    for tbl, refs in REFERENCES.items():
+        for col, target, tkey in refs:
+            pk = primary_key(cur, FORK, fork_tables[tbl])
+            on = " AND ".join(f"r.`k{n + 1}` = w.`{k}`" for n, k in enumerate(pk))
+            cur.execute(f"SELECT w.`{col}` FROM `{STEP}{isql.IMPORT_ROWS}` r JOIN `{STEP}{tbl}` w ON {on} "
+                        f"WHERE r.tbl = %s AND NOT EXISTS (SELECT 1 FROM `{STEP}{target}` x WHERE x.`{tkey}` = w.`{col}`)", (tbl,))
+            broken += [f"{tbl}.{col} {r[0]} (no {target})" for r in cur.fetchall()]
+    for f in fixes:                     # a corrected row must still be there
+        if f["kind"] == "update":
+            where = " AND ".join(f"`{k}` = {int(v)}" for k, v in f["key"].items())
+            cur.execute(f"SELECT COUNT(*) FROM `{STEP}{f['table']}` WHERE {where}")
+            if not cur.fetchone()[0]:
+                broken.append(f"fix {f['fix']}: {f['table']} {f['key']} missing")
+    cur.execute(f"SELECT o.ID, o.Type, o.ObjectID FROM `{STEP}{isql.IMPORT_ROWS}` r JOIN `{STEP}quest_objectives` o ON r.k1 = o.ID "
+                "WHERE r.tbl = 'quest_objectives'")
+    for oid, otype, target in cur.fetchall():
+        table = {0: "creature_template", 3: "creature_template", 2: "gameobject_template"}.get(otype)
+        if table:
+            cur.execute(f"SELECT COUNT(*) FROM `{STEP}{table}` WHERE entry = %s", (target,))
+            if not cur.fetchone()[0]:
+                broken.append(f"objective {oid}: {table} {target} missing")
+        elif otype == 1:             # items live in the client's tables, not the world: forever-db's item list
+            cur.execute(f"SELECT COUNT(*) FROM `{FORK}`.src_forever_db WHERE tbl = 'item' AND id = %s", (target,))
+            if not cur.fetchone()[0]:
+                broken.append(f"objective {oid}: item {target} unknown to Forever's client data")
+        else:
+            broken.append(f"objective {oid}: type {otype} can't be checked here")
+    # loot: items in Forever's client item list, reference lists that exist, and every table some creature's loot
+    loot = "creature_loot_template"
+    rec = (f"`{STEP}{isql.IMPORT_ROWS}` r JOIN `{STEP}{loot}` w ON r.k1 = w.Entry AND r.k2 = w.ItemType AND r.k3 = w.Item "
+           f"WHERE r.tbl = '{loot}'")
+    cur.execute(f"SELECT w.Entry, w.Item FROM {rec} AND w.ItemType = 0 AND NOT EXISTS (SELECT 1 FROM `{FORK}`.src_forever_db x "
+                "WHERE x.tbl = 'item' AND x.id = w.Item)")
+    broken += [f"loot {e}: item {i} unknown to Forever's client data" for e, i in cur.fetchall()]
+    cur.execute(f"SELECT w.Entry, w.Item FROM {rec} AND w.ItemType = 1 AND NOT EXISTS (SELECT 1 FROM `{STEP}reference_loot_template` x "
+                "WHERE x.Entry = w.Item)")
+    broken += [f"loot {e}: reference list {i} missing" for e, i in cur.fetchall()]
+    cur.execute(f"SELECT w.Entry, w.ItemType, w.Item FROM {rec} AND w.ItemType NOT IN (0, 1)")
+    broken += [f"loot {e}: ItemType {t} for {i} (only items and reference lists are imported)" for e, t, i in cur.fetchall()]
+    cur.execute(f"SELECT DISTINCT w.Entry FROM {rec} AND NOT EXISTS (SELECT 1 FROM `{STEP}creature_template_difficulty` d "
+                "WHERE d.LootID = w.Entry)")
+    broken += [f"loot table {e} is no creature's" for (e,) in cur.fetchall()]
+    return not broken, "; ".join(broken[:20])
 
 
 def run_file(cur, conn, text, mapping):
@@ -426,9 +531,9 @@ def run_file(cur, conn, text, mapping):
     conn.commit()
 
 
-def simulate(cur, conn, manifest, ours, mapping, checks):
-    """Change the stepped world as a later fork file might, run our files again, and check they leave the fork's rows
-    alone. Runs last: the stepped world is changed afterwards (the scratch world is not)."""
+def simulate_slice1(cur, conn, manifest, ours, mapping, checks):
+    """Change the stepped world as a later fork file might, run slice 1's files again, and check they leave the fork's
+    rows alone. Runs last: the stepped world is changed afterwards (the scratch world is not)."""
     by_kind = {f["kind"]: f["name"] for f in manifest["files"]}
     imp, fixes = by_kind.get("import"), by_kind.get("corrections")
     # 1. a fork file takes over a quest we gave givers or enders: DELETE its rows, INSERT one of ours with its own build
@@ -471,50 +576,97 @@ def simulate(cur, conn, manifest, ours, mapping, checks):
                    cur.fetchone()[0] == 1)
 
 
-def report_md(r, manifest):
-    adds = {t: len(v) for t, v in manifest["adds"].items()}
-    fixes = manifest["fixes"]
-    rel = [f for f in fixes if f["kind"] == "relations"]
-    out = [f"# Everlake world import, {r['slice']}: dry run", "",
-           f"Made {r['made']} by tools/forever-data/import_dryrun.py against the fork world {r['world']}. "
-           f"Result: **{'every check passes' if r['ok'] else 'a check FAILED'}**.", "",
+def simulate_slice2(cur, conn, manifest, ours, mapping, checks):
+    """Slice 2 (loot): the fork removes a drop we added, or gives a creature we linked a table to its own loot table."""
+    by_kind = {f["kind"]: f["name"] for f in manifest["files"]}
+    imp, fixes = by_kind.get("import"), by_kind.get("corrections")
+    loot = "creature_loot_template"
+    # 1. a fork file rewrites a loot table we added a drop to, without that drop: a re-run must not add it back
+    cur.execute(f"SELECT k1, k2, k3 FROM `{STEP}{isql.IMPORT_ROWS}` WHERE file = %s AND tbl = %s AND k1 < %s ORDER BY k1, k3 LIMIT 1",
+                (imp, loot, manifest.get("new_loot_base", 900_000_000)))
+    row = cur.fetchone()
+    if row:
+        entry, item_type, item = row
+        cur.execute(f"DELETE FROM `{STEP}{loot}` WHERE Entry = %s AND ItemType = %s AND Item = %s", (entry, item_type, item))
+        conn.commit()
+        run_file(cur, conn, ours[imp].decode("utf-8"), mapping)
+        cur.execute(f"SELECT COUNT(*) FROM `{STEP}{loot}` WHERE Entry = %s AND ItemType = %s AND Item = %s", (entry, item_type, item))
+        checks.add(f"after the fork drops item {item} from loot table {entry} (ours), a re-run doesn't add it back",
+                   cur.fetchone()[0] == 0)
+    # 2. the fork gives a creature we linked a new table to its own loot table: the correction must not act again
+    fix = next((f for f in manifest["fixes"] if f["kind"] == "update"), None)
+    if fix and fixes:
+        npc = fix["key"]["Entry"]
+        cur.execute(f"UPDATE `{STEP}creature_template_difficulty` SET LootID = %s, VerifiedBuild = 70900 WHERE Entry = %s AND DifficultyID = 0",
+                    (npc, npc))
+        conn.commit()
+        run_file(cur, conn, ours[fixes].decode("utf-8"), mapping)
+        run_file(cur, conn, ours[imp].decode("utf-8"), mapping)
+        cur.execute(f"SELECT LootID FROM `{STEP}creature_template_difficulty` WHERE Entry = %s AND DifficultyID = 0", (npc,))
+        checks.add(f"after the fork links creature {npc}'s own loot table, a re-run of slice 2 leaves it", cur.fetchone()[0] == npc)
+    if not row and not fix:
+        checks.add("slice 2: nothing to simulate (no rows)", True)
+
+
+SIMULATIONS = {"slice1": simulate_slice1, "slice2": simulate_slice2}
+
+
+def report_md(r, manifests):
+    out = [f"# Everlake world import: dry run of {', '.join(r['slices'])}", "",
+           f"Made {r['made']} by tools/forever-data/import_dryrun.py against the fork world {r['world']}, with every "
+           f"file of every slice. Result: **{'every check passes' if r['ok'] else 'a check FAILED'}**.", "",
            "## Files", ""]
     out += [f"- `{f['name']}` ({f['kind']}, SHA1 {f['sha1'][:12]})" for f in r["files"]]
-    out += ["", "## What the files do", "",
-            "| | Rows |", "|---|---|"]
-    out += [f"| add `{t}` | {n} |" for t, n in sorted(adds.items())]
-    out += [f"| corrections: other givers or enders | {len(rel)} quests: {sum(len(f['add']) for f in rel)} rows added, "
-            f"{sum(len(f['delete']) for f in rel)} fork rows removed |",
-            f"| corrections: empty text filled in | {sum(1 for f in fixes if f['kind'] == 'update')} |",
-            f"| close calls (review list, not in the files) | {len(manifest['review'])} |",
-            f"| held back | {len(manifest['held_back'])} |", ""]
-    out += ["Objective rows: " + (f"written with Flags,Flags2 = {manifest['objective_flags']}" if manifest["objective_flags"]
-                                  else "none written: no public source records their Flags (see held back)") + ".", ""]
+    out += ["", "## What the files do", "", "| Slice | | Rows |", "|---|---|---|"]
+    for m in manifests:
+        s = m["slice"]
+        out += [f"| {s} | add `{t}` | {len(v)} |" for t, v in sorted(m["adds"].items())]
+        rel = [f for f in m["fixes"] if f["kind"] == "relations"]
+        if rel:
+            out.append(f"| {s} | corrections: other givers or enders | {len(rel)} quests: {sum(len(f['add']) for f in rel)} rows added, "
+                       f"{sum(len(f['delete']) for f in rel)} fork rows removed |")
+        upd = collections.Counter(f["table"] for f in m["fixes"] if f["kind"] == "update")
+        out += [f"| {s} | corrections: `{t}` rows changed | {n} |" for t, n in sorted(upd.items())]
+        basis = collections.Counter(r.get("basis") for rs in m["adds"].values() for r in rs if r.get("basis"))
+        out += [f"| {s} | ... of them with their chance from {b} | {n} |" for b, n in sorted(basis.items())]
+        out += [f"| {s} | review list (not in the files) | {len(m['review'])} |", f"| {s} | held back | {len(m['held_back'])} |"]
+    out.append("")
+    for m in manifests:
+        if "objective_flags" in m:
+            out += [f"{m['slice']} objective rows: " + (f"written with Flags,Flags2 = {m['objective_flags']}" if m["objective_flags"]
+                                                        else "none written: no public source records their Flags (see held back)") + ".", ""]
+        if "classic_only" in m:
+            out += [f"{m['slice']}: drops only Classic data shows (forever-db's drop rows, which are pfQuest/VMaNGOS and CMaNGOS) are "
+                    + ("added with their Classic chance; each such row's note in `everlake_import_rows` and the file's comment says "
+                       "`classic forever-db N% (pfQuest/CMaNGOS)`, so a later Forever recording can replace it"
+                       if m["classic_only"] == "add" else "held back")
+                    + f". EG Link's chance needs {m['min_kills']} recorded kills; rows with an EG Link chance say `eg-link drops/kills`.", ""]
     out += ["## Runs", ""]
-    out.append(f"- Stepped (the fork world as deployed, then our files): {r['timings_s'].get('stepped', '?')} s.")
+    out.append(f"- Stepped (the fork world as deployed, then all our files): {r['timings_s'].get('stepped', '?')} s.")
     out.append("- From scratch (the world release, then every fork file and ours in name order): "
                + (f"{r['timings_s'].get('scratch', '?')} s." if r["scratch_run"] else "skipped (--skip-scratch)."))
     out += ["", "## Checks", ""]
     out += [f"- {'pass' if c['ok'] else '**FAIL**'}: {c['check']}" + (f" ({c['detail']})" if c["detail"] and not c["ok"] else "")
             for c in r["checks"]]
-    out += ["", "Tables changed against the fork world (rows): " +
+    out += ["", "Tables changed against the fork world (keys): " +
             ", ".join(f"`{t}` +{v['added']} -{v['removed']} ~{v['changed']}" for t, v in sorted(r["tables_changed"].items())), ""]
-    out += ["## Gap report, before and after", "", "| Gap | Before | After | Closed | Left: review | Left: held back | Left: kept |",
-            "|---|---|---|---|---|---|---|"]
-    for cat in SLICE_CATEGORIES:
+    out += ["## Gap report, before and after", "", "Loot gaps count drops (npc and item); the rest count quests.", "",
+            "| Gap | Before | After | Closed | Left: review | Left: held back | Left: kept |", "|---|---|---|---|---|---|---|"]
+    for cat in r["categories"]:
         left = r["left"].get(cat, {})
         out.append(f"| {cat} | {r['gaps_before'].get(cat, 0)} | {r['gaps_after'].get(cat, 0)} | {r['closed'].get(cat, 0)} | "
                    f"{left.get('review', 0)} | {left.get('held back', 0)} | {left.get('kept', 0)} |")
-    others = [c for c in r["gaps_before"] if c not in SLICE_CATEGORIES and r["gaps_before"][c] != r["gaps_after"].get(c)]
+    others = [c for c in r["gaps_before"] if c not in r["categories"] and r["gaps_before"][c] != r["gaps_after"].get(c)]
     out += ["", "Other categories: " + ("unchanged." if not others else "changed: " + ", ".join(
         f"{c} {r['gaps_before'][c]} -> {r['gaps_after'].get(c)}" for c in others)), ""]
-    held = collections.Counter(h.get("reason") or h["why"] for h in manifest["held_back"])
-    out += ["## Held back, by reason", "", "Full list: held-back.md.", ""]
-    out += [f"- {n} x {why}" for why, n in held.most_common()]
-    out += ["", "## Close calls", "", "Full list: review.md.", ""]
-    review = collections.Counter(i["category"] for i in manifest["review"])
-    out += [f"- {cat}: {n}" for cat, n in sorted(review.items())]
-    return "\n".join(out) + "\n"
+    for m in manifests:
+        held = collections.Counter(h.get("reason") or h["why"] for h in m["held_back"])
+        out += [f"## {m['slice']}: held back, by reason", "", f"Full list: slices/{m['slice']}/held-back.md.", ""]
+        out += [f"- {n} x {why}" for why, n in held.most_common()]
+        out += ["", f"## {m['slice']}: review list", "", f"Full list: slices/{m['slice']}/review.md.", ""]
+        review = collections.Counter(i["category"] for i in m["review"])
+        out += [f"- {cat}: {n}" for cat, n in sorted(review.items())] + [""]
+    return "\n".join(out).rstrip() + "\n"
 
 
 if __name__ == "__main__":

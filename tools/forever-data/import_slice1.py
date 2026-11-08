@@ -15,8 +15,8 @@ Reads acore_forever (the pinned sources and the fork world, tc_*); writes only f
   progress and completion texts), each with a note of the sources that gave it;
 - sql/world/YYYY_MM_DD_01_world_everlake_import_slice1_corrections.sql: changes to fork rows (other givers or enders,
   an empty text filled in), each guarded so it only acts while the fork row is still what it was written against;
-- slice1/manifest.json (every decision, for import_dryrun.py), slice1/review.md (close calls, not written into the
-  files) and slice1/held-back.md (rows that need something we don't have, with why).
+- slices/slice1/manifest.json (every decision, for import_dryrun.py), review.md (close calls, not written into the
+  files) and held-back.md (rows that need something we don't have, with why).
 
 Every value comes from the weighted vote (source_weights.py) over every source, the fork's own Forever beta sniffs
 included (tc-sniff); the fork's converted Classic rows only count where no Forever source speaks. The generated SQL is
@@ -430,7 +430,7 @@ def main():
 
 def write(args, names, sl, pins, world_label, col_info, types, flags):
     sql_dir = os.path.join(args.out, "sql", "world")
-    meta_dir = os.path.join(args.out, SLICE)
+    meta_dir = os.path.join(args.out, "slices", SLICE)
     os.makedirs(sql_dir, exist_ok=True)
     os.makedirs(meta_dir, exist_ok=True)
 
