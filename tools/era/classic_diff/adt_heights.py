@@ -1,6 +1,6 @@
 """Terrain heights (MCVT) of 40 random Azeroth/Kalimdor tiles whose files differ between Forever and Classic Era:
 real ground change, or the same ground re-exported?"""
-import glob, os, random, re, sqlite3, struct, sys
+import os, random, re, struct, sys
 S = sys.argv[1]; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tact"))
 import tact
 F, E = tact.Tact(S + "/cache-wowf", "wowf", log=lambda *a: None), tact.Tact(S + "/cache-era", "wow_classic_era", log=lambda *a: None)

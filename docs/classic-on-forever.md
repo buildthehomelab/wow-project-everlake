@@ -77,9 +77,9 @@ and Forever's `ItemSparse` may lack rows that Blizzard sends as live hotfixes, s
    helps if the problem is the first download rather than the row count.
 3. **Talents:** Classic's trees are already in the client's files; they need building as trait trees for Forever's
    talent frame, the way Test 1 built the Death Knight tree.
-4. **A choice for the user: Classic's look.** Forever uses the HD character models. A 1:1 look means the Classic realm
-   points 7,335 creature displays back at the original models. Whether Forever's build still holds the original model
-   files as they were wasn't checked: 4,338 character files share ids with Classic Era but differ in bytes.
+4. **Classic's look: Forever's models (decided by the user, 2026-11-08).** Forever uses the HD character models;
+   Classic keeps them, because it's less work and both realms look the same. So the 7,335 `CreatureDisplayInfo` rows
+   that differ only by model are **not** sent, and Classic's row count drops by that much.
 5. **TBC and WotLK later:** Forever has no Outland or Northrend terrain, so those continents come in the same way as
    Sunstrider Isle did. Much of their art is probably already in Forever's build.
 
