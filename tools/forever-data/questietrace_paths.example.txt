@@ -1,0 +1,3 @@
+# QuestieTrace files to pin as questietrace-own: one path or glob per line (~ allowed).
+# We record nothing ourselves (no live Forever account). Only add QuestieTrace SavedVariables files or text files
+# holding /qlt export strings that someone else has shared.

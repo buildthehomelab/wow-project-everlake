@@ -29,6 +29,7 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 | `docker/entrypoint.sh` | Writes the server configs from the environment on every start |
 | `docker/patches/` | Fixes on top of the core that aren't merged upstream yet |
 | `scripts/gen-certs.sh` | Your own root CA (limited to `*.actual.battle.net`) and the login server certificate |
+| `tools/forever-data/` | Public Forever data pinned daily into its own database, and a report of what Everlake's world lacks ([notes](tools/forever-data/README.md)) |
 | `tools/tact/` | Gate 2: `patch.py` makes a build that is Blizzard's plus our files, `cdn.py` serves it ([notes](docs/custom-files.md)) |
 | `client/macos/everlake-client.sh` | Sets up a Mac to play here (hosts entry, CA, key patch, game copy) and starts the game |
 | `docs/client-connection.md` | What a client needs to connect, and why |
