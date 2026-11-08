@@ -10,7 +10,7 @@ release (the `tc_*` tables here); every other source is a view of the live game.
 | Load each source | `load_sources.py` | `src_<source>` tables + `src_pins` |
 | Load the fork's world | `load_tc.py` | `tc_<table>` (TrinityCore layout): the release plus the fork's `sql/updates` and `sql/custom` world files, run as Everlake's worldserver runs them; `tc_updates` lists every update file in it |
 | What Everlake's world lacks | `gap_report.py [--zone NAME] [--world SCHEMA.PREFIX]` | `reports/everlake-gaps.md` + `.json` |
-| Write an import slice | `import_slice1.py`, `import_slice2.py`, `import_slice3.py` | update files, review and held-back lists in `world-data/` (gitignored) |
+| Write an import slice | `import_slice1.py` ... `import_slice4.py` | update files, review and held-back lists in `world-data/` (gitignored) |
 | Dry-run them | `import_dryrun.py` | two worlds in `acore_world_dryrun` (`elscratch_*`, `elstep_*`), `world-data/slices/<newest>/dry-run.md` |
 
 Nothing here writes Everlake's own databases. The import (docs/forever-import.md) is written as ordinary update files,
@@ -216,6 +216,35 @@ window lists what the NPC offers, so one is enough.
 The import file adds a row only where it is missing, never again once added (a row the fork removes stays removed), a
 trainer spell only while a creature uses the list, and a vendor item only while the vendor doesn't already sell the item
 at another price.
+
+## Import, slice 4: spawns
+
+`import_slice4.py --maps DIR` writes slice 4: spawns (`creature`, `gameobject`) for NPCs and objects that have a
+template but no spawn, and NPCs' spots far from every spawn they have (`npcs_not_spawned`, `objects_not_spawned`,
+`extra_spots`). `DIR` is Everlake's extracted maps folder (the worldserver's `data/maps`); `terrain.py` reads its
+`.map` tiles (version 10) the way the worldserver does (`GridMap`), terrain and water only.
+
+The user's decisions (2026-11-08):
+
+- A point comes from forever-db (QuestieDB's points, with a height where a CMaNGOS spawn stands within 3 yards) and goes
+  in only where a live Forever sighting of that NPC or object lies within 40 yards (EG Link's combat-log positions,
+  deaths, loot and windows on live builds). forever-db's points are largely Classic data: holiday and invasion NPCs,
+  test NPCs, WotLK ones. Only a few dozen of the 934 unspawned NPCs were ever seen live.
+- Nothing summoned (by the fork's SmartAI or a client spell) or, for an NPC the fork doesn't spawn, scripted.
+- A point with no height takes the terrain height, except in a dungeon or battleground, in water, or where a fork
+  spawn within 10 yards stands more than 2 yards off the ground (a building, bridge or cave). Checked against the
+  fork's own spawns: the terrain height is within a yard of 83% of them, median 0.08 yards.
+- A unique NPC (elite, rare, boss, or one that gives quests, sells or trains) with several points, or an extra spot next
+  to its spawn, goes to the review list: it may be one NPC on a patrol.
+- Guids from 900,000,000, creatures and objects each; a later slice continues after the manifest's `guids_used` and
+  above the live realm's highest guid (the worldserver gives a GM's `.npc add` the highest guid + 1, inside this block
+  once these spawns are in).
+
+Values no source has: orientation 0 and rotation (0, 0, 0, 1); an extra spot copies its phases, difficulty, equipment,
+respawn and wandering from the NPC's nearest fork spawn (standing still where that one walks a path); a new NPC takes
+the commonest respawn and wandering of the fork's NPCs of its classification on that map, an object those of its type.
+The import file adds a spawn only while the fork has no spawn of the same NPC or object within 40 yards but ours, and
+never again once added.
 
 ## Dry run (every slice)
 

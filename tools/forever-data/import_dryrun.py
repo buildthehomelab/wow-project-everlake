@@ -74,6 +74,8 @@ REFERENCES = {
     "quest_objectives": [("QuestID", "quest_template", "ID")],
     "trainer_spell": [("TrainerId", "trainer", "Id")],
     "npc_vendor": [("entry", "creature_template", "entry")],
+    "creature": [("id", "creature_template", "entry")],
+    "gameobject": [("id", "gameobject_template", "entry")],
 }
 
 
@@ -655,7 +657,33 @@ def simulate_slice3(cur, conn, manifest, ours, mapping, checks):
         checks.add("slice 3: nothing to simulate (no rows)", True)
 
 
-SIMULATIONS = {"slice1": simulate_slice1, "slice2": simulate_slice2, "slice3": simulate_slice3}
+def simulate_slice4(cur, conn, manifest, ours, mapping, checks):
+    """Slice 4 (spawns): the fork removes a spawn we added, or (on a realm where it came first) spawns the same NPC close to
+    one of our points."""
+    imp = next(f["name"] for f in manifest["files"] if f["kind"] == "import")
+    cur.execute(f"SELECT k1 FROM `{STEP}{isql.IMPORT_ROWS}` WHERE file = %s AND tbl = 'creature' ORDER BY k1 LIMIT 2", (imp,))
+    got = [r[0] for r in cur.fetchall()]
+    if len(got) < 2:
+        checks.add("slice 4: nothing to simulate (fewer than two spawns)", True)
+        return
+    gone, near = got
+    cur.execute(f"DELETE FROM `{STEP}creature` WHERE guid = %s", (gone,))
+    cur.execute(f"SELECT id, map, position_x, position_y, position_z FROM `{STEP}creature` WHERE guid = %s", (near,))
+    i, m, x, y, z = cur.fetchone()
+    cur.execute(f"DELETE FROM `{STEP}creature` WHERE guid = %s", (near,))
+    cur.execute(f"DELETE FROM `{STEP}{isql.IMPORT_ROWS}` WHERE tbl = 'creature' AND k1 = %s", (near,))
+    cur.execute(f"SELECT MAX(guid) + 1 FROM `{STEP}creature` WHERE guid < 900000000")
+    fork_guid = cur.fetchone()[0]
+    cur.execute(f"INSERT INTO `{STEP}creature` (guid, id, map, position_x, position_y, position_z, VerifiedBuild) VALUES (%s, %s, %s, %s, %s, %s, 70900)",
+                (fork_guid, i, m, x + 10, y, z))
+    conn.commit()
+    run_file(cur, conn, ours[imp].decode("utf-8"), mapping)
+    cur.execute(f"SELECT COUNT(*) FROM `{STEP}creature` WHERE guid IN (%s, %s)", (gone, near))
+    checks.add(f"after the fork removes spawn {gone} (ours), and where it spawned NPC {i} 10 yards from our point first, "
+               "a re-run adds neither", cur.fetchone()[0] == 0)
+
+
+SIMULATIONS = {"slice1": simulate_slice1, "slice2": simulate_slice2, "slice3": simulate_slice3, "slice4": simulate_slice4}
 
 
 def report_md(r, manifests):
