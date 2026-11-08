@@ -120,6 +120,21 @@ If Fresh is close enough, the option is done with Blizzard's own art. If the Chi
 next step is a merged model: the China body as geoset 2903 in Blizzard's model (a third Skin Type value), the
 normal body moved from geoset 0 to 2901, and the jaw choices made to depend on it (RelatedChrCustomizationChoiceID).
 
+## Result 4 (2026-11-08): Fresh + a China skin colour is the look
+
+With China mode off, Fresh with Skin Color 7-12 (the China colours, textures `skin00_12`-`17_hd`) on Blizzard's normal
+model looks like the China Undead: no model merge needed. (A first try drew black parts: most likely the China
+textures still streaming into the test copy.) The Skin Color option was there all along, under the head tab.
+
+But the choice didn't stick: Blizzard pairs skin colours with Skin Type (ChrCustomizationReqChoice). Normal colours
+need Bony (requirements 61/66); China colours need Fresh (4976/4977), and those requirements, like Fresh's own (4975),
+also have OverrideArchive 1 (China setting only). The creator drops the China colour, picks a normal one, and that
+one pulls Skin Type back to Bony.
+
+**Fix** (push 9570005, `sql/everlake/2026_11_08_05_hotfixes_undead_china_colours.sql`): requirements 4975-4977 with
+OverrideArchive -1. The Fresh pairing stays. `2026_11_08_04` is removed: it would have made the China colours need
+Bony, and it never ran on the server.
+
 ## What each result means
 
 - **China shows a whole body**: per-character China look works. Left to do: the China skin textures per skin colour
