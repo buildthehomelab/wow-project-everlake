@@ -90,6 +90,9 @@ services:
       TC_PLAYERBOT_WORLD_ZONE_BOTS: "15"
       TC_PLAYERBOT_WORLD_START_ZONE_BOTS: "10"
       TC_PLAYERBOT_WORLD_POOL_MAX: "120"
+      # The bots' log (logs/Playerbot.log) on the console too, so the log viewer shows why world bots don't appear
+      # ("[world] ..." lines: no navmesh around the player, memory budget, roster, spawns)
+      TC_LOGGER_PLAYERBOT_V2: "3,Console Playerbot"
     stdin_open: true
     tty: true
     stop_grace_period: 2m
