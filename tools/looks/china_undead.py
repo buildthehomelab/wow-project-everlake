@@ -33,6 +33,11 @@ MODELS = {
                [997389, 1080445, 1080444, 2132581, 4876495, 4876496, 4876497]),
 }
 SKELETONS = {"male": 2140228, "female": 2140222}
+# Skin colour 0's body texture (1024x512), for the (C) models: a skinned model gets no character skin (texture type 1
+# draws black, seen 2026-11-08), so (C) names the China copy of this texture directly instead.
+SKIN_TEXTURES = {"male": 959282, "female": 1019816}
+# (C) ids: after the 16 files above. Male: model 95450017, texture 95450018; female: 95450019, 95450020.
+FIRST_C_FDID = 95450017
 
 
 def low_violence_files(t):
@@ -104,6 +109,32 @@ def set_skins(model, skins):
     raise SystemExit("model has no SFID chunk")
 
 
+def named_skin(model, texture):
+    """The model with its character-skin texture (type 1) replaced by a named texture (type 0, the FileDataID in TXID)."""
+    md_at = model.index(b"MD21") + 8
+    ntex, otex = struct.unpack_from("<2I", model, md_at + 0x50)
+    at = 0
+    while at + 8 <= len(model):
+        size = struct.unpack_from("<I", model, at + 4)[0]
+        if model[at:at + 4] == b"TXID":
+            txid_at = at + 8
+            break
+        at += 8 + size
+    else:
+        raise SystemExit("model has no TXID chunk")
+    out = bytearray(model)
+    swapped = 0
+    for i in range(ntex):
+        kind = struct.unpack_from("<I", out, md_at + otex + i * 16)[0]
+        if kind == 1:
+            struct.pack_into("<II", out, md_at + otex + i * 16, 0, 3)  # named, wrap both ways
+            struct.pack_into("<I", out, txid_at + i * 4, texture)
+            swapped += 1
+    if swapped != 1:
+        raise SystemExit("expected one skin texture, found %d" % swapped)
+    return bytes(out)
+
+
 def chunk(model, cid):
     at = 0
     while at + 8 <= len(model):
@@ -124,7 +155,7 @@ def main():
     lv = low_violence_files(t)
     print("%d LowViolence enUS files" % len(lv))
     os.makedirs(args.out, exist_ok=True)
-    rows, fdid = [], FIRST_FDID
+    rows, fdid, c_fdid = [], FIRST_FDID, FIRST_C_FDID
     for sex, (path, model_id, skin_ids) in MODELS.items():
         model = read_china(t, lv, model_id)
         sfid = struct.unpack("<7I", chunk(model, b"SFID"))
@@ -145,6 +176,15 @@ def main():
         rows.append((new_model, "m2", "%s (China copy of %d)" % (path, model_id)))
         print("%s: model %d -> %d (%d bytes), skins %s -> %d-%d" % (sex, model_id, new_model, len(data), skin_ids,
                                                                   new_skins[0], new_skins[-1]))
+        # (C): the same model with the China skin texture named in it
+        tex_id, c_model, c_tex = SKIN_TEXTURES[sex], c_fdid, c_fdid + 1
+        c_fdid += 2
+        tex = read_china(t, lv, tex_id) if tex_id in lv else t.read(tex_id)
+        open(os.path.join(args.out, str(c_tex)), "wb").write(tex)
+        rows.append((c_tex, "blp", "China copy of %d (skin colour 0 body texture)" % tex_id))
+        open(os.path.join(args.out, str(c_model)), "wb").write(named_skin(data, c_tex))
+        rows.append((c_model, "m2", "%s (China copy of %d, skin texture %d named)" % (path, model_id, c_tex)))
+        print("%s (C): model %d with texture %d (China copy of %d)" % (sex, c_model, c_tex, tex_id))
     with open(os.path.join(args.out, "files.tsv"), "w") as f:
         for new, kind, note in sorted(rows):
             f.write("%d\t%s\t%s\n" % (new, kind, note))
