@@ -97,6 +97,8 @@ services:
       - ${DATA_DIR:-./data}:/opt/trinitycore/data:ro
       - ./overrides:/opt/trinitycore/overrides:ro
       - logs-ptr:/opt/trinitycore/logs
+      # the repo's entrypoint, so its changes reach the PTR with git pull and a restart, without a rebuild
+      - ./docker/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
 
 networks:
   everlake:
