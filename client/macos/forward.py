@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Forwards the Everlake ports from this Mac's 127.0.0.1 to the server.
 
-    forward.py <server address> [port ...]      (default ports: 1119 8081 8085 8086 8095)
+    forward.py <server address> [port | port@address ...]   (default ports: 1119 8081 8085 8086 8095)
+
+port@address sends that port to another machine than the server (the gate2 CDN may run on another Mac).
 
 Why: since macOS 15, an app needs the Local Network permission to connect to other machines on the LAN. The
 re-signed game copy doesn't get it (macOS blocks it without asking), while Terminal has it. Connections to
@@ -51,13 +53,18 @@ async def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
     server = sys.argv[1]
-    ports = [int(p) for p in sys.argv[2:]] or PORTS
+    targets = [(int(p.partition("@")[0]), p.partition("@")[2] or server) for p in sys.argv[2:]] \
+        or [(p, server) for p in PORTS]
+    ports = [p for p, _ in targets]
     # macOS lets a normal user listen on a port below 1024 (80, the gate2 CDN) only on every address, not on
     # 127.0.0.1 alone ("permission denied" without sudo). Those ports listen on 0.0.0.0: the LAN could then reach this
     # Mac's port 80, which only leads to the server's CDN, already open to the LAN itself. The others stay local.
-    servers = [await asyncio.start_server(handler(server, p), "0.0.0.0" if p < 1024 else "127.0.0.1", p)
-               for p in ports]
+    servers = [await asyncio.start_server(handler(host, p), "0.0.0.0" if p < 1024 else "127.0.0.1", p)
+               for p, host in targets]
     print(f"[forward] 127.0.0.1:{','.join(map(str, ports))} -> {server}", flush=True)
+    for p, host in targets:
+        if host != server:
+            print(f"[forward] port {p} -> {host}", flush=True)
     # our own pid, once every port listens: macOS's /usr/bin/python3 is a stub that runs the real Python as a child,
     # so the pid the shell saw isn't the one holding the ports
     if os.environ.get("FORWARD_PID_FILE"):
