@@ -136,6 +136,48 @@ configure_worldserver() {
     # client's build like bnetserver does, so it needs the same extra builds, or a 70790 client finds no realm there.
     setkey "$f" Realm.AlsoAcceptBuilds "\"$ALSO_ACCEPT_BUILDS\""
     apply_overrides "$f" worldserver
+    configure_playerbots
+}
+
+# Bots (WoW Forever Bots, src/modules/PlayerbotV2): worldserver.conf.d/playerbot.conf from its .dist on every start, then
+# overrides/playerbot.conf. The build's own active defaults (zz-forever-bots.conf: world bots, auction house bot, raid
+# bots; zz-forever-lfg.conf: dungeon finder fill) stay as installed; overrides/playerbot.conf is read last and wins.
+configure_playerbots() {
+    local dir="$ETC/worldserver.conf.d"
+    [ -f "$dir/playerbot.conf.dist" ] || return 0
+    cp "$dir/playerbot.conf.dist" "$dir/playerbot.conf"
+    apply_overrides "$dir/playerbot.conf" playerbot
+    # worldserver reads worldserver.conf.d in name order, so the zz-* defaults would win over playerbot.conf:
+    # put the overrides in a file read after them too
+    if [ -f "$OVERRIDES/playerbot.conf" ]; then
+        { echo "[worldserver]"; grep -E '^[[:space:]]*[A-Za-z][A-Za-z0-9_.]*[[:space:]]*=' "$OVERRIDES/playerbot.conf"; } > "$dir/zz-9-overrides.conf"
+    else
+        rm -f "$dir/zz-9-overrides.conf"
+    fi
+}
+
+# The bots' shared database (`playerbot`, Playerbot.SharedDatabase): docker/mysql-init creates it on a new MySQL
+# volume, docker/mysql-init/02-playerbot.sh on an existing one. Its schema and static data (names, templates, dungeon
+# routes) are loaded here once, as the TrinityCore user; the module applies its own migrations (sql/playerbot_v2) when
+# worldserver starts. Bots also need the navigation meshes (mmaps) and MMAP_PATHFINDING=1, or they stand still.
+prepare_playerbot_db() {
+    local sql=/src/TrinityCore/sql/playerbot_shared
+    [ -f "$sql/playerbot_shared_schema.sql" ] || return 0
+    # SHOW DATABASES lists only the databases this user has rights on
+    if ! mysql_q "SHOW DATABASES LIKE 'playerbot'" | grep -q playerbot; then
+        echo "[entrypoint] ERROR: database 'playerbot' is missing or not granted to ${DB_USER}."
+        echo "[entrypoint] Existing MySQL volume: run docker/mysql-init/02-playerbot.sh once (README, Bots)."
+        exit 1
+    fi
+    if [ "$(mysql_q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='playerbot'")" = "0" ]; then
+        echo "[entrypoint] loading the playerbot schema and static data (once)..."
+        MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" < "$sql/playerbot_shared_schema.sql"
+        MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" playerbot < "$sql/playerbot_shared_data.sql"
+        echo "[entrypoint] playerbot database ready"
+    fi
+    if [ "${MMAP_PATHFINDING:-0}" != 1 ] || [ ! -d "$ROOT/data/mmaps" ]; then
+        echo "[entrypoint] WARNING: bots need mmaps in the data folder and MMAP_PATHFINDING=1, or they cannot walk (README, Bots)."
+    fi
 }
 
 configure_bnetserver() {
@@ -250,6 +292,7 @@ case "${1:-worldserver}" in
         write_client_build_override
         check_data
         wait_for_mysql
+        prepare_playerbot_db
         exec "$ROOT/bin/worldserver" -c "$ETC/worldserver.conf" "$@"
         ;;
     bnetserver)

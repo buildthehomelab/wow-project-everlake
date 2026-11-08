@@ -32,6 +32,7 @@ services:
       TC_PLAYERBOT_WORLD_ENABLE: "0"
       TC_AUCTION_HOUSE_BOT_SELLER_ENABLED: "0"
       TC_AUCTION_HOUSE_BOT_BUYER_ENABLED: "0"
+      TC_PLAYERBOT_LFG_ENABLE: "0"   # no dungeon finder bot fill either: the bots' database belongs to realm 1
     stdin_open: true
     tty: true
     stop_grace_period: 2m

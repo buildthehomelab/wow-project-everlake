@@ -1,4 +1,5 @@
-# Everlake server image: TrinityCore "forever" branch (advocaite/TrinityCore) for the WoW Forever client.
+# Everlake server image: our core fork (buildthehomelab/wow-trinitycore-everlake, branch everlake: advocaite's "forever"
+# plus the WoW Forever Bots module and the changes we took, see its docs/upstream-prs.md) for the WoW Forever client.
 # Based on jibay442/forever_docker (GPL-2.0). The core is pinned to one commit so the server, the frozen client
 # build and the extracted data always match; bump TC_COMMIT on purpose, never by accident.
 #
@@ -17,9 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libmysqlclient-dev libssl-dev libbz2-dev libreadline-dev libncurses-dev libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
 
-ARG TC_REPO=https://github.com/advocaite/TrinityCore.git
-# forever branch 2026-11-08: client 1.60.1.70862 (realms on 70862; bnetserver and the worldservers also let 70790 in, docker/entrypoint.sh)
-ARG TC_COMMIT=2ae1313e9f89ba34103fee1400dc3d4222efd8c4
+ARG TC_REPO=https://github.com/buildthehomelab/wow-trinitycore-everlake.git
+# everlake branch 2026-11-08 (PR #2: advocaite forever-bots @ 19bdc6af66 on forever 2ae1313e): client 1.60.1.70862
+# (realms on 70862; bnetserver and the worldservers also let 70790 in, docker/entrypoint.sh)
+ARG TC_COMMIT=d4fcfa58b71be15b9949634b5721e862a299df6b
 RUN git init -q /src/TrinityCore \
     && git -C /src/TrinityCore remote add origin "${TC_REPO}" \
     && git -C /src/TrinityCore fetch -q --depth 1 origin "${TC_COMMIT}" \
@@ -41,6 +43,7 @@ RUN cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/opt/trinitycore \
         -DTOOLS=${TOOLS} \
+        -DBUILD_PLAYERBOT_V2=1 \
         -DWITH_WARNINGS=0 \
     && make -j"${BUILD_JOBS}" \
     && make install

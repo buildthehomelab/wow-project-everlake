@@ -9,6 +9,8 @@
 #   CASC_PRODUCT  wowf (WoW Forever) by default
 #   CASC_REGION   us by default
 #   EXTRACT_MMAPS=1 also generates mmaps (long; only needed with MMAP_PATHFINDING=1)
+#   MMAPS_ONLY=1  only the navigation meshes (mmaps) the bots and MMAP_PATHFINDING=1 need, from the maps and vmaps
+#                 already in the data folder (long; no download)
 #   DBC_ONLY=1    only dbc and gt (mapextractor -e 10), for a client update that changes table contents but no map
 #                 files (e.g. 70790 -> 70862); maps, vmaps and mmaps stay as they are
 #
@@ -19,6 +21,16 @@ OUT=/opt/trinitycore/data
 BIN=/opt/trinitycore/bin
 PRODUCT="${CASC_PRODUCT:-wowf}"
 REGION="${CASC_REGION:-us}"
+
+# MMAPS_ONLY=1: only the mmaps, from the maps and vmaps already extracted (same call as EXTRACT_MMAPS=1 below)
+if [ "${MMAPS_ONLY:-0}" = 1 ]; then
+    [ -d "$OUT/maps" ] && [ -d "$OUT/vmaps" ] || { echo "[extract] ERROR: mmaps need maps and vmaps first (run the extractor once without MMAPS_ONLY)"; exit 1; }
+    echo "[extract] === mmaps_generator only (long)"
+    cd "$OUT"
+    "$BIN/mmaps_generator" --threads "$(nproc)"
+    echo "[extract] done:"; du -sh "$OUT/mmaps"
+    exit 0
+fi
 
 if [ "${CASC_REMOTE:-1}" = 1 ]; then
     SRC=/cache
