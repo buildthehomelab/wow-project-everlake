@@ -120,9 +120,9 @@ How it decides:
   race name filled in) are a close call. Emotes are 0, as in every sniffed Forever row. Imported rows carry
   `VerifiedBuild` 0, so later votes don't count them as a sniff.
 - Objective rows need Forever's own objective ids, which only EG Link's quest records have (forever-db has kind, target
-  and count). No public source records objective `Flags`/`Flags2` (sniffed Forever objectives mostly use 32 and 0 or 1),
-  so objectives are held back unless `--objective-flags FLAGS,FLAGS2` decides them. Area trigger and reputation
-  objectives need more than a `quest_objectives` row and are always held back.
+  and count). No public source records objective `Flags`/`Flags2`: they are 32 and 0 (decided 2026-11-08; 32 is what
+  94% of sniffed Forever objectives use), `--objective-flags F,F2` or `none` to hold every objective back. Area trigger
+  and reputation objectives need more than a `quest_objectives` row and are always held back.
 
 How the files are written (`import_sql.py`): an import file adds rows through a temporary stage table, marks the rows
 the world is missing, inserts exactly those and records their keys with its own file name in `everlake_import_rows`; a
