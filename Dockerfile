@@ -72,6 +72,36 @@ RUN curl -fL --retry 3 -o tdb.7z "${TDB_URL}" \
     && ! grep -l 'DEFINER=' /tdb/*.sql \
     && ls -la /tdb
 
+############################ world data ############################
+# The Forever world import (docs/forever-import.md): update files from buildthehomelab/wow-everlake-world-data, pinned by
+# commit (full SHA). Empty (the default) takes none. The files land in the world database, so they reach every realm
+# that uses that database and every realm started from the image: set WORLD_DATA_COMMIT only in a compose project with
+# its own world database and its own EVERLAKE_IMAGE_TAG (the PTR realm first), never on the shared default image.
+FROM ubuntu:${UBUNTU_VERSION} AS worlddata
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG WORLD_DATA_REPO=https://github.com/buildthehomelab/wow-everlake-world-data.git
+ARG WORLD_DATA_COMMIT=
+RUN mkdir -p /world-data \
+    && if [ -n "${WORLD_DATA_COMMIT}" ]; then \
+        echo "${WORLD_DATA_COMMIT}" | grep -Eq '^[0-9a-f]{40}$' || { echo "WORLD_DATA_COMMIT: a full 40-character commit SHA"; exit 1; }; \
+        apt-get update && apt-get install -y --no-install-recommends ca-certificates git && rm -rf /var/lib/apt/lists/* \
+        && git init -q /src/world-data \
+        && git -C /src/world-data remote add origin "${WORLD_DATA_REPO}" \
+        && git -C /src/world-data fetch -q --depth 1 origin "${WORLD_DATA_COMMIT}" \
+        && git -C /src/world-data checkout -q FETCH_HEAD \
+        && [ -d /src/world-data/sql/world ] \
+        && for f in /src/world-data/sql/world/*; do \
+            [ -e "$f" ] || continue; \
+            [ -f "$f" ] || { echo "world data: $f is not a file"; exit 1; }; \
+            # only our own names: they can never replace or clash with one of the fork's update files
+            case "$(basename "$f")" in [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9]_world_everlake_import_*.sql) ;; \
+                *) echo "world data: unexpected file name $f"; exit 1 ;; esac; \
+            cp "$f" /world-data/; \
+        done \
+        && ls -la /world-data; \
+    fi
+
 ############################ runtime ############################
 FROM ubuntu:${UBUNTU_VERSION}
 
@@ -93,6 +123,8 @@ COPY --from=build /src/TrinityCore/sql /src/TrinityCore/sql
 COPY sql/everlake/2026_11_07_09_auth_name_reservation.sql sql/everlake/2026_11_08_06_auth_one_ruleset.sql \
      /src/TrinityCore/sql/custom/auth/
 COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql /src/TrinityCore/sql/custom/hotfixes/
+# The world import's update files (empty unless WORLD_DATA_COMMIT is set; see the worlddata stage)
+COPY --from=worlddata /world-data/ /src/TrinityCore/sql/custom/world/
 # worldserver's auto-setup imports TDB_full_*.sql from its working directory
 COPY --from=tdb /tdb/ /opt/trinitycore/bin/
 COPY docker/entrypoint.sh docker/extract.sh /usr/local/bin/
