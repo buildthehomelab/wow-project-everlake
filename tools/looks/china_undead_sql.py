@@ -7,6 +7,10 @@ Copies the Forever build's "Fresh" Skin Type choice (male 6529, female 6526) int
 "China (B)" and gives each the China body (tools/looks/china_undead.py) as a skinned model. Reads
 ChrCustomizationElement of the Forever build from wago.tools (cached in --cache).
 
+--part d writes the third test (push 9570002): "Normal body", Blizzard's own Undead model (959310 / 997378, bones
+inline) as the skinned model, with no new files. China (C) drew black too, so this tells whether any skinned
+body draws black (textured = the China model's borrowed skeleton is the problem).
+
 --part c writes the second test (push 9570001): "China (C)", the China body with its skin texture named in the
 model (95450017 male, 95450019 female), since the first test drew the body black.
 """
@@ -19,7 +23,7 @@ import urllib.request
 ap = argparse.ArgumentParser()
 ap.add_argument("--cache", required=True)
 ap.add_argument("--out", required=True)
-ap.add_argument("--part", choices=["ab", "c"], default="ab")
+ap.add_argument("--part", choices=["ab", "c", "d"], default="ab")
 args = ap.parse_args()
 
 
@@ -34,8 +38,8 @@ def L(table, build="1.60.1.70790"):
 
 
 BUILD = 70790
-PART_C = args.part == "c"
-PUSH = 9570001 if PART_C else 9570000
+PART_C, PART_D = args.part == "c", args.part == "d"
+PUSH = 9570002 if PART_D else 9570001 if PART_C else 9570000
 H_CHOICE, H_ELEMENT, H_SKINNED = 0x681D0F3D, 0xD6D051EC, 0x559CECEC
 elements = L("ChrCustomizationElement")
 ECOLS = ["ID", "ChrCustomizationChoiceID", "RelatedChrCustomizationChoiceID", "ChrCustomizationGeosetID",
@@ -43,15 +47,18 @@ ECOLS = ["ID", "ChrCustomizationChoiceID", "RelatedChrCustomizationChoiceID", "C
          "ChrCustomizationCondModelID", "ChrCustomizationDisplayInfoID", "ChrCustItemGeoModifyID",
          "ChrCustomizationVoiceID", "AnimKitID", "ParticleColorID", "ChrCustGeoComponentLinkID"]
 # (sex, option, Fresh choice to copy, China model FileDataID)
-SEXES = [("male", 567, "6529", 95450017 if PART_C else 95450001), ("female", 568, "6526", 95450019 if PART_C else 95450009)]
-VARIANTS = [("China (C)", 0)] if PART_C else [("China", 0), ("China (B)", 1)]   # name, skinned-model Flags
-FIRST_ELEMENT = 9546101 if PART_C else 9546001
+MODELS = {"ab": (95450001, 95450009), "c": (95450017, 95450019), "d": (959310, 997378)}[args.part]
+SEXES = [("male", 567, "6529", MODELS[0]), ("female", 568, "6526", MODELS[1])]
+# name, skinned-model Flags
+VARIANTS = {"ab": [("China", 0), ("China (B)", 1)], "c": [("China (C)", 0)], "d": [("Normal body", 0)]}[args.part]
+FIRST_ELEMENT = {"ab": 9546001, "c": 9546101, "d": 9546201}[args.part]
+FIRST_ID = {"ab": 954601, "c": 954605, "d": 954607}[args.part]
 choices, els, skinned = [], [], []
-cid, eid, sid = (954605, FIRST_ELEMENT, 954605) if PART_C else (954601, FIRST_ELEMENT, 954601)
+cid, eid, sid = FIRST_ID, FIRST_ELEMENT, FIRST_ID
 for sex, option, fresh, model in SEXES:
     fresh_els = [e for e in elements if e["ChrCustomizationChoiceID"] == fresh]
     for n, (name, flags) in enumerate(VARIANTS):
-        order = 5 if PART_C else 3 + n
+        order = 6 if PART_D else 5 if PART_C else 3 + n
         choices.append((name, cid, option, 55, 0, order, order, 0, 90001, 0, 0, 0, sex))
         for e in fresh_els:
             row = [int(e[c]) for c in ECOLS]
@@ -62,7 +69,14 @@ for sex, option, fresh, model in SEXES:
         cid += 1; sid += 1
 out = []
 w = out.append
-if PART_C:
+if PART_D:
+    w("-- China Undead test, part 3 (docs/china-undead.md): \"Normal body\" per sex. China and China (C) drew the China")
+    w("-- body black, with the character skin and with a named texture alike. This attaches Blizzard's own Undead model")
+    w("-- (959310 male, 997378 female; bones inline, unchanged) the same way, with Fresh's parts. Textured = skinned")
+    w("-- bodies work and the China model's borrowed skeleton (SKID, no bones) is the problem; black = any skinned body")
+    w("-- draws black on this model. No new files. Hotfix push %d. Re-runnable; the DELETEs undo it." % PUSH)
+    w("-- Restart the worldserver afterwards.")
+elif PART_C:
     w("-- China Undead test, part 2 (docs/china-undead.md): \"China (C)\" per sex. The first test (push 9570000) drew the")
     w("-- China body black: a skinned model gets no character skin. These models name the China skin texture (skin colour")
     w("-- 0) in place of the character skin: 95450017 (male, texture 95450018) and 95450019 (female, texture 95450020).")
