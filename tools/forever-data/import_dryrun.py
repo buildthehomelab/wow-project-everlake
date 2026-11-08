@@ -34,7 +34,8 @@ Checks:
   added removed, a creature given its own loot table) a re-run leaves the fork's rows alone (this runs last and changes
   the stepped world);
 - the gap report on the stepped world: every item of the slices' categories is closed or on the review or held-back
-  list with its reason, and no category gains an item. Loot gaps count per drop (npc/item), the rest per quest or NPC.
+  list with its reason, and no category gains an item. Loot, trainer-spell and vendor-item gaps count per item of an
+  NPC (npc/item), the rest per quest or NPC.
 Writes <slice folder>/dry-run.md and dry-run.json for the --report slice. Exit status 1 when a check fails.
 """
 import argparse
@@ -60,8 +61,8 @@ from load_sources import SOURCES, connect  # noqa: E402
 DRYRUN = "acore_world_dryrun"
 FORK = "acore_forever"
 SCRATCH, STEP = "elscratch_", "elstep_"
-# gap categories whose items are drops (npc/item), not whole NPCs
-PER_DROP = {"loot_items_missing", "npcs_no_loot"}
+# gap categories counted per item of an NPC (npc/item: a drop, a trainer spell, a vendor item), not per whole NPC
+PER_ITEM = {"loot_items_missing", "npcs_no_loot", "trainer_spells_missing", "vendor_items_missing"}
 # what each kind of recorded row must point at: (column, table it must be in, that table's key column)
 REFERENCES = {
     "creature_queststarter": [("id", "creature_template", "entry"), ("quest", "quest_template", "ID")],
@@ -71,6 +72,8 @@ REFERENCES = {
     "quest_request_items": [("ID", "quest_template", "ID")],
     "quest_offer_reward": [("ID", "quest_template", "ID")],
     "quest_objectives": [("QuestID", "quest_template", "ID")],
+    "trainer_spell": [("TrainerId", "trainer", "Id")],
+    "npc_vendor": [("entry", "creature_template", "entry")],
 }
 
 
@@ -189,7 +192,7 @@ def fork_mapping(cur, prefix, raw_all, skipped):
 
 
 def gap_keys(cat, item):
-    if cat in PER_DROP:
+    if cat in PER_ITEM:
         return {f"{item['npc']}/{i}" for i in item.get("items", ())}
     return {str(item.get("quest") or item.get("npc") or item.get("object"))}
 
@@ -519,6 +522,20 @@ def references(cur, fork_tables, fixes):
     cur.execute(f"SELECT DISTINCT w.Entry FROM {rec} AND NOT EXISTS (SELECT 1 FROM `{STEP}creature_template_difficulty` d "
                 "WHERE d.LootID = w.Entry)")
     broken += [f"loot table {e} is no creature's" for (e,) in cur.fetchall()]
+    # trainer spells: the spell and what it needs known first are in Forever's client spell tables (item-history's, a
+    # reference used only for this check), and the list is some creature's; vendor items: in the client's item list
+    rec = (f"`{STEP}{isql.IMPORT_ROWS}` r JOIN `{STEP}trainer_spell` w ON r.k1 = w.TrainerId AND r.k2 = w.SpellId "
+           "WHERE r.tbl = 'trainer_spell'")
+    for col in ("SpellId", "ReqAbility1", "ReqAbility2", "ReqAbility3"):
+        cur.execute(f"SELECT w.TrainerId, w.`{col}` FROM {rec} AND w.`{col}` <> 0 AND NOT EXISTS (SELECT 1 FROM "
+                    f"`{FORK}`.src_item_history x WHERE x.tbl = 'spells' AND x.id = w.`{col}`)")
+        broken += [f"trainer list {t}: {col} {i} unknown to Forever's client spell tables" for t, i in cur.fetchall()]
+    cur.execute(f"SELECT DISTINCT w.TrainerId FROM {rec} AND NOT EXISTS (SELECT 1 FROM `{STEP}creature_trainer` c WHERE c.TrainerID = w.TrainerId)")
+    broken += [f"trainer list {t} is no creature's" for (t,) in cur.fetchall()]
+    cur.execute(f"SELECT w.entry, w.item FROM `{STEP}{isql.IMPORT_ROWS}` r JOIN `{STEP}npc_vendor` w ON r.k1 = w.entry AND r.k2 = w.item "
+                f"AND r.k3 = w.ExtendedCost AND r.k4 = w.type WHERE r.tbl = 'npc_vendor' AND (w.type <> 1 OR w.item <= 0 OR NOT EXISTS "
+                f"(SELECT 1 FROM `{FORK}`.src_forever_db x WHERE x.tbl = 'item' AND x.id = w.item))")
+    broken += [f"vendor {e}: item {i} unknown to Forever's client data" for e, i in cur.fetchall()]
     return not broken, "; ".join(broken[:20])
 
 
@@ -608,7 +625,37 @@ def simulate_slice2(cur, conn, manifest, ours, mapping, checks):
         checks.add("slice 2: nothing to simulate (no rows)", True)
 
 
-SIMULATIONS = {"slice1": simulate_slice1, "slice2": simulate_slice2}
+def simulate_slice3(cur, conn, manifest, ours, mapping, checks):
+    """Slice 3 (trainers and vendors): the fork removes a trainer spell we added, or lists a vendor item we added at its
+    own price (another ExtendedCost) in its place."""
+    imp = next(f["name"] for f in manifest["files"] if f["kind"] == "import")
+    cur.execute(f"SELECT k1, k2 FROM `{STEP}{isql.IMPORT_ROWS}` WHERE file = %s AND tbl = 'trainer_spell' ORDER BY k1, k2 LIMIT 1", (imp,))
+    ts = cur.fetchone()
+    if ts:
+        cur.execute(f"DELETE FROM `{STEP}trainer_spell` WHERE TrainerId = %s AND SpellId = %s", ts)
+        conn.commit()
+        run_file(cur, conn, ours[imp].decode("utf-8"), mapping)
+        cur.execute(f"SELECT COUNT(*) FROM `{STEP}trainer_spell` WHERE TrainerId = %s AND SpellId = %s", ts)
+        checks.add(f"after the fork drops spell {ts[1]} from trainer list {ts[0]} (ours), a re-run doesn't add it back", cur.fetchone()[0] == 0)
+    cur.execute(f"SELECT k1, k2, k3, k4 FROM `{STEP}{isql.IMPORT_ROWS}` WHERE file = %s AND tbl = 'npc_vendor' ORDER BY k1, k2 LIMIT 1", (imp,))
+    nv = cur.fetchone()
+    if nv:
+        entry, item, ext, typ = nv
+        cur.execute(f"DELETE FROM `{STEP}npc_vendor` WHERE entry = %s AND item = %s AND ExtendedCost = %s AND type = %s", nv)
+        # as on a realm where the fork's row came first: nothing of ours recorded, so only the "another price" guard stops it
+        cur.execute(f"DELETE FROM `{STEP}{isql.IMPORT_ROWS}` WHERE tbl = 'npc_vendor' AND k1 = %s AND k2 = %s AND k3 = %s AND k4 = %s", nv)
+        cur.execute(f"INSERT INTO `{STEP}npc_vendor` (entry, slot, item, ExtendedCost, type, VerifiedBuild) VALUES (%s, 0, %s, 4242, %s, 70900)",
+                    (entry, item, typ))
+        conn.commit()
+        run_file(cur, conn, ours[imp].decode("utf-8"), mapping)
+        cur.execute(f"SELECT ExtendedCost FROM `{STEP}npc_vendor` WHERE entry = %s AND item = %s AND type = %s", (entry, item, typ))
+        checks.add(f"where the fork lists vendor {entry}'s item {item} at its own price, our file adds nothing next to it",
+                   [r[0] for r in cur.fetchall()] == [4242])
+    if not ts and not nv:
+        checks.add("slice 3: nothing to simulate (no rows)", True)
+
+
+SIMULATIONS = {"slice1": simulate_slice1, "slice2": simulate_slice2, "slice3": simulate_slice3}
 
 
 def report_md(r, manifests):
@@ -650,7 +697,7 @@ def report_md(r, manifests):
             for c in r["checks"]]
     out += ["", "Tables changed against the fork world (keys): " +
             ", ".join(f"`{t}` +{v['added']} -{v['removed']} ~{v['changed']}" for t, v in sorted(r["tables_changed"].items())), ""]
-    out += ["## Gap report, before and after", "", "Loot gaps count drops (npc and item); the rest count quests.", "",
+    out += ["## Gap report, before and after", "", "Loot, trainer-spell and vendor-item gaps count items of an NPC (npc and item); the rest count quests or NPCs.", "",
             "| Gap | Before | After | Closed | Left: review | Left: held back | Left: kept |", "|---|---|---|---|---|---|---|"]
     for cat in r["categories"]:
         left = r["left"].get(cat, {})
