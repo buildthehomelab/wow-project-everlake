@@ -37,6 +37,7 @@ import source_weights  # noqa: E402
 from load_sources import SOURCES, connect  # noqa: E402
 
 F = candidates.F
+WORLD = candidates.WORLD
 LIVE_BUILD = 70790           # first live Forever build (launch, 2026-11-04); EG Link rows from it on count as seen live
 NEW_SPOT_YARDS = 80          # a Forever spawn this far from every one of the world's spawns of that NPC is a new spot
 TEST_NAME = re.compile(r"^\s*<|\[(?:DNT|PH|Never used)\]|zzOLD|\b(?:UNUSED|DEPRECATED|TEST|OLD)\b")   # capitals only: "The Old Ways" is real
@@ -139,6 +140,38 @@ FIRST_KEY = {**{t: "id" for t in QUEST_ID_TABLES}, "creature_template": "entry",
              "creature_template_difficulty": "entry", "creature_template_model": "creatureid"}
 
 
+def quest_evidence(cur):
+    """({quest id: {evidence labels}}, {quest id: area id}): every quest any source names, which sources name it
+    (eg-link-live, questietrace, foreverdb-seen ... see LIVE_EVIDENCE), and the area the sources place it in."""
+    evidence = collections.defaultdict(set)
+    area_hint = {}
+    for r in candidates.rows(cur, f"SELECT id, JSON_EXTRACT(data, '$.zone_area') AS area FROM {F}.src_forever_db WHERE tbl = 'quest'"):
+        evidence[r["id"]].add("forever-db")
+        if (candidates.as_int(r["area"]) or 0) > 0:
+            area_hint[r["id"]] = candidates.as_int(r["area"])
+    eg_area = {}          # EG Link's zoneAreaId, newest build that has one
+    for r in candidates.rows(cur, f"SELECT id, JSON_UNQUOTE(JSON_EXTRACT(data, '$._build')) AS build, "
+                                  f"JSON_EXTRACT(data, '$.zoneAreaId') AS area FROM {F}.src_eg_link WHERE tbl = 'quests.enUS'"):
+        b = build_no(r["build"])
+        evidence[r["id"]].add("eg-link-live" if b >= LIVE_BUILD else "eg-link-beta")
+        area = candidates.as_int(r["area"]) or 0
+        if area > 0 and (r["id"] not in eg_area or b >= eg_area[r["id"]][0]):
+            eg_area[r["id"]] = (b, area)
+    for qid, (_, area) in eg_area.items():
+        area_hint.setdefault(qid, area)
+    for tbl, label in ((candidates.TRACE_QUEST, "questietrace"), (candidates.BASE_QUEST, "questiedb")):
+        for r in candidates.rows(cur, f"SELECT DISTINCT id FROM {F}.src_questiedb WHERE tbl = %s AND id IS NOT NULL", (tbl,)):
+            evidence[r["id"]].add(label)
+    for tbl, label in (("QuestForever.qfQuests", "foreverdb"), ("QuestForever.qfSeen", "foreverdb-seen")):
+        for r in candidates.rows(cur, f"SELECT DISTINCT id FROM {F}.src_foreverdb_net WHERE tbl = %s AND id IS NOT NULL", (tbl,)):
+            evidence[r["id"]].add(label)
+    for r in candidates.rows(cur, f"SELECT id FROM {F}.src_wowhead_tooltips WHERE tbl = 'quest' "
+                                  f"AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.status')) = 'ok'"):
+        evidence[r["id"]].add("wowhead")
+    evidence = {int(k): v for k, v in evidence.items() if k is not None}
+    return evidence, area_hint
+
+
 def custom_sql_mentions(sources, applied=frozenset()):
     """{(table, key column): ids} that the fork's sql/custom world files the release doesn't already hold write or change: the key columns of INSERT and
     REPLACE rows, and `key = N` / `key IN (...)` in UPDATE and DELETE conditions. A hint, not a full SQL parse: an id
@@ -187,21 +220,32 @@ def custom_sql_mentions(sources, applied=frozenset()):
     return out, {"label": pin["label"], "files": files}
 
 
+def set_world(world):
+    """Compare another copy of the world: SCHEMA.PREFIX, e.g. acore_world_dryrun.elstep_ (names checked: they go into SQL)."""
+    global WORLD
+    if not re.fullmatch(r"\w+\.\w*", world):
+        raise SystemExit(f"--world {world!r}: expected SCHEMA.PREFIX")
+    WORLD = candidates.WORLD = world
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--zone", help="only this top-level zone (AreaTable name)")
     ap.add_argument("--sources", default=SOURCES, help="the pinned sources folder (for the fork's sql/custom files)")
     ap.add_argument("--out", default=os.path.join(HERE, "reports"))
+    ap.add_argument("--world", default=WORLD, help="the world's tables as SCHEMA.PREFIX (default acore_forever.tc_, the fork's "
+                                                   "world; a dry run's world is acore_world_dryrun.<prefix>)")
     args = ap.parse_args()
+    set_world(args.world)
     conn = connect()
     cur = conn.cursor()
     zones = Zones(cur)
     try:
-        applied = {r["name"] for r in candidates.rows(cur, f"SELECT name FROM {F}.tc_updates")}
+        applied = {r["name"] for r in candidates.rows(cur, f"SELECT name FROM {WORLD}updates")}
     except Exception as error:  # noqa: BLE001
         if "1146" not in str(error) and "doesn't exist" not in str(error):
             raise
-        raise SystemExit("acore_forever.tc_updates is missing: run load_tc.py --force once so the release's update list is kept")
+        raise SystemExit(f"{WORLD}updates is missing: run load_tc.py --force once so the release's update list is kept")
     mentions, custom = custom_sql_mentions(args.sources, applied)
 
     def quest_touched(qid):
@@ -218,41 +262,16 @@ def main():
                    or (t == "npc_vendor" and col == "entry"))
 
     # ---- live Forever's quests: every id any source names, with what each source says about it
-    evidence = collections.defaultdict(set)
-    area_hint = {}
-    for r in candidates.rows(cur, f"SELECT id, JSON_EXTRACT(data, '$.zone_area') AS area FROM {F}.src_forever_db WHERE tbl = 'quest'"):
-        evidence[r["id"]].add("forever-db")
-        if (candidates.as_int(r["area"]) or 0) > 0:
-            area_hint[r["id"]] = candidates.as_int(r["area"])
-    eg_area = {}          # EG Link's zoneAreaId, newest build that has one
-    for r in candidates.rows(cur, f"SELECT id, JSON_UNQUOTE(JSON_EXTRACT(data, '$._build')) AS build, "
-                                  f"JSON_EXTRACT(data, '$.zoneAreaId') AS area FROM {F}.src_eg_link WHERE tbl = 'quests.enUS'"):
-        b = build_no(r["build"])
-        evidence[r["id"]].add("eg-link-live" if b >= LIVE_BUILD else "eg-link-beta")
-        area = candidates.as_int(r["area"]) or 0
-        if area > 0 and (r["id"] not in eg_area or b >= eg_area[r["id"]][0]):
-            eg_area[r["id"]] = (b, area)
-    for qid, (_, area) in eg_area.items():
-        area_hint.setdefault(qid, area)
-    for tbl, label in ((candidates.TRACE_QUEST, "questietrace"), (candidates.BASE_QUEST, "questiedb")):
-        for r in candidates.rows(cur, f"SELECT DISTINCT id FROM {F}.src_questiedb WHERE tbl = %s AND id IS NOT NULL", (tbl,)):
-            evidence[r["id"]].add(label)
-    for tbl, label in (("QuestForever.qfQuests", "foreverdb"), ("QuestForever.qfSeen", "foreverdb-seen")):
-        for r in candidates.rows(cur, f"SELECT DISTINCT id FROM {F}.src_foreverdb_net WHERE tbl = %s AND id IS NOT NULL", (tbl,)):
-            evidence[r["id"]].add(label)
-    for r in candidates.rows(cur, f"SELECT id FROM {F}.src_wowhead_tooltips WHERE tbl = 'quest' "
-                                  f"AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.status')) = 'ok'"):
-        evidence[r["id"]].add("wowhead")
-    evidence = {int(k): v for k, v in evidence.items() if k is not None}
+    evidence, area_hint = quest_evidence(cur)
 
-    tc_q = {r["ID"]: r for r in candidates.rows(cur, f"SELECT ID, LogTitle, QuestSortID, QuestDescription FROM {F}.tc_quest_template "
+    tc_q = {r["ID"]: r for r in candidates.rows(cur, f"SELECT ID, LogTitle, QuestSortID, QuestDescription FROM {WORLD}quest_template "
                                                      f"WHERE ID IN ({candidates.ids_sql(evidence)})")}
 
     def tc_rel(tables):
         out = collections.defaultdict(set)
         for table in tables:
             kind = "npc" if table.startswith("creature") else "object"
-            for r in candidates.rows(cur, f"SELECT id, quest FROM {F}.tc_{table} WHERE quest IN ({candidates.ids_sql(evidence)})"):
+            for r in candidates.rows(cur, f"SELECT id, quest FROM {WORLD}{table} WHERE quest IN ({candidates.ids_sql(evidence)})"):
                 out[r["quest"]].add((kind, r["id"]))
         return out
     tc_start = tc_rel(("creature_queststarter", "gameobject_queststarter"))
@@ -335,13 +354,13 @@ def main():
         if items and (int(r["id"]) not in stock or b >= stock[int(r["id"])][0]):
             stock[int(r["id"])] = (b, items)
     npc_ids = set(points) | set(quest_npcs) | set(stock)
-    tc_npc = {r["entry"]: r["name"] for r in candidates.rows(cur, f"SELECT entry, name FROM {F}.tc_creature_template "
+    tc_npc = {r["entry"]: r["name"] for r in candidates.rows(cur, f"SELECT entry, name FROM {WORLD}creature_template "
                                                                     f"WHERE entry IN ({candidates.ids_sql(npc_ids)})")}
     tc_points = collections.defaultdict(list)
-    for r in candidates.rows(cur, f"SELECT id, map, position_x, position_y FROM {F}.tc_creature WHERE id IN ({candidates.ids_sql(npc_ids)})"):
+    for r in candidates.rows(cur, f"SELECT id, map, position_x, position_y FROM {WORLD}creature WHERE id IN ({candidates.ids_sql(npc_ids)})"):
         tc_points[r["id"]].append((r["map"], float(r["position_x"]), float(r["position_y"])))
     tc_stock, refs = collections.defaultdict(set), collections.defaultdict(set)
-    for r in candidates.rows(cur, f"SELECT entry, item FROM {F}.tc_npc_vendor WHERE type = 1"):
+    for r in candidates.rows(cur, f"SELECT entry, item FROM {WORLD}npc_vendor WHERE type = 1"):
         (refs[r["entry"]].add(-r["item"]) if r["item"] < 0 else tc_stock[r["entry"]].add(r["item"]))
     for entry in list(refs):                  # a negative item lists another vendor's stock; follow the chain
         todo, seen = list(refs[entry]), {entry}
@@ -389,7 +408,7 @@ def main():
     # ---- the rest of the world: objects, loot, trainers, quest objectives, rewards and texts, flight masters
     def tc_spawns(table, ids):
         out = collections.defaultdict(list)
-        for r in candidates.rows(cur, f"SELECT id, map, position_x, position_y FROM {F}.tc_{table} WHERE id IN ({candidates.ids_sql(ids)})"):
+        for r in candidates.rows(cur, f"SELECT id, map, position_x, position_y FROM {WORLD}{table} WHERE id IN ({candidates.ids_sql(ids)})"):
             out[r["id"]].append((r["map"], float(r["position_x"]), float(r["position_y"])))
         return out
 
@@ -414,7 +433,7 @@ def main():
     for r in candidates.rows(cur, f"SELECT id, JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')) AS name FROM {F}.src_forever_db "
                                   f"WHERE tbl = 'object' AND id IN ({candidates.ids_sql(obj_ids)})"):
         obj_names[r["id"]] = r["name"]
-    tc_obj = {r["entry"]: r["name"] for r in candidates.rows(cur, f"SELECT entry, name FROM {F}.tc_gameobject_template "
+    tc_obj = {r["entry"]: r["name"] for r in candidates.rows(cur, f"SELECT entry, name FROM {WORLD}gameobject_template "
                                                                     f"WHERE entry IN ({candidates.ids_sql(obj_ids)})")}
     tc_obj_points = tc_spawns("gameobject", obj_ids)
     skipped_test_objects = 0
@@ -454,7 +473,7 @@ def main():
             teach[r["id"]] = (b, spells)
     flight = {r["id"] for r in candidates.rows(cur, f"SELECT DISTINCT id FROM {F}.src_eg_link WHERE tbl = 'flights' AND id IS NOT NULL")}
     more = (set(drops) | set(teach) | flight) - set(tc_npc) - npc_ids
-    tc_npc.update({r["entry"]: r["name"] for r in candidates.rows(cur, f"SELECT entry, name FROM {F}.tc_creature_template "
+    tc_npc.update({r["entry"]: r["name"] for r in candidates.rows(cur, f"SELECT entry, name FROM {WORLD}creature_template "
                                                                          f"WHERE entry IN ({candidates.ids_sql(more)})")})
     for nid, pts in tc_spawns("creature", more - set(tc_points)).items():
         tc_points[nid] = pts
@@ -462,12 +481,12 @@ def main():
                                                                f"FROM {F}.src_forever_db WHERE tbl = 'npc' AND id IN ({candidates.ids_sql(more)})")}
     with_tpl = {n for n in set(drops) | set(teach) | flight if n in tc_npc}
     loot_id = {}
-    for r in candidates.rows(cur, f"SELECT Entry, DifficultyID, LootID FROM {F}.tc_creature_template_difficulty "
+    for r in candidates.rows(cur, f"SELECT Entry, DifficultyID, LootID FROM {WORLD}creature_template_difficulty "
                                   f"WHERE LootID > 0 AND Entry IN ({candidates.ids_sql(set(drops) & with_tpl)}) ORDER BY DifficultyID DESC"):
         if r["DifficultyID"] == 0 or r["Entry"] not in loot_id:
             loot_id[r["Entry"]] = r["LootID"]          # the open-world row when there is one, else a dungeon difficulty
     direct, links = collections.defaultdict(set), collections.defaultdict(set)     # loot id -> items / reference ids
-    for r in candidates.rows(cur, f"SELECT Entry, ItemType, Item FROM {F}.tc_creature_loot_template "
+    for r in candidates.rows(cur, f"SELECT Entry, ItemType, Item FROM {WORLD}creature_loot_template "
                                   f"WHERE Entry IN ({candidates.ids_sql({v for v in loot_id.values() if v})})"):
         if r["ItemType"] in (0, 1):     # 2 currency, 3 tracking quest: not item drops
             (links if r["ItemType"] == 1 else direct)[r["Entry"]].add(r["Item"])
@@ -476,7 +495,7 @@ def main():
     while todo - loaded:                      # reference lists can name further reference lists
         batch = todo - loaded
         loaded |= batch
-        for r in candidates.rows(cur, f"SELECT Entry, ItemType, Item FROM {F}.tc_reference_loot_template WHERE Entry IN ({candidates.ids_sql(batch)})"):
+        for r in candidates.rows(cur, f"SELECT Entry, ItemType, Item FROM {WORLD}reference_loot_template WHERE Entry IN ({candidates.ids_sql(batch)})"):
             if r["ItemType"] == 1:
                 ref_links[r["Entry"]].add(r["Item"])
                 todo.add(r["Item"])
@@ -494,13 +513,13 @@ def main():
         return got
 
     trainer_of = collections.defaultdict(set)
-    for r in candidates.rows(cur, f"SELECT CreatureID, TrainerID FROM {F}.tc_creature_trainer WHERE CreatureID IN ({candidates.ids_sql(teach)})"):
+    for r in candidates.rows(cur, f"SELECT CreatureID, TrainerID FROM {WORLD}creature_trainer WHERE CreatureID IN ({candidates.ids_sql(teach)})"):
         trainer_of[r["CreatureID"]].add(r["TrainerID"])
     taught = collections.defaultdict(set)
-    for r in candidates.rows(cur, f"SELECT TrainerId, SpellId FROM {F}.tc_trainer_spell "
+    for r in candidates.rows(cur, f"SELECT TrainerId, SpellId FROM {WORLD}trainer_spell "
                                   f"WHERE TrainerId IN ({candidates.ids_sql({t for v in trainer_of.values() for t in v})})"):
         taught[r["TrainerId"]].add(r["SpellId"])
-    flags = {r["entry"]: int(r["npcflag"]) for r in candidates.rows(cur, f"SELECT entry, npcflag FROM {F}.tc_creature_template "
+    flags = {r["entry"]: int(r["npcflag"]) for r in candidates.rows(cur, f"SELECT entry, npcflag FROM {WORLD}creature_template "
                                                                        f"WHERE entry IN ({candidates.ids_sql(flight)})")}
     for nid in sorted(with_tpl):
         title = tc_npc.get(nid) or fdb_npc.get(nid)
@@ -530,7 +549,7 @@ def main():
 
     # quests the world has: objectives, reward items, progress and completion text
     world_q = {qid for qid in quest_zone if qid in tc_q}
-    with_obj = {r["QuestID"] for r in candidates.rows(cur, f"SELECT DISTINCT QuestID FROM {F}.tc_quest_objectives WHERE QuestID IN ({candidates.ids_sql(world_q)})")}
+    with_obj = {r["QuestID"] for r in candidates.rows(cur, f"SELECT DISTINCT QuestID FROM {WORLD}quest_objectives WHERE QuestID IN ({candidates.ids_sql(world_q)})")}
     want_obj = set()
     for r in candidates.rows(cur, f"SELECT id, data FROM {F}.src_eg_link WHERE tbl = 'objectives' AND id IN ({candidates.ids_sql(world_q)})"):
         d = j(r["data"])
@@ -544,14 +563,14 @@ def main():
             rewards[r["id"]].add(candidates.as_int(r["item"]))
     cols = ", ".join([f"RewardItem{i}" for i in range(1, 5)] + [f"RewardChoiceItemID{i}" for i in range(1, 7)])
     world_rewards = {r["ID"]: {v for k, v in r.items() if k != "ID" and v} for r in candidates.rows(
-        cur, f"SELECT ID, {cols} FROM {F}.tc_quest_template WHERE ID IN ({candidates.ids_sql(rewards)})")}
+        cur, f"SELECT ID, {cols} FROM {WORLD}quest_template WHERE ID IN ({candidates.ids_sql(rewards)})")}
     text_kinds = collections.defaultdict(set)
     for r in candidates.rows(cur, f"SELECT id, JSON_KEYS(data) AS keys_ FROM {F}.src_eg_link WHERE tbl = 'texts.enUS' AND id IN ({candidates.ids_sql(world_q)})"):
         text_kinds[r["id"]] |= set(j(r["keys_"]) or ())
     progress = {r["ID"]: (r["CompletionText"] or "").strip() for r in candidates.rows(
-        cur, f"SELECT ID, CompletionText FROM {F}.tc_quest_request_items WHERE ID IN ({candidates.ids_sql(text_kinds)})")}
+        cur, f"SELECT ID, CompletionText FROM {WORLD}quest_request_items WHERE ID IN ({candidates.ids_sql(text_kinds)})")}
     completion = {r["ID"]: (r["RewardText"] or "").strip() for r in candidates.rows(
-        cur, f"SELECT ID, RewardText FROM {F}.tc_quest_offer_reward WHERE ID IN ({candidates.ids_sql(text_kinds)})")}
+        cur, f"SELECT ID, RewardText FROM {WORLD}quest_offer_reward WHERE ID IN ({candidates.ids_sql(text_kinds)})")}
     names = {qid: tc_q[qid]["LogTitle"] for qid in world_q}
     for qid in sorted(world_q):
         zone = quest_zone[qid]
@@ -576,7 +595,7 @@ def main():
         for cat, items in cats.items():
             slot[cat].extend(items)
     totals = {cat: sum(len(z.get(cat, [])) for z in by_name.values()) for cat, _ in CATEGORIES}
-    report = {"made": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "pins": labels,
+    report = {"world": WORLD, "made": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "pins": labels,
               "custom_sql": custom, "skipped_test_quests": skipped_test, "skipped_test_npcs": skipped_test_npcs, "skipped_test_objects": skipped_test_objects, "totals": totals,
               "zones": {z: {c: v for c, v in cats.items()} for z, cats in sorted(by_name.items())}}
     os.makedirs(args.out, exist_ok=True)
