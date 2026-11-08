@@ -16,7 +16,6 @@
 #   ./everlake-client.sh switch <account email> [game folder]  (gate 5 realm switch test: guided, sends a report)
 #   ./everlake-client.sh reports <address | server>  (where check, test1 and switch send reports and screenshots)
 #   ./everlake-client.sh cdn <address[:port] | server>  (where gate2 gets the patched build; default: the server, 8087)
-#   ./everlake-client.sh china-undead [CDN address[:port]]  (China Undead test: gate2 copy + files; docs/china-undead.md)
 #   ./everlake-client.sh china-mode on|off [game folder]  (the client's own China setting, overrideArchive)
 #
 # setup (asks for your password once, for the hosts file):
@@ -699,23 +698,6 @@ case "$cmd" in
         W="$GAME/WTF/$WTF_NAME"; [ -f "$W" ] || die "no $W: run setup first"
         { grep -v -E '^SET overrideArchive ' "$W" || true; echo "SET overrideArchive \"$v\""; } > "$W.tmp" && mv "$W.tmp" "$W"
         say "overrideArchive $v in $W (takes effect at the next start of the game)"
-        ;;
-    china-undead)
-        # China Undead test (docs/china-undead.md): a gate2 test copy from the patched build with the China bodies,
-        # its files in local storage, and the client's China setting off so only our new choices show the China body.
-        if pgrep -f "$COPY_NAME/Contents/MacOS" >/dev/null 2>&1; then die "quit the game first"; fi
-        if [ -n "${1:-}" ]; then "$0" cdn "$1" || die "cdn failed"; fi
-        curl -sf -m 10 "http://$(cdn_addr)/everlake/build.json" | grep -q '"95450017"' \
-            || die "the CDN at $(cdn_addr) doesn't serve the China Undead build (file 95450017, the (C) models): run cdn-build on the server"
-        "$0" gate2 || die "gate2 failed"
-        "$0" gate2-install || die "gate2-install failed"
-        "$0" china-mode off gate2 || die "china-mode failed"
-        say "ready. Next:"
-        say "  1. $0 play <account email> gate2"
-        say "     Create an Undead (male and female), Skin Type: try \"China (C)\" (and \"China\", \"China (B)\") next to Bony."
-        say "     Screenshots of each, at creation and in the world. Then log in with it and look at it with and without gear."
-        say "  2. for comparison, Blizzard's own China look: $0 china-mode on gate2, play again, then china-mode off gate2"
-        say "  3. $0 check gate2  (sends the logs to the server)"
         ;;
     gate2)
         GAME="$(find_game "${1:-}")" || die "game folder not found"

@@ -1,148 +1,47 @@
-# China Undead (test)
+# China Undead look, per character
 
-Goal: an Undead character can pick the China look (no exposed bones) in the character creator and at the barber,
-while every other Undead keeps the normal look. Status: first test run 2026-11-08 (body draws, black); second test "China (C)" black too; third test "Normal body" black too; test 4 "Fresh for everyone" built, not run.
+Every Undead can pick the China look: no bones showing, buff and pale, intact face. Pick **Skin Type: Fresh** (body
+tab) and one of the **China skin colours, 7-12** (Skin Color, head tab), at character creation or at the barber.
+Characters on Bony keep the normal look. It is all Blizzard's own art in the Forever client, switched on by server
+data: no client files.
 
-## What Blizzard ships
+Status 2026-11-08: works in the creator on the Mac mini (male, test copy, China setting off). Not yet checked:
+finishing a character and logging in (the server saving Fresh with a China colour), a female, other players seeing it.
 
-- Blizzard's build holds two copies of some files under **one** FileDataID: the normal one, and a censored one in a
-  root block flagged LowViolence (0x80). The client reads the censored copies only when its `overrideArchive`
-  setting is on (the China client). Forever 1.60.1.70790 has 7,737 of them, 671 for the Undead.
-- The China Undead model (`scourgemale_hd.m2` 959310, `scourgefemale_hd.m2` 997378) uses **the same skeleton file**
-  as the normal one (byte for byte) and has no bones of its own (a SKID chunk), like retail's add-on models. Its
-  body mesh is bigger (male 736 → 1,452 triangles, female 752 → 2,654: the ribs and spine are covered) and every jaw
-  choice is the same covered jaw. The exposed-bone pieces (geosets 1204, 1702-1705, 2901, 3001, 3201-3202,
-  5101-5103) are gone.
-- Undead already have the option **Skin Type** (male 567, female 568): **Bony** (requirement 55) and **Fresh**
-  (requirement 4975, `OverrideArchive` 1, so only shown with the China setting on). Fresh hides the bone pieces
-  (geosets 19, 29 and 30 set to 2) and swaps cape geosets.
+## What it took
 
-## The test
-
-Two new Skin Type choices per sex, **China** and **China (B)**, offered like Bony (requirement 55):
-
-- the Fresh choice's parts (bone pieces hidden, cape geosets), plus
-- the China body as a skinned model (ChrCustomizationSkinnedModel, the way retail adds Mechagnome arms or Dracthyr
-  horns), geoset type 0 id 0 (the body mesh), on the character's own skeleton.
-- The two differ only in the skinned model's Flags: 0 and 1 (retail uses 1 on 20 of 1,027 rows; meaning unknown).
-
-Pieces:
-
-| What | Where |
-|---|---|
-| China models + their 7 skin files each as new FileDataIDs 95450001-95450016 (SFID repointed) | `tools/looks/china_undead.py` |
-| Hotfix rows: 4 choices, 52 elements, 4 skinned models (in `hotfix_blob`, the core has no table for them), push 9570000 | `tools/looks/china_undead_sql.py` → `sql/everlake/2026_11_08_00_hotfixes_china_undead.sql` |
-| Patched build: Blizzard's plus the 16 China files, served by the `cdn` service (port 8087) | `scripts/cdn-build.sh`, `docker-compose.yml` |
-| Mac mini: the CDN's address (default: the server, 8087), the test copy, the China setting | `everlake-client.sh cdn`, `china-undead`, `china-mode on/off` |
-
-The skinned-model record bytes follow layout 4C32AA8A: CollectionsFileDataID int32, GeosetType uint8, GeosetID,
-Modifier, Flags int32, no ID (the table's IDs are non-inline).
-
-## Running it
-
-Server, in the checkout that holds `.env`:
-
-1. The hotfix rows into the realm database `hotfixes` (`sql/everlake/2026_11_08_00_hotfixes_china_undead.sql`), then
-   restart the worldserver.
-2. The patched build: `docker compose run --rm cdn-build` (`scripts/cdn-build.sh`: the China files, then
-   `patch.py` into `CDN_DIR`; the first run downloads Blizzard's indexes, about 3-4 minutes). Then restart the app
-   so the `cdn` service starts; it serves the build on `CDN_PORT` (8087) and passes everything else to Blizzard.
-   Later builds need no restart.
-
-Mac mini (the CDN defaults to the game server's port 8087):
-
-```sh
-./client/macos/everlake-client.sh china-undead
-./client/macos/everlake-client.sh play <account email> gate2
-```
-
-Then: Undead, Skin Type, China / China (B); screenshots at creation and in the world, with and without gear. For
-comparison, Blizzard's own China look: `china-mode on gate2`, play, `china-mode off gate2`.
-
-## Result 1 (2026-11-08): the body draws, but black
-
-On the Mac mini, "China (B)" (male and female) drew the China body over the normal one: no bones, no holes, gear on
-top. But it was **black**: a skinned model doesn't get the character's skin (texture type 1). Retail's own
-add-on models (Mechagnome parts, Demon Hunter horns) name their textures (type 0) instead. Also seen: a blue and
-white checker on the ground at the feet, cause unknown (it may not belong to these choices).
-
-**Second test, "China (C)"** (push 9570001, `sql/everlake/2026_11_08_01_hotfixes_china_undead_c.sql`): the same
-body, with the China copy of skin colour 0's body texture named in the model (models 95450017 male / 95450019
-female, textures 95450018 / 95450020). If it draws textured, the whole option needs one such model per skin colour
-(13), chosen with RelatedChrCustomizationChoiceID on the skin colour choice. Server: run that SQL, restart the
-worldserver, `docker compose run --rm cdn-build`. Mini: `china-undead` again (the build changed), then play.
-
-## Result 2 (2026-11-08): China (C) is black too
-
-The named texture changed nothing: the China body is black whatever texture it gets. Also: Forever's Undead
-creator shows **no Skin Color option** (the retail data has one; something hides it).
-
-**Third test, "Normal body"** (push 9570002, `sql/everlake/2026_11_08_02_hotfixes_china_undead_normal_body.sql`,
-no new files): Blizzard's own Undead model (959310 / 997378, bones inline, unchanged) attached the same way, with
-Fresh's parts.
-
-- **Textured** (looks like a normal Undead): skinned bodies work; the China model's borrowed skeleton (SKID chunk, no
-  bones of its own) is what draws black. Next: give the China model its bones inline, or put the China body into
-  Blizzard's model as extra geosets.
-- **Black**: any skinned body draws black on this character. Next: the China body as geosets of Blizzard's model,
-  drawn like the rest of the character (no skinned model).
-
-Server only: run the SQL, restart the app. Mini: nothing to reinstall, play again.
-
-## Result 3 (2026-11-08): "Normal body" is black too
-
-Blizzard's own model as a skinned model draws black as well: any skinned-model body draws black on this character,
-so the skinned-model route is closed. (Still no Skin Color option in Forever's Undead creator.)
-
-## What the China model really is
-
-Measured on the HD models (skin 00, triangles):
-
-| | male | female |
+| File | Push | What |
 |---|---|---|
-| Normal body (geoset 0) | 736 | 752 |
-| Bony pieces 2901 / 3001 / 1901 | 1,438 / 914 / 576 | 1,168 / 760 / 444 |
-| **Fresh pieces 2902 / 3002 / 1902**, in the normal model | 724 / 362 / 296 | 512 / 426 / 124 |
-| China body (geoset 0) | 1,452 | 2,654 |
-| Fresh pieces in the China model | identical | identical |
-| Jaw choices | normal: 1,074-1,436 each; China: all 1,250 (the "Intact" jaw) | China: tiny, the face is in the body |
+| `sql/everlake/2026_11_08_03_hotfixes_undead_fresh.sql` | 9570003 | Fresh (6529 male, 6526 female) offered with Bony's requirement 55 |
+| `sql/everlake/2026_11_08_05_hotfixes_undead_china_colours.sql` | 9570005 | Requirements 4975-4977 with OverrideArchive -1 |
 
-So the China model is Blizzard's **Fresh** pieces, an intact jaw for every jaw choice, and a fuller body mesh. The
-normal model already has the Fresh pieces: retail's Skin Type **Fresh** switches them in. Forever hides that
-choice behind requirement 4975 (OverrideArchive 1 = only with the China setting on).
+Run both into the realm's `hotfixes` database, then restart the worldserver (the app in the TrueNAS UI).
 
-**Test 4, Fresh for everyone** (push 9570003, `sql/everlake/2026_11_08_03_hotfixes_undead_fresh.sql`): Fresh
-(6529 male, 6526 female) sent again with Bony's requirement 55. It also removes the skinned-model tests (pushes
-9570000-9570002). Server data only, nothing to rebuild or reinstall.
+## How Blizzard built it
 
-To compare: Fresh + Jaw Features "Intact" on one character, and Blizzard's China model through `china-mode on gate2`.
-If Fresh is close enough, the option is done with Blizzard's own art. If the China body's extra cover matters, the
-next step is a merged model: the China body as geoset 2903 in Blizzard's model (a third Skin Type value), the
-normal body moved from geoset 0 to 2901, and the jaw choices made to depend on it (RelatedChrCustomizationChoiceID).
+- The China client (the client setting `overrideArchive` = 1) reads censored copies of some files: Blizzard's build
+  keeps them under the same FileDataIDs, in root blocks flagged LowViolence (0x80). Forever 1.60.1.70790 has 7,737,
+  671 of them for the Undead. `everlake-client.sh china-mode on|off` switches a Mac's copy into that mode.
+- Customization data says which choices that mode may use: a `ChrCustomizationReq` with OverrideArchive 1 means
+  "only with the China setting on", 0 "only with it off", -1 "always". The core doesn't check it; the client does.
+- Undead **Skin Type** (male 567, female 568): Bony (6527/6524, requirement 55) and Fresh (6529/6526, requirement
+  4975, China only). Fresh switches geosets 19, 29 and 30 from 1 to 2: covered pieces instead of bony ones, which the
+  normal model has too.
+- Undead **Skin Color** (58/63) has six normal colours (requirements 61/66) and six China colours (`skin00_12`-`17_hd`,
+  requirements 4976/4977, China only), with the same swatches. `ChrCustomizationReqChoice` pairs them: normal colours
+  need Bony, China colours need Fresh. The China textures carry their own painted face, so they need no Face layer.
+- With only Fresh offered, a China colour was shown and then dropped by the creator's next check, and the normal
+  colour it fell back to pulled Skin Type back to Bony. Hence the second file.
 
-## Result 4 (2026-11-08): Fresh + a China skin colour is the look
+## Dead ends (2026-11-07/08)
 
-With China mode off, Fresh with Skin Color 7-12 (the China colours, textures `skin00_12`-`17_hd`) on Blizzard's normal
-model looks like the China Undead: no model merge needed. (A first try drew black parts: most likely the China
-textures still streaming into the test copy.) The Skin Color option was there all along, under the head tab.
+- **Skinned models** (ChrCustomizationSkinnedModel, as retail adds Mechagnome arms): the China body drew in the right
+  shape but black, with the character skin, with a named texture and even with Blizzard's own Undead model. Any body
+  attached this way draws black on this character.
+- **Merging the China model into Blizzard's model** as extra geosets: it differs in about 50 parts per sex, and the
+  male would pass the 65,535-vertex limit of a level of detail (72,693 at the closest). Not needed in the end.
+- **Showing Undead Skin Color by giving the option Flags 80** like other races: it was never hidden (head tab).
+- A first Fresh test drew black parts; most likely the China textures still streaming into the test copy.
 
-But the choice didn't stick: Blizzard pairs skin colours with Skin Type (ChrCustomizationReqChoice). Normal colours
-need Bony (requirements 61/66); China colours need Fresh (4976/4977), and those requirements, like Fresh's own (4975),
-also have OverrideArchive 1 (China setting only). The creator drops the China colour, picks a normal one, and that
-one pulls Skin Type back to Bony.
-
-**Fix** (push 9570005, `sql/everlake/2026_11_08_05_hotfixes_undead_china_colours.sql`): requirements 4975-4977 with
-OverrideArchive -1. The Fresh pairing stays. `2026_11_08_04` is removed: it would have made the China colours need
-Bony, and it never ran on the server.
-
-## What each result means
-
-- **China shows a whole body**: per-character China look works. Left to do: the China skin textures per skin colour
-  (they differ from the normal ones), bare hands/feet/legs under gear, and the choice's name.
-- **Holes where the bones were** (Fresh's parts work, our body doesn't draw): the client doesn't draw a skinned
-  model's mesh 0, or doesn't take a model with a SKID chunk. Next: move the body to another geoset id, or give the
-  model its bones inline.
-- **The choices don't show**: the hotfix rows didn't arrive or were refused (worldserver log, `check gate2`).
-- **Client error or crash**: the skinned-model blob layout is wrong; read the crash log.
-
-Undo: the DELETEs at the top of the SQL file, restart the worldserver; `gate2-uninstall` on the mini.
+The patched-build pipeline these tests used stays for other added files: `tools/tact/patch.py`, the `cdn` service and
+`cdn-build` (`docs/custom-files.md`).

@@ -143,7 +143,8 @@ services:
       - ./tools/tact:/app/tools/tact:ro
       - ${CDN_DIR:-./cdn}:/cdn:ro
 
-  # Writes the patched build the cdn service serves: docker compose run --rm cdn-build (scripts/cdn-build.sh)
+  # Writes the patched build the cdn service serves from the file sets in CDN_FILES_DIR:
+  # docker compose run --rm cdn-build (scripts/cdn-build.sh)
   cdn-build:
     image: python:3.12-alpine
     profiles: ["tools"]
@@ -154,6 +155,7 @@ services:
     volumes:
       - ./tools:/app/tools:ro
       - ./scripts/cdn-build.sh:/app/scripts/cdn-build.sh:ro
+      - ${CDN_FILES_DIR:-./cdn-files}:/files:ro
       - ${CDN_DIR:-./cdn}:/cdn
       - cdn-cache:/cache
 
