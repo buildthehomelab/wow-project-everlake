@@ -20,7 +20,8 @@ Scenario (NameReservation.GracePeriod = 60 s here, NAMES_TEST_GRACE):
      take it back, B gets it after the grace period
   5. both realms claim the same five names at the same moment: each name ends with exactly one account
   6. bots (when the image has PlayerbotV2): a bot can't be created with a player's name, bot names reserve nothing,
-     and a player's claim renames an offline bot holding the name
+     a player's claim renames an offline bot holding the name, an online one keeps it until the next start, when
+     the boot rename runs
   7. back-fill: a clash between two accounts is reported and left alone, a single owner is reserved
 """
 import argparse
@@ -38,6 +39,8 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 COMPOSE = ["docker", "compose", "-p", "everlake-names-test", "-f", os.path.join(HERE, "scratch", "compose.yml")]
 GRACE = int(os.environ.get("NAMES_TEST_GRACE", "60"))
 REALM1, REALM2 = 70, 71
+# pdump takes bare file names (PlayerDump.DisallowPaths = 1): they land in the worldserver's working directory
+DUMP_DIR = "/opt/trinitycore/bin"
 
 results = []
 
@@ -102,10 +105,11 @@ def console(service, *commands, wait=3.0):
     return reply.replace("\r", "")
 
 
-def wait_ready(service, timeout):
+def wait_ready(service, timeout, since=None):
+    """since: only log lines after this time (a restart keeps the old "ready" line in the log)"""
     end = time.time() + timeout
     while time.time() < end:
-        logs = compose("logs", "--no-color", service).stdout
+        logs = compose("logs", "--no-color", *(["--since", since] if since else []), service).stdout
         if re.search(r"\(worldserver-daemon\) ready", logs):
             return True
         if re.search(r"Exited|exited with code", compose("ps", "-a", service).stdout):
@@ -129,7 +133,7 @@ def char(db, name):
 
 
 def load(service, account, name):
-    return console(service, f"pdump load /tmp/tmpl.dump {account} {name}")
+    return console(service, f"pdump load tmpl.dump {account} {name}")
 
 
 def main():
@@ -167,14 +171,22 @@ def main():
         sql(f"DELETE FROM {db}.characters WHERE account IN ({A['game']}, {B['game']}) OR name = 'Tmpl'")
     sql(f"INSERT INTO characters.characters (guid, account, name, race, class, gender, level, taximask) "
         f"VALUES (990001, {T['game']}, 'Tmpl', 1, 1, 0, 1, '')")
-    console("worldserver", "pdump write /tmp/tmpl.dump Tmpl")
+    # the core finds characters by name or guid in its character cache, filled at start: restart realm 1 to load Tmpl
+    since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    compose("restart", "worldserver", check=True)
+    if not wait_ready("worldserver", 900, since):
+        sys.exit("realm 1 did not come back after the restart")
+    reply = console("worldserver", "pdump write tmpl.dump Tmpl")
+    if "tmpl.dump" not in subprocess.run(["docker", "exec", compose("ps", "-q", "worldserver").stdout.strip(), "ls", DUMP_DIR],
+                                         capture_output=True, text=True).stdout:
+        sys.exit(f"pdump write did not write {DUMP_DIR}/tmpl.dump: {reply.strip()[-500:]}")
     # the realm 1 dump, copied to realm 2's container
     src = compose("ps", "-q", "worldserver").stdout.strip()
     dst = compose("ps", "-q", "worldserver2").stdout.strip()
-    subprocess.run(["docker", "cp", f"{src}:/tmp/tmpl.dump", "/tmp/everlake-names-test.dump"], check=True, capture_output=True)
-    subprocess.run(["docker", "cp", "/tmp/everlake-names-test.dump", f"{dst}:/tmp/tmpl.dump"], check=True, capture_output=True)
+    subprocess.run(["docker", "cp", f"{src}:{DUMP_DIR}/tmpl.dump", "/tmp/everlake-names-test.dump"], check=True, capture_output=True)
+    subprocess.run(["docker", "cp", "/tmp/everlake-names-test.dump", f"{dst}:{DUMP_DIR}/tmpl.dump"], check=True, capture_output=True)
     os.remove("/tmp/everlake-names-test.dump")
-    check("template dump written", "tmpl.dump" in subprocess.run(["docker", "exec", dst, "ls", "/tmp"], capture_output=True, text=True).stdout)
+    check("template dump written", "tmpl.dump" in subprocess.run(["docker", "exec", dst, "ls", DUMP_DIR], capture_output=True, text=True).stdout)
 
     print("== 1. A takes Ora on realm 1")
     load("worldserver", A["name"], "Ora")
@@ -226,7 +238,7 @@ def main():
 
     print("== 5. both realms claim the same names at once")
     names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo"]
-    threads = [threading.Thread(target=lambda s=s, acc=acc: console(s, *[f"pdump load /tmp/tmpl.dump {acc} {n}" for n in names], wait=1.5))
+    threads = [threading.Thread(target=lambda s=s, acc=acc: console(s, *[f"pdump load tmpl.dump {acc} {n}" for n in names], wait=1.5))
                for s, acc in (("worldserver", A["name"]), ("worldserver2", B["name"]))]
     for t in threads:
         t.start()
@@ -241,7 +253,9 @@ def main():
         check(f"{n}: one owner, only its character has the name", r and r[2] == 1 and winners == {owner_game}, (r, c1, c2))
 
     print("== 6. bots")
-    has_bots = "Unknown command" not in console("worldserver", "playerbot")
+    # PlayerbotV2 keeps its pool accounts in characters.playerbot_v2_account; the core without bots has no such table
+    has_bots = one("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'characters' "
+                   "AND TABLE_NAME = 'playerbot_v2_account'") == "1"
     if not has_bots:
         print("  image has no PlayerbotV2: skipped")
     else:
@@ -261,6 +275,34 @@ def main():
                       one(f"SELECT name FROM characters.characters WHERE guid = {bot[0]}") not in (None, "Mira"))
             else:
                 check("bot online: it keeps Mira for now, A got a temporary name", c and c[1] == bot[1], c)
+
+        # an offline bot gives the name up at once
+        console("worldserver", "playerbot create Nova human warrior 1", wait=5)
+        nova = char("characters", "Nova")
+        check("bot Nova created on realm 1", nova is not None)
+        if nova:
+            console("worldserver", "playerbot logout Nova", wait=5)
+            for _ in range(30):
+                if one(f"SELECT online FROM characters.characters WHERE guid = {nova[0]}") == "0":
+                    break
+                time.sleep(1)
+            time.sleep(3)  # the session goes away a moment after the save
+            load("worldserver", A["name"], "Nova")
+            c = char("characters", "Nova")
+            check("A's claim renamed the offline bot Nova and A has Nova", c and c[1] == A["game"], c)
+            check("bot Nova kept its character under a new name",
+                  one(f"SELECT name FROM characters.characters WHERE guid = {nova[0]}") not in (None, "", "Nova"))
+            check("Nova reserved for A", reservation("Nova") == (A["bnet"], False, 1), reservation("Nova"))
+
+        # a bot that still holds a reserved name when the realm starts is renamed at boot
+        if bot and one(f"SELECT name FROM characters.characters WHERE guid = {bot[0]}") == "Mira":
+            sql(f"INSERT INTO auth.name_reservation (name, battlenet_account) VALUES ('Mira', {B['bnet']})")
+            since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            compose("restart", "worldserver", check=True)
+            if not wait_ready("worldserver", 900, since):
+                sys.exit("realm 1 did not come back after the restart")
+            check("boot renamed the bot holding B's Mira",
+                  one(f"SELECT name FROM characters.characters WHERE guid = {bot[0]}") not in (None, "", "Mira"))
 
     print("== 7. back-fill")
     sql(f"INSERT INTO characters.characters (guid, account, name, race, class, gender, level, taximask) VALUES "
@@ -288,10 +330,17 @@ def main():
 
     passed = sum(ok for _, ok in results)
     print(f"\n{passed} of {len(results)} checks passed")
-    if args.down:
-        compose("down", "-v")
     return 0 if passed == len(results) else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.stdout.reconfigure(line_buffering=True)
+    down = "--down" in sys.argv
+    try:
+        sys.exit(main())
+    finally:
+        if down:  # also after a failure, so the next run starts from a new volume
+            for service in ("worldserver", "worldserver2"):
+                print(f"--- last {service} log lines")
+                print(compose("logs", "--no-color", "--tail", "40", service).stdout)
+            compose("down", "-v")
