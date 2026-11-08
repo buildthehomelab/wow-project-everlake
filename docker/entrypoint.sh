@@ -288,9 +288,20 @@ update_realmlist() {
     echo "[entrypoint] realm ${REALM_ID}: address=${PUBLIC_ADDRESS} localAddress=${REALM_LOCAL_ADDRESS} port=${WORLD_PORT}"
 }
 
+# SQL errors go to logs/DBErrors.log only (about a million harmless ones per start), so an abort over a database
+# error ("Your database structure is not up to date", MySQLConnection.cpp) shows nothing on the console. worldserver
+# empties the file when it starts: print how the previous run's ended first, so the log viewer has it.
+show_last_sql_errors() {
+    local f="$ROOT/logs/DBErrors.log"
+    [ -s "$f" ] || return 0
+    echo "[entrypoint] the previous run's last SQL errors (logs/DBErrors.log):"
+    tail -n 15 "$f" | cut -c1-400 | sed 's/^/[entrypoint]   /'
+}
+
 case "${1:-worldserver}" in
     worldserver)
         shift || true
+        show_last_sql_errors
         configure_worldserver
         write_client_build_override
         check_data

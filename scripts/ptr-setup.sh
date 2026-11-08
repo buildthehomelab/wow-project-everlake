@@ -70,6 +70,15 @@ case "${1:-}" in
             if db_exists "${pair#*:}"; then echo "[ptr] ${pair#*:} exists already: left as it is (refresh copies it again)"; continue; fi
             copy_db "${pair%%:*}" "${pair#*:}"
         done
+        # worldserver fills an empty characters database itself; one with tables but no `updates` table is a first fill
+        # that broke off, and every later start aborts on it ("database structure is not up to date"): start it again.
+        # Only the PTR's own characters database, never a live one.
+        if db_exists characters_ptr \
+           && [ "$(root_sql -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'characters_ptr'")" != 0 ] \
+           && [ "$(root_sql -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'characters_ptr' AND table_name = 'updates'")" = 0 ]; then
+            echo "[ptr] characters_ptr has tables but no updates table (a first fill that broke off): emptied, worldserver fills it again"
+            root_sql -e "DROP DATABASE characters_ptr;"
+        fi
         for db in characters_ptr playerbot_ptr; do
             if db_exists "$db"; then echo "[ptr] $db exists already: left as it is"; continue; fi
             create_db "$db"; echo "[ptr] $db created (empty: the PTR's worldserver fills it on its first start)"
