@@ -4,6 +4,7 @@
     pin_sources.py                 pin the newest of everything
     pin_sources.py --verify        check every pinned file against its recorded sha256
     pin_sources.py --wowhead-only [--wowhead-max N]   only the Wowhead tooltips
+    pin_sources.py --only NAME,NAME                  only these GitHub sources (eg-link, forever-db, tc-forever ...)
 
 The folder is $FOREVER_SOURCES, else data/forever-sources in this repo (gitignored). Each source lands in
 <folder>/<name>/<commit or build or date>/. manifest.json records where every file came from, its
@@ -92,8 +93,9 @@ SOURCES = {
         "licence": "GPL-2.0",
         "credit": "World data from the [TrinityCore `forever` branch](https://github.com/advocaite/TrinityCore/tree/forever) "
                   "(VMaNGOS vanilla world and sniffs of Forever's beta), GPL-2.0.",
-        # the SQL that lands after the full-database release; locale catalogs (tens of MB each) left out
-        "keep": lambda p: p == "COPYING" or (re.match(r"sql/custom/(world|hotfixes)/[^/]+\.sql$", p) and "locale" not in p),
+        # the update files that land on top of the full-database release: sql/updates (TrinityCore's own) and sql/custom
+        # (the fork's); locale catalogs (tens of MB each) left out
+        "keep": lambda p: p == "COPYING" or (re.match(r"sql/(custom|updates)/(world|hotfixes)/(?:[^/]+/)*[^/]+\.sql$", p) and "locale" not in p),
     },
     "item-history": {
         "repo": "ericbtaylorjr/forever-db",
@@ -445,9 +447,15 @@ def main():
         pin_wowhead_tooltips(manifest, limit)
         save(manifest)
         return
+    only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None
     for name, source in SOURCES.items():
-        pin_repo(name, source, manifest)
+        if only is None or name in only:
+            pin_repo(name, source, manifest)
+            save(manifest)
+    if only is not None:              # pin_sources.py --only NAME,NAME: just those GitHub sources
+        write_credits()
         save(manifest)
+        return
     pin_wago(manifest)
     pin_wowhead(manifest)
     pin_tc_release(manifest)

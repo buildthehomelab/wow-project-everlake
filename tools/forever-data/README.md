@@ -8,7 +8,7 @@ release (the `tc_*` tables here); every other source is a view of the live game.
 |---|---|---|
 | Pin the public sources | `pin_sources.py` (`--verify` rechecks the hashes) | files + `manifest.json` with sha256, `CREDITS.md` |
 | Load each source | `load_sources.py` | `src_<source>` tables + `src_pins` |
-| Load the fork's world release | `load_tc.py` | `tc_<table>` (TrinityCore layout) + `tc_updates` |
+| Load the fork's world | `load_tc.py` | `tc_<table>` (TrinityCore layout): the release plus the fork's `sql/updates` and `sql/custom` world files, run as Everlake's worldserver runs them; `tc_updates` lists every update file in it |
 | What Everlake's world lacks | `gap_report.py [--zone NAME]` | `reports/everlake-gaps.md` + `.json` |
 
 Nothing here writes Everlake's own databases. Filling the gaps is not built yet. The plan: Forever's own ids (the client
@@ -21,7 +21,7 @@ repository can't take in as is, and Wowhead and the item history are reference o
 ```bash
 export FOREVER_SOURCES=/path/to/forever-sources      # default: data/forever-sources in this repo (gitignored)
 export FOREVER_DB_USER=... FOREVER_DB_PASS=...         # a login with all rights on acore_forever
-python3 pin_sources.py                                 # --wowhead-only [--wowhead-max N]: only the tooltips
+python3 pin_sources.py                                 # --only NAME,NAME: some sources; --wowhead-only: the tooltips
 python3 load_sources.py                                # --only NAME,NAME: some sources
 python3 load_tc.py
 python3 gap_report.py
@@ -77,9 +77,15 @@ Quest text keeps retail text tokens (`$1oa` and the like): the Forever client sh
   list) and known only from client or beta data;
 - quests with other names, givers or enders, or with none;
 - NPCs Forever uses with no template, NPCs never spawned, extra spawn spots;
-- vendor stock (EG Link's recorded stock against `npc_vendor`, following list references).
+- vendor stock (EG Link's recorded stock against `npc_vendor`, following list references);
+- objects missing or never spawned, loot missing recorded drops, trainers missing spells, quests with no objectives,
+  missing reward items, or no progress or completion text.
 
-The fork's `sql/custom` world files that the release doesn't already hold (its `updates` table, kept as `tc_updates`,
-lists the ones it does) are not applied. Every gap whose key rows those files write or change is marked "custom SQL
-touches it", so it can be checked first. "Never spawned" includes creatures that scripts summon, and extra spots include
+`load_tc.py` runs the fork's `sql/updates` and `sql/custom` world files on top of the release by the same rules as the
+fork's own updater at worldserver start (`custom_sql.UpdatePlan`): new files are applied; a changed file is applied again,
+except world baselines, which are only re-hashed; once a custom file is applied again, every later custom file is too.
+`custom_sql.py` points each statement's tables at the new tables. It lets through only the statement kinds update files
+use, checks every table a statement names (also in statements built inside strings), and stops the load on anything else,
+so nothing outside the world tables is touched. A custom file pinned after the last `load_tc.py` run is
+not in `tc_*` yet: gaps whose key rows it writes or changes are marked "custom SQL touches it". "Never spawned" includes creatures that scripts summon, and extra spots include
 points along patrol paths.
