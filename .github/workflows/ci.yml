@@ -23,6 +23,8 @@ jobs:
           python-version: "3.12" # the python:3.12-alpine services in docker-compose.yml
       - name: python (ruff, bug rules only, see ruff.toml)
         run: pip install --quiet ruff==0.14.4 && ruff check --output-format github .
+      - name: python unit tests (tools/live-hotfixes)
+        run: python -m unittest discover -s tools/live-hotfixes -v
       - name: lua (luacheck, see .luacheckrc)
         run: |
           sudo apt-get update -qq
