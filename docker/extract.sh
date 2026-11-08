@@ -45,15 +45,21 @@ if [ "${DBC_ONLY:-0}" = 1 ]; then
     rm -rf "$NEW" && mkdir -p "$NEW"
     "$BIN/mapextractor" -i "$SRC" -o "$NEW" -p "$PRODUCT" "${MAP_ARGS[@]}" -e 10
     # mapextractor exits 0 even when it cannot open the CASC storage
-    if [ -z "$(find "$NEW/dbc" -name '*.db2' -print -quit 2>/dev/null)" ] || [ ! -d "$NEW/gt" ]; then
+    if [ -z "$(find "$NEW/dbc" -name '*.db2' -print -quit 2>/dev/null)" ] \
+        || [ -z "$(find "$NEW/gt" -type f -print -quit 2>/dev/null)" ]; then
         echo "[extract] ERROR: mapextractor wrote no dbc or gt files, see the messages above. ./data is unchanged."
         rm -rf "$NEW"; exit 1
     fi
-    for d in dbc gt; do
-        rm -rf "$OUT/$d.old"
-        [ -d "$OUT/$d" ] && mv "$OUT/$d" "$OUT/$d.old"
-        mv "$NEW/$d" "$OUT/$d"
-    done
+    # old folders aside, new ones in; if a move fails, put the old ones back so dbc and gt stay one build
+    rm -rf "$OUT/dbc.old" "$OUT/gt.old"
+    if ! { { [ ! -d "$OUT/dbc" ] || mv "$OUT/dbc" "$OUT/dbc.old"; } && { [ ! -d "$OUT/gt" ] || mv "$OUT/gt" "$OUT/gt.old"; } \
+           && mv "$NEW/dbc" "$OUT/dbc" && mv "$NEW/gt" "$OUT/gt"; }; then
+        echo "[extract] ERROR: could not swap in the new dbc and gt, putting the old ones back."
+        for d in dbc gt; do
+            if [ -d "$OUT/$d.old" ]; then rm -rf "$OUT/$d"; mv "$OUT/$d.old" "$OUT/$d"; fi
+        done
+        exit 1
+    fi
     rm -rf "$NEW" "$OUT/dbc.old" "$OUT/gt.old"
     echo "[extract] done (restart the worldservers to load the new tables):"
     du -sh "$OUT/dbc" "$OUT/gt" 2>/dev/null
