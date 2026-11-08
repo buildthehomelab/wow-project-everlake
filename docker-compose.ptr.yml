@@ -30,6 +30,8 @@ services:
       MYSQL_HOST: mysql
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
       DB_USER: ${DB_USER:-trinity}
+      # Battle.net emails whose accounts may enter the PTR: GM level 3 on all realms (scripts/ptr-setup.sh gms)
+      PTR_GM_EMAILS: ${PTR_GM_EMAILS:-}
     volumes:
       - ./scripts:/ptr/scripts:ro
 

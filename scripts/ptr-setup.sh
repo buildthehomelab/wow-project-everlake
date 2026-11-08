@@ -3,7 +3,7 @@
 # The PTR app runs "init" by itself before its worldserver starts (service ptr-init, MYSQL_HOST set: MySQL over the
 # app network). By hand on the host it uses the running MySQL container instead (docker exec).
 #
-#   scripts/ptr-setup.sh init      dbs, then realm (what the PTR app runs on every start; safe to repeat)
+#   scripts/ptr-setup.sh init      dbs, realm, then gms (what the PTR app runs on every start; safe to repeat)
 #   scripts/ptr-setup.sh dbs       world_ptr and hotfixes_ptr as copies of realm 1's world and hotfixes, and the empty
 #                                  characters_ptr and playerbot_ptr (worldserver fills them on the PTR's first start).
 #                                  A database that exists is left as it is.
@@ -12,6 +12,12 @@
 #   scripts/ptr-setup.sh realm     realm row 73 becomes "Everlake PTR": port 8097, the Hardcore card (140), GM accounts
 #                                  only, address and build copied from realm 1. Undo: UPDATE auth.realmlist SET
 #                                  name = 'Forever Hardcore', flag = 3, port = 8085, allowedSecurityLevel = 0 WHERE id = 73;
+#   scripts/ptr-setup.sh gms       the game accounts of the Battle.net emails in PTR_GM_EMAILS (comma-separated, .env)
+#                                  become GM level 3 on ALL realms (account_access RealmID -1). The PTR is GM only, and
+#                                  the login server counts only rank stored for all realms when it hands out a ruleset
+#                                  card's realm (LOGIN_SEL_BNET_ACCOUNT_INFO: aa.RealmID = -1): a GM of realm 70 alone
+#                                  gets "no realms available" on the PTR's card. Empty PTR_GM_EMAILS: nothing changes.
+#                                  Undo for one account: DELETE FROM auth.account_access WHERE AccountID = <id> AND RealmID = -1;
 #   scripts/ptr-setup.sh status    the PTR's databases, its realm row, and the accounts that may enter it
 #
 # MYSQL_HOST + MYSQL_ROOT_PASSWORD: connect over the network (inside the PTR app).
@@ -64,6 +70,24 @@ case "${1:-}" in
     init)
         bash "$0" dbs
         bash "$0" realm
+        bash "$0" gms
+        ;;
+    gms)
+        IFS=',' read -r -a emails <<< "${PTR_GM_EMAILS:-}"
+        for email in "${emails[@]}"; do
+            email="$(echo "$email" | tr -d '[:space:]')"
+            [ -n "$email" ] || continue
+            if ! [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$ ]]; then
+                echo "[ptr] PTR_GM_EMAILS: '$email' is not an email address: skipped"; continue
+            fi
+            found="$(root_sql -N -e "SELECT COUNT(*) FROM auth.account a JOIN auth.battlenet_accounts b ON b.id = a.battlenet_account WHERE b.email = '$email'")"
+            if [ "$found" = 0 ]; then echo "[ptr] PTR_GM_EMAILS: no game account for $email: skipped"; continue; fi
+            root_sql auth -e "INSERT INTO account_access (AccountID, SecurityLevel, RealmID, Comment)
+                SELECT a.id, 3, -1, 'PTR_GM_EMAILS (scripts/ptr-setup.sh)' FROM account a
+                JOIN battlenet_accounts b ON b.id = a.battlenet_account WHERE b.email = '$email'
+                ON DUPLICATE KEY UPDATE SecurityLevel = GREATEST(SecurityLevel, 3);"
+            echo "[ptr] $email: $found game account(s) are GM level 3 on all realms (the PTR included)"
+        done
         ;;
     dbs)
         for pair in world:world_ptr hotfixes:hotfixes_ptr; do
