@@ -7,6 +7,12 @@
 #   scripts/realm2-setup.sh realm2     realm 2's data: the Test 1 class kit, its markers, its characters, realm row 71
 #   scripts/realm2-setup.sh realm1     realm 1 without the class kit, with its own markers, Death Knights and Monks
 #                                      moved out. Stop realm 1's worldserver first (lock protocol) and start it after.
+#   scripts/realm2-setup.sh classic <kit.sql[.gz]>
+#                                      Classic hotfix test (docs/classic-on-forever.md) instead of realm2: realm row 71,
+#                                      only accounts of security level CLASSIC_SECURITY (default 3, GMs) may enter it,
+#                                      and the kit (tools/era/classic_kit.py + hotfix_kit.py) into hotfixes2.
+#                                      Characters stay as dbs copied them. Undo: drop characters2 and hotfixes2,
+#                                      UPDATE auth.realmlist SET flag = 3 WHERE id = 71.
 #
 # Then: docker compose -f docker-compose.yml -f docker-compose.realm2.yml up -d worldserver2
 #
@@ -63,6 +69,20 @@ case "${1:-}" in
         echo "[realm2] auth <- 2026_11_07_06_auth_realm2.sql"; root_sql auth < "$SQL/2026_11_07_06_auth_realm2.sql"
         root_sql -t -e "SELECT guid, account, name, class, level FROM characters2.characters WHERE account <> 0;
                         SELECT id, name, address, port, flag, contentSetId FROM auth.realmlist WHERE id IN (70, 71);"
+        ;;
+    classic)
+        kit="${2:-}"
+        [ -f "$kit" ] || { echo "usage: $0 classic <kit .sql or .sql.gz>"; exit 1; }
+        root_sql -N -e "SHOW DATABASES LIKE 'hotfixes2'" | grep -q hotfixes2 || { echo "[classic] run '$0 dbs' first"; exit 1; }
+        echo "[classic] auth <- 2026_11_07_06_auth_realm2.sql (row 71 = Everlake Two, the Roleplay card)"
+        root_sql auth < "$SQL/2026_11_07_06_auth_realm2.sql"
+        root_sql auth -e "UPDATE realmlist SET allowedSecurityLevel = ${CLASSIC_SECURITY:-3} WHERE id = 71;"
+        echo "[classic] hotfixes2 <- $(basename "$kit") (about 89,000 rows, a minute or so)"
+        case "$kit" in *.gz) gunzip -c "$kit" ;; *) cat "$kit" ;; esac | root_sql hotfixes2
+        root_sql -t -e "SELECT COUNT(*) AS kit_rows, COUNT(DISTINCT Id) AS pushes FROM hotfixes2.hotfix_data
+                            WHERE Id BETWEEN 9600000 AND 9609999;
+                        SELECT COUNT(*) AS all_rows, COUNT(DISTINCT Id) AS all_pushes FROM hotfixes2.hotfix_data;
+                        SELECT id, name, port, flag, allowedSecurityLevel, contentSetId FROM auth.realmlist WHERE id IN (70, 71);"
         ;;
     realm1)
         if docker compose ps --status running --services 2>/dev/null | grep -qx worldserver; then

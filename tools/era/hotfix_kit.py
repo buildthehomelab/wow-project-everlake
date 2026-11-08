@@ -32,6 +32,7 @@ Kit format (JSON):
 """
 import argparse
 import csv
+import functools
 import json
 import os
 import re
@@ -69,6 +70,7 @@ class Wago:
     def __init__(self, cache):
         self.cache = cache
         self.tables = {}
+        self.index = {}
 
     def path(self, table, build):
         return os.path.join(self.cache, build, table + ".csv")
@@ -97,18 +99,27 @@ class Wago:
         return self.tables[key]
 
     def by(self, table, build, column):
-        t = self.load(table, build)
-        out = {}
-        if t:
-            for r in t[1]:
-                out.setdefault(int(r[column]), []).append(r)
-        return out
+        key = (table, build, column)
+        if key not in self.index:
+            t = self.load(table, build)
+            out = {}
+            if t:
+                for r in t[1]:
+                    out.setdefault(int(r[column]), []).append(r)
+            self.index[key] = out
+        return self.index[key]
 
 
 # Tables the core has no hotfix table for: their rows go to hotfix_blob as the client's own record bytes (a sparse table's
 # record: the fields in order, strings inline and null-terminated, no ID). Spell holds the tooltip text; the client keeps
 # no spell as known without its row.
 BLOB_TABLES = {"Spell": ["NameSubtext_lang", "Description_lang", "AuraDescription_lang"]}
+
+
+def chunks(items, size=1000):
+    """Statements of at most 1000 rows each, so a kit of 100,000 rows stays far below max_allowed_packet."""
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
 
 
 def blob(table, row):
@@ -118,6 +129,7 @@ def blob(table, row):
     return out
 
 
+@functools.lru_cache(maxsize=None)
 def table_hash(dbc, table):
     with open(os.path.join(dbc, table + ".db2"), "rb") as f:
         head = f.read(200)
@@ -163,6 +175,7 @@ class Kit:
         self.n = 0
         self.out = []          # (table, record id, row dict laid out as the target)
         self.notes = []
+        self.row_notes = {}    # (table, kind) -> notes; printed one by one when few, else counted
         self.seen = set()
 
     def target_header(self, table):
@@ -188,9 +201,12 @@ class Kit:
             return
         self.seen.add((table, rid))
         if self.target_has(table, rid):
-            self.notes.append("%s %d: the Forever build already has this ID; the hotfix replaces it" % (table, rid))
+            self.row_notes.setdefault((table, "replaces a row the Forever build has"), []).append(
+                "%s %d: the Forever build already has this ID; the hotfix replaces it" % (table, rid))
+        missing = [c for c in missing if c not in (overrides or {})]
         if missing and source != "custom":
-            self.notes.append("%s %d from %s: no %s in the source, sent as 0/empty" % (table, rid, source, ", ".join(missing)))
+            self.row_notes.setdefault((table, "columns not in the source sent as 0/empty: " + ", ".join(missing)), []).append(
+                "%s %d from %s: no %s in the source, sent as 0/empty" % (table, rid, source, ", ".join(missing)))
         self.out.append((table, rid, row))
 
     def rows(self, spec):
@@ -348,12 +364,14 @@ class Kit:
         for table, recs in by_table.items():
             if table in BLOB_TABLES:
                 h = table_hash(self.dbc, table)
-                ids = ", ".join(str(r) for r, _ in recs)
-                lines.append("")
-                lines.append("DELETE FROM `hotfix_blob` WHERE `TableHash` = %d AND `RecordId` IN (%s);" % (h, ids))
-                lines.append("INSERT INTO `hotfix_blob` (`TableHash`, `RecordId`, `locale`, `Blob`, `VerifiedBuild`) VALUES")
-                lines.append(",\n".join("(%d, %d, 'enUS', X'%s', %s)" % (h, r, blob(table, row).hex(), self.target.split(".")[-1])
-                                         for r, row in recs) + ";")
+                for part in chunks(recs):
+                    ids = ", ".join(str(r) for r, _ in part)
+                    lines.append("")
+                    lines.append("DELETE FROM `hotfix_blob` WHERE `TableHash` = %d AND `RecordId` IN (%s);" % (h, ids))
+                    lines.append("INSERT INTO `hotfix_blob` (`TableHash`, `RecordId`, `locale`, `Blob`, `VerifiedBuild`) VALUES")
+                    lines.append(",\n".join("(%d, %d, 'enUS', X'%s', %s)" % (h, r, blob(table, row).hex(),
+                                                                            self.target.split(".")[-1])
+                                             for r, row in part) + ";")
                 continue
             name = snake(table)
             cols = self.schema.get(name)
@@ -367,18 +385,20 @@ class Kit:
                 a, b = norm(dbname), norm(h)
                 if not (a.startswith(b[:4]) or b.startswith(a[:4]) or a.endswith(b[-4:])):
                     self.notes.append("%s: column %s holds %s (check)" % (name, dbname, h))
+            for part in chunks(recs):
+                lines.append("")
+                lines.append("DELETE FROM `%s` WHERE `ID` IN (%s);" % (name, ", ".join(str(r) for r, _ in part)))
+                lines.append("INSERT INTO `%s` (%s) VALUES" % (name, ", ".join("`%s`" % c[0] for c in cols)))
+                values = []
+                for rid, row in part:
+                    v = [sql_value(row[h], dt, ct) for (n, dt, ct), h in zip(dbcols, header)] + [self.target.split(".")[-1]]
+                    values.append("(" + ", ".join(v) + ")")
+                lines.append(",\n".join(values) + ";")
+        for part in chunks(hotfix):
             lines.append("")
-            lines.append("DELETE FROM `%s` WHERE `ID` IN (%s);" % (name, ", ".join(str(r) for r, _ in recs)))
-            lines.append("INSERT INTO `%s` (%s) VALUES" % (name, ", ".join("`%s`" % c[0] for c in cols)))
-            values = []
-            for rid, row in recs:
-                v = [sql_value(row[h], dt, ct) for (n, dt, ct), h in zip(dbcols, header)] + [self.target.split(".")[-1]]
-                values.append("(" + ", ".join(v) + ")")
-            lines.append(",\n".join(values) + ";")
-        lines.append("")
-        lines.append("INSERT INTO `hotfix_data` (`Id`, `UniqueId`, `TableHash`, `RecordId`, `Status`, `VerifiedBuild`) VALUES")
-        lines.append(",\n".join("(%d, %d, %d, %d, 1, %s)" % (p, u, h, r, self.target.split(".")[-1])
-                                for p, u, h, r in hotfix) + ";")
+            lines.append("INSERT INTO `hotfix_data` (`Id`, `UniqueId`, `TableHash`, `RecordId`, `Status`, `VerifiedBuild`) VALUES")
+            lines.append(",\n".join("(%d, %d, %d, %d, 1, %s)" % (p, u, h, r, self.target.split(".")[-1])
+                                    for p, u, h, r in part) + ";")
         return "\n".join(lines) + "\n", pushes
 
 
@@ -409,6 +429,12 @@ def main():
                                            ", ".join("%s %d" % c for c in counts.items())))
     for n in k.notes:
         print("  " + n)
+    for (table, kind), notes in k.row_notes.items():
+        if len(notes) <= 10:
+            for n in notes:
+                print("  " + n)
+        else:
+            print("  %s: %d rows %s" % (table, len(notes), kind))
 
 
 if __name__ == "__main__":

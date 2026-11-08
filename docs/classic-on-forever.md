@@ -83,6 +83,73 @@ and Forever's `ItemSparse` may lack rows that Blizzard sends as live hotfixes, s
 5. **TBC and WotLK later:** Forever has no Outland or Northrend terrain, so those continents come in the same way as
    Sunstrider Isle did. Much of their art is probably already in Forever's build.
 
+## Classic test 1: one realm sends 89,000 rows
+
+Built 2026-11-08, not run yet. Realm 2 ("Everlake Two", the Roleplay card) sends Classic Era's rows as hotfixes; realm 1
+keeps Forever's. It answers point 1 above: does the client take that many rows, how long does the first login take, how
+much memory does it use, and does switching realms stay clean.
+
+**The kit:** 88,820 rows in 898 pushes (9600000-9600897), made by `tools/era/classic_kit.py` (which rows) and
+`tools/era/hotfix_kit.py` (the SQL), 19 MB of SQL:
+
+| Table | Rows | | Table | Rows |
+|---|---|---|---|---|
+| SpellName | 5,289 | | SpellClassOptions | 959 |
+| Spell (text, `hotfix_blob`) | 6,854 | | SpellInterrupts | 1,617 |
+| SpellMisc | 10,256 | | SpellXSpellVisual | 4,283 |
+| SpellEffect | 11,107 | | other spell tables | 4,868 |
+| SpellAuraOptions | 8,167 | | SkillLineAbility | 457 |
+| SpellTargetRestrictions | 2,598 | | Item | 3,797 |
+| SpellCategories | 1,277 | | ItemSparse | 17,707 |
+| SpellLevels | 1,077 | | ItemEffect | 12,071 |
+| | | | ItemSet, AreaTable, Faction, FactionTemplate, TaxiNodes | 311 |
+
+For scale: Forever's own hotfix database already holds 24,304 rows in 17,296 pushes, and every login to realm 1
+gets them. Realm 2 sends those plus the kit, about 113,000 rows. The core answers the client's request for all of
+them in one message (`HandleHotfixRequest`), so the first login on realm 2 gets one message of several MB.
+
+Checked here: the SQL loads into a copy of the hotfix database from the Forever database release (2026-10-14) in 16
+seconds and can be loaded again (its DELETEs undo it). Not checked: the worldserver loading it, and the client.
+
+**Making the kit** (on a Mac with the repository; the DB2 files only give the table hashes, any Forever build's will do):
+
+```bash
+W=~/everlake-classic-kit; mkdir -p $W
+python3 -I tools/era/classic_kit.py --cache $W/wago --out $W/classic_kit.json
+# the hotfix database's columns, from the server: see hotfix_kit.py's header for the query
+python3 -I tools/era/hotfix_kit.py $W/classic_kit.json --schema $W/hotfix_schema.tsv \
+    --dbc data/dbc/enUS --cache $W/wago --out $W/classic_test.sql
+gzip -9 $W/classic_test.sql   # about 1.9 MB
+```
+
+**On the server** (the checkout holding `.env`; realm 2 is only open to GM accounts unless `CLASSIC_SECURITY=0`):
+
+```bash
+scripts/realm2-setup.sh dbs
+scripts/realm2-setup.sh classic ~/classic_test.sql.gz
+docker compose -f docker-compose.yml -f docker-compose.realm2.yml up -d worldserver2
+docker compose -f docker-compose.yml -f docker-compose.realm2.yml logs worldserver2 | grep -i -E "hotfix|error"
+```
+
+**On the Mac mini** (about 15 minutes, two game runs; the report, the hotfix cache and screenshots are sent to the
+report drop):
+
+```bash
+./everlake-client.sh classic1 <account email>
+```
+
+The EverlakeClassic1 addon checks seven probes at every login: two spell texts Classic changed (Remove Lesser Curse,
+Prayer of Healing), three spells Forever removed (Blessing of Salvation, Curse of the Elements, Detect Magic) and two
+item levels (Dragonslayer's Signet 65 → 74, Alchemists' Stone 50 → 60). On Everlake Two every probe should show
+Classic's value, on Everlake Forever's; anything else is printed in red as MIXED. The script also samples the game's
+memory every 5 seconds and asks how long the Roleplay card took to show its character list, on the first login and on
+the second (from the cache).
+
+**Passes when:** the first login on Everlake Two works without a freeze over about a minute; the second is about as
+fast as Everlake; the game's memory doesn't jump by more than a few hundred MB; every login is OK, never MIXED.
+**If the first login fails or hangs**, the next try is the core sending the rows in several messages instead of one,
+then a smaller kit (`classic_kit.py --max-rows`) to find the limit.
+
 ## Re-running it
 
 The scripts are in `tools/era/classic_diff/`. Pick a work folder outside the repo (downloads are untrusted data):
