@@ -19,6 +19,10 @@ OVERRIDES="$ROOT/overrides"
 : "${REALM_LOCAL_SUBNET_MASK:=255.255.255.0}"
 : "${REALM_NAME:=Forever}"
 : "${REALM_ID:=70}"
+# The core's auth update 2026_11_07_00 moves the realms to 70862 (Battle.net's 2026-11-07 update, same game data).
+# Clients still on 70790 (a frozen test copy, a player who hasn't updated) keep seeing and joining them: bnetserver
+# and every worldserver accept these builds too (Realm.AlsoAcceptBuilds, comma-separated).
+ALSO_ACCEPT_BUILDS="70790"
 # Realm 1's world port. 8085 by default; another one when the host already runs a server on 8085 (e.g. beside Evermore)
 : "${WORLD_PORT:=8085}"
 : "${LOGIN_HOSTNAME:=trinity.actual.battle.net}"
@@ -128,6 +132,9 @@ configure_worldserver() {
     setkey "$f" Classic.Shop.Enabled 1
     setkey "$f" AccountInstancesPerHour 5
     setkey "$f" PlayerSave.Stats.MinLevel 1
+    # At character select a client asks this worldserver for another ruleset's realm (the ruleset picker): it checks the
+    # client's build like bnetserver does, so it needs the same extra builds, or a 70790 client finds no realm there.
+    setkey "$f" Realm.AlsoAcceptBuilds "\"$ALSO_ACCEPT_BUILDS\""
     apply_overrides "$f" worldserver
 }
 
@@ -143,9 +150,7 @@ configure_bnetserver() {
     setkey "$f" LogsDir "\"$ROOT/logs\""
     setkey "$f" Realm.CfgContentSetID 137
     setkey "$f" Realm.SuperDistrictID 2
-    # The core's auth update 2026_11_07_00 moves the realms to 70862 (Battle.net's 2026-11-07 update, same game data).
-    # Clients still on 70790 (a frozen test copy, a player who hasn't updated) keep seeing and joining them.
-    setkey "$f" Realm.AlsoAcceptBuilds '"70790"'
+    setkey "$f" Realm.AlsoAcceptBuilds "\"$ALSO_ACCEPT_BUILDS\""
     apply_overrides "$f" bnetserver
 }
 
