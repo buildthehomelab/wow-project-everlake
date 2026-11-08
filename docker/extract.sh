@@ -9,6 +9,8 @@
 #   CASC_PRODUCT  wowf (WoW Forever) by default
 #   CASC_REGION   us by default
 #   EXTRACT_MMAPS=1 also generates mmaps (long; only needed with MMAP_PATHFINDING=1)
+#   DBC_ONLY=1    only dbc and gt (mapextractor -e 10), for a client update that changes table contents but no map
+#                 files (e.g. 70790 -> 70862); maps, vmaps and mmaps stay as they are
 #
 # The CDN always serves the newest build. Check that it is the build the server is pinned to before extracting.
 set -euo pipefail
@@ -36,6 +38,19 @@ else
 fi
 
 cd "$OUT"
+if [ "${DBC_ONLY:-0}" = 1 ]; then
+    echo "[extract] === mapextractor, dbc and gt only (DBC_ONLY=1)"
+    mark="$(mktemp)"
+    "$BIN/mapextractor" -i "$SRC" -o "$OUT" -p "$PRODUCT" "${MAP_ARGS[@]}" -e 10
+    # mapextractor exits 0 even when it cannot open the CASC storage: check that it wrote new tables
+    if [ -z "$(find "$OUT/dbc" -name '*.db2' -newer "$mark" -print -quit 2>/dev/null)" ]; then
+        echo "[extract] ERROR: mapextractor wrote no dbc files, see the messages above."; exit 1
+    fi
+    rm -f "$mark"
+    echo "[extract] done:"
+    du -sh "$OUT/dbc" "$OUT/gt" 2>/dev/null
+    exit 0
+fi
 if [ "${SKIP_MAPS:-0}" = 1 ] && [ -d "$OUT/dbc" ] && [ -d "$OUT/maps" ]; then
     echo "[extract] === 1/3 skipped (SKIP_MAPS=1, dbc and maps already there)"
 else

@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 ARG TC_REPO=https://github.com/advocaite/TrinityCore.git
-# forever branch 2026-11-06: client 1.60.1.70790
-ARG TC_COMMIT=6ac7bece2e7a6b3f75599f20d62235985ea78a7d
+# forever branch 2026-11-08: client 1.60.1.70862 (realms on 70862; bnetserver also lets 70790 in, docker/entrypoint.sh)
+ARG TC_COMMIT=2ae1313e9f89ba34103fee1400dc3d4222efd8c4
 RUN git init -q /src/TrinityCore \
     && git -C /src/TrinityCore remote add origin "${TC_REPO}" \
     && git -C /src/TrinityCore fetch -q --depth 1 origin "${TC_COMMIT}" \

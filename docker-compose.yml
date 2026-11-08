@@ -41,7 +41,7 @@ services:
     build:
       context: .
       args:
-        TC_COMMIT: ${TC_COMMIT:-6ac7bece2e7a6b3f75599f20d62235985ea78a7d}
+        TC_COMMIT: ${TC_COMMIT:-2ae1313e9f89ba34103fee1400dc3d4222efd8c4}
         BUILD_JOBS: ${BUILD_JOBS:-4}
     image: everlake-trinitycore:latest
     command: ["worldserver"]
@@ -110,6 +110,7 @@ services:
       CASC_PRODUCT: ${CASC_PRODUCT:-wowf}
       CASC_REGION: ${CASC_REGION:-us}
       EXTRACT_MMAPS: ${EXTRACT_MMAPS:-0}
+      DBC_ONLY: ${DBC_ONLY:-0}
       SKIP_MAPS: ${SKIP_MAPS:-0}
     volumes:
       - "${WOW_DIR:-./wow-not-set}:/wow:ro"

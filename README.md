@@ -37,8 +37,8 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 
 | What | Value |
 |---|---|
-| Core | [advocaite/TrinityCore](https://github.com/advocaite/TrinityCore/tree/forever) `forever` @ `6ac7bece` (2026-11-06) |
-| Client | WoW Forever **1.60.1.70790** |
+| Core | [advocaite/TrinityCore](https://github.com/advocaite/TrinityCore/tree/forever) `forever` @ `2ae1313e` (2026-11-08) |
+| Client | WoW Forever **1.60.1.70862**; 1.60.1.70790 clients are also let in (`Realm.AlsoAcceptBuilds`) |
 | World DB | `forever-tdb-2026-10-14` release of the same repository |
 
 The server, the client and the extracted data must all be the same build. Battle.net updates the client on its own,
@@ -47,6 +47,10 @@ so freeze it before testing, and check the CDN build before extracting:
 ```sh
 curl -s http://us.patch.battle.net:1119/wowf/versions | grep '^us|'
 ```
+
+70790 and 70862 have the same table layouts and the same map files; only table contents differ (spells, items and
+about 80 other tables, compared file by file on Blizzard's CDN on 2026-11-08). Data extracted from 70790 still loads.
+To bring the tables up to 70862 without redoing maps, vmaps and mmaps: `DBC_ONLY=1 docker compose run --rm extractor`.
 
 ## Run it
 
