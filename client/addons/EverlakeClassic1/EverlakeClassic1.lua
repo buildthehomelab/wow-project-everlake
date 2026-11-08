@@ -73,7 +73,9 @@ local function check(label)
     for _, p in ipairs(PROBES) do
         local value = read(p)
         local s = side(p, value)
-        if p.kind == "ilvl" and value == nil then
+        -- nil is "not loaded yet" for spell text and item levels (both sides have a value), unlike a spell name,
+        -- where nil is Forever's answer: the 5 s check came back nil for both texts on both realms (2026-11-08 run)
+        if (p.kind == "ilvl" or p.kind == "text") and value == nil then
             pending = pending + 1
             s = "pending"
         end
@@ -98,7 +100,7 @@ local function check(label)
     if entry.verdict == "OK" then
         say(("|cff33ff33OK|r on %s: all %s (%s)."):format(realm, want, entry.seen))
     elseif entry.verdict == "PENDING" then
-        say(("|cffffff33PENDING|r on %s: item data still loading (%s)."):format(realm, entry.seen))
+        say(("|cffffff33PENDING|r on %s: spell text or item data still loading (%s)."):format(realm, entry.seen))
     else
         say(("|cffff3333MIXED|r on %s, expected %s: %s"):format(realm, want, entry.wrong))
     end
@@ -118,7 +120,7 @@ frame:SetScript("OnEvent", function(_, event, name)
         for _, e in ipairs(pendingErrors) do db.errors[#db.errors + 1] = e end
         pendingErrors = {}
     elseif event == "PLAYER_LOGIN" then
-        -- item data may load a little later: check after 5 s and again after 30 s
+        -- spell text and item data load a little later: check after 5 s and again after 30 s
         C_Timer.After(5, function() check("login") end)
         C_Timer.After(30, function() check("login+30s") end)
     end

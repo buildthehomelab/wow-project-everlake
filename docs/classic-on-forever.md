@@ -162,6 +162,27 @@ fast as Everlake; the game's memory doesn't jump by more than a few hundred MB; 
 **If the first login fails or hangs**, the next try is the core sending the rows in several messages instead of one,
 then a smaller kit (`classic_kit.py --max-rows`) to find the limit.
 
+**Result, 2026-11-08 18:28-18:38** (Mac mini, build 70790; report in the report drop as
+`20261108-183820-classic1-*`):
+
+- All 88,820 Classic rows reached the client: Hotfix.log names every one, and DBCache.bin grew from 3.5 MB (24,932
+  rows) to 20 MB (138,614 rows). The core answered the HotfixRequest in one message without trouble.
+- Roleplay card to character list: 4 s on the first login (the download) and 4 s on the second (from the cache). No
+  freeze, crash or Lua error.
+- Each realm shows its own data: at every 30-second check Everlake Two showed all seven probes the Classic way and
+  Everlake all seven the Forever way, over five realm changes, with both sets in the one cache file.
+- The red MIXED lines at the 5-second check were the addon's fault: the two spell texts were not loaded yet (nil), and
+  the addon called that "neither". Addon 0.2.0 counts a missing spell text as PENDING, like an item level.
+- Memory: run 1 peaked at 2,323 MB (average 1,824), run 2 at 3,074 MB (average 2,322). With no Everlake-only run to
+  compare, this does not answer "no more than a few hundred MB" yet: that is the baseline below.
+
+**Memory baseline.** The same two runs on Everlake alone, with the hotfix cache moved aside first (the game downloads
+it again), using the character from the test. The report prints memory per run for both, side by side:
+
+```bash
+./everlake-client.sh classic1 <account email> baseline
+```
+
 ## Re-running it
 
 The scripts are in `tools/era/classic_diff/`. Pick a work folder outside the repo (downloads are untrusted data):
