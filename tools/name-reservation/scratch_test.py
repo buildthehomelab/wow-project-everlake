@@ -139,7 +139,7 @@ def load(service, account, name):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--down", action="store_true", help="remove the scratch stack and its volume at the end")
-    args = ap.parse_args()
+    ap.parse_args()  # --down is read in __main__, so it also runs after a failure
 
     print("== starting the scratch stack (first start imports the world database: several minutes)")
     compose("up", "-d", "mysql", check=True)

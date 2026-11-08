@@ -1,0 +1,5 @@
+# ruff for the Python tools (CI): bugs only (pyflakes + syntax), no style rules.
+target-version = "py39"
+
+[lint]
+select = ["F", "E9"]

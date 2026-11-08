@@ -341,6 +341,7 @@ gate2_report() {
     for d in "$root/Data" "$root/Data/data" "$root/Data/config"; do
         ls -ldeO@ "$d" 2>&1 | sed 's/^/    /'
     done
+    # shellcheck disable=SC2010 # ls -e/-O show ACLs and flags, which a glob cannot
     ls -leO "$root/Data/data" 2>/dev/null | grep -E '\.idx$' | head -4 | sed 's/^/    /'
     gate2_folder_report "test copy" "$game" "$mark"
     real="$(find_game "" 2>/dev/null)" || real=""

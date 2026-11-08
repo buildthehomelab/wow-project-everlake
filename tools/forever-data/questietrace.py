@@ -222,7 +222,7 @@ def mine(session):
     for i, ev in enumerate(events):
         if not isinstance(ev, dict):
             continue
-        e, t, tp = ev.get("e"), ev.get("t", 0), ev.get("tp", 0)
+        e, t = ev.get("e"), ev.get("t", 0)
         nxt = events[i + 1] if i + 1 < len(events) else None
         limit = nxt.get("tp", math.inf) if isinstance(nxt, dict) and nxt.get("t") == t else math.inf
         at = lambda fn, *p: value_at(stream(session, fn, *p), t, limit)  # noqa: E731
