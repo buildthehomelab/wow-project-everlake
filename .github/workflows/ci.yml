@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: core pin and SQL file names
+        run: bash tools/ci/check-repo.sh
+      - name: shellcheck
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck -S warning
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # the python:3.12-alpine services in docker-compose.yml
+      - name: python (ruff, bug rules only, see ruff.toml)
+        run: pip install --quiet ruff==0.14.4 && ruff check --output-format github .
+      - name: lua (luacheck, see .luacheckrc)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends lua-check > /dev/null
+          luacheck client/addons
+      - name: docker compose files
+        run: |
+          docker compose --env-file .env.example -f docker-compose.yml config -q
+          docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.realm2.yml config -q
+
+  mac-client:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: keypatch.c builds without warnings (as everlake-client.sh builds it)
+        run: clang -O2 -dynamiclib -arch arm64 -arch x86_64 -Wall -Wextra -Werror -o "$RUNNER_TEMP/keypatch.dylib" client/macos/keypatch.c
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9" # Apple's /usr/bin/python3 on the Mac mini
+      - name: client/macos Python parses on 3.9
+        run: for f in client/macos/*.py; do python -I -c 'import ast, sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])' "$f" || exit 1; done
+
+  patches:
+    # docker/patches must apply to the cores we build. Bump "bots" when the forever-bots core is updated.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - core: pinned (Dockerfile TC_COMMIT)
+            commit: ""
+          - core: forever-bots
+            commit: 5206a7275f03dd2f6f2217fab9f67a4b232269fa # docs/era-data.md
+    name: patches (${{ matrix.core }})
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tools/ci/check-patches.sh ${{ matrix.commit }}
