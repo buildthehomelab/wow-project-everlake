@@ -112,9 +112,13 @@ if os.environ.get("FOREVER_TC_REPO") or os.environ.get("FOREVER_TC_REF"):
                                  branch=os.environ.get("FOREVER_TC_REF") or SOURCES["tc-forever"]["branch"])
 TC_RELEASE = {"repo": "advocaite/TrinityCore", "tag_prefix": "forever-tdb-"}
 FOREVERDB_NET = "https://foreverdb.net/"
+# Blizzard's live Forever hotfix cache, mirrored publicly and refreshed daily (wowsims/forever, MIT, builds from it)
+LIVE_HOTFIXES_URL = "https://storage.googleapis.com/raidbots-static/wow/forever/enUS/DBCache.bin"
 CREDITS_EXTRA = (
     "Forever's client tables through [wago.tools](https://wago.tools); item, quest, NPC, object and spell tooltips from "
     "[Wowhead](https://www.wowhead.com/forever)'s public tooltip service, as a reference.",
+    "Live Forever hotfixes from Blizzard's hotfix cache, through the public mirror that "
+    "[wowsims/forever](https://github.com/wowsims/forever) builds from.",
     "Vendor, trainer and quest data from [ForeverDB.net](https://foreverdb.net): Data from ForeverDB.net, GPL-3.0.",
     "Game content such as names and text belongs to Blizzard Entertainment.",
 )
@@ -259,6 +263,26 @@ def pin_tc_release(manifest):
     record(manifest, "tc-release", {"label": release["tag_name"], "folder": os.path.relpath(folder, ROOT), "pinned": now(),
                                     "files": files, "repo": TC_RELEASE["repo"], "licence": "GPL-2.0"})
     print(f"tc-release: pinned {release['tag_name']}, {len(files)} files")
+
+
+def pin_live_hotfixes(manifest):
+    """Live Forever's hotfix cache (DBCache.bin). It changes in place every day, so a pin is one content: label
+    <client build>-<first 12 of its sha256>. A file that doesn't read as a whole hotfix cache is refused, not pinned."""
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "live-hotfixes"))
+    import dbcache
+    data = fetch(LIVE_HOTFIXES_URL)
+    build, records = dbcache.parse(data)
+    label = f"{build}-{hashlib.sha256(data).hexdigest()[:12]}"
+    current = manifest["current"].get("live-hotfixes")
+    if current and current["label"] == label:
+        print(f"live-hotfixes: unchanged at {label}")
+        return
+    folder = os.path.join(ROOT, "live-hotfixes", label)
+    record(manifest, "live-hotfixes", {"label": label, "folder": os.path.relpath(folder, ROOT), "pinned": now(),
+                                       "files": {"DBCache.bin": write(folder, "DBCache.bin", data)}, "build": build,
+                                       "records": len(records), "url": LIVE_HOTFIXES_URL,
+                                       "licence": "Blizzard data; public mirror (wowsims/forever, MIT, builds from it)"})
+    print(f"live-hotfixes: pinned {label}, {len(records)} records")
 
 
 def pin_foreverdb_net(manifest):
@@ -457,13 +481,17 @@ def main():
         if only is None or name in only:
             pin_repo(name, source, manifest)
             save(manifest)
-    if only is not None:              # pin_sources.py --only NAME,NAME: just those GitHub sources
+    if only is not None:              # pin_sources.py --only NAME,NAME: just those GitHub sources (or live-hotfixes)
+        if "live-hotfixes" in only:
+            pin_live_hotfixes(manifest)
         write_credits()
         save(manifest)
         return
     pin_wago(manifest)
     pin_wowhead(manifest)
     pin_tc_release(manifest)
+    save(manifest)
+    pin_live_hotfixes(manifest)
     save(manifest)
     pin_foreverdb_net(manifest)
     save(manifest)

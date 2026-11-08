@@ -180,10 +180,24 @@ def read_wowhead_tooltips(pin, folder):
         yield kind, str(rid), rid, None, row
 
 
+def read_live_hotfixes(pin, folder):
+    """Live Forever's hotfix cache, every record of every push in file order: tbl = the table hash as 0xXXXXXXXX
+    (DB2 name hash), k = "<record>@<push>", id = record id, ref = push id (-1: sent with every connection).
+    data = push, unique id, status (1 valid, 2 removed, 3 invalid, 4 not public), region and the record bytes as hex.
+    The bytes stay raw: decoding needs the client build's table layouts."""
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "live-hotfixes"))
+    import dbcache
+    _, records = dbcache.read(os.path.join(folder, "DBCache.bin"))
+    for r in records:
+        yield (f"0x{r.table:08X}", f"{r.record}@{r.push}", r.record, r.push,
+               {"push": r.push, "unique": r.unique, "status": r.status, "region": r.region, "data": r.data.hex()})
+
+
 READERS = {
     "forever-db": read_forever_db, "eg-link": read_eg_link, "questiedb": read_questiedb, "foreverdb-net": read_foreverdb_net,
     "allthethings": read_allthethings, "wago": read_wago, "wowhead": read_wowhead, "item-history": read_item_history,
     "questietrace-own": read_questietrace_own, "wowhead-tooltips": read_wowhead_tooltips,
+    "live-hotfixes": read_live_hotfixes,
 }
 
 

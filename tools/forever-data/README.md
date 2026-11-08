@@ -54,6 +54,7 @@ Every `src_` table has the same columns: `tbl` (the source's table or file), `n`
 | `src_foreverdb_net` | [ForeverDB.net](https://foreverdb.net) addon data: quests, vendors, trainers, dungeons, loot | GPL-3.0, credit "Data from ForeverDB.net" |
 | `src_allthethings` | [AllTheThings](https://github.com/ATTWoWAddon/AllTheThings) Forever zone and dungeon files (raw Lua text) | MIT |
 | `src_wago` | Forever client tables through [wago.tools](https://wago.tools) (areas, maps, taxis, factions, sounds) | Blizzard data |
+| `src_live_hotfixes` | Live Forever's hotfix cache (`DBCache.bin`, [public mirror](https://storage.googleapis.com/raidbots-static/wow/forever/enUS/DBCache.bin) that [wowsims/forever](https://github.com/wowsims/forever) builds from): every hotfixed record live sends (spells, talents, items, TACT keys). `tbl` = table hash, `id` = record, `ref` = push; record bytes raw (hex), decoding needs the build's layouts. Pinned per content (`<build>-<sha>`), `--only live-hotfixes` alone. Reader: [`tools/live-hotfixes`](../live-hotfixes/README.md) | Blizzard data |
 | `src_wowhead`, `src_wowhead_tooltips` | Wowhead's public Forever tooltips (quests, NPCs, objects, items, spells) | reference only |
 | `src_item_history` | Items and spells per build and hotfix ([ericbtaylorjr/forever-db](https://github.com/ericbtaylorjr/forever-db)) | none stated: reference only, never copied into Everlake |
 | `tc_*` | [TrinityCore `forever`](https://github.com/advocaite/TrinityCore/tree/forever) world release | GPL-2.0 |

@@ -118,11 +118,12 @@ COPY --from=build /opt/trinitycore /opt/trinitycore
 # The updater looks for sql/ under the source directory baked in at build time
 COPY --from=build /src/TrinityCore/sql /src/TrinityCore/sql
 # Our login-database tables the core patches need, applied by the updater on start like the fork's own custom files
-# (name reservation: docker/patches/0008), and the one ruleset card at login (Forever). The other sql/everlake files
-# are data and stay manual.
+# (name reservation: docker/patches/0008), the one ruleset card at login (Forever), and the TACT keys live Forever sends
+# that the core lacks (tools/live-hotfixes/tact_keys.py). The other sql/everlake files are data and stay manual.
 COPY sql/everlake/2026_11_07_09_auth_name_reservation.sql sql/everlake/2026_11_08_06_auth_one_ruleset.sql \
      /src/TrinityCore/sql/custom/auth/
-COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql /src/TrinityCore/sql/custom/hotfixes/
+COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql sql/everlake/2026_11_08_08_hotfixes_live_tact_keys.sql \
+     /src/TrinityCore/sql/custom/hotfixes/
 # The world import's update files (empty unless WORLD_DATA_COMMIT is set; see the worlddata stage)
 COPY --from=worlddata /world-data/ /src/TrinityCore/sql/custom/world/
 # worldserver's auto-setup imports TDB_full_*.sql from its working directory
