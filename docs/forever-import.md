@@ -32,25 +32,33 @@ every import is checked against the newest fork world first, and anything the fo
 1. **Forever's own ids.** The client knows quests, NPCs, objects and items by Forever's ids, so imported rows keep them.
    (The 10,000,000 id blocks were only for fitting Forever into AzerothCore on Evermore; they don't apply here.)
 2. **Add, don't edit.** An import only adds rows the fork's world doesn't have. A fork row is never changed by an
-   import, so the fork's own update files keep applying cleanly on top. Every change to a row the fork has goes in a
-   separate, clearly labelled corrections file instead, one row per change with its sources, so it can be reviewed on
-   its own and dropped when the fork catches up: a renamed quest, other givers, an empty progress or completion text
-   filled in, a loot table linked to a creature (its LootID), a vendor or flight-master flag.
+   import, so the fork's own update files keep applying cleanly on top. Every change to a row the fork has goes in
+   separate, clearly labelled corrections files instead (new ones with each slice), one row per change with its
+   sources, so they can be reviewed on their own: a renamed quest, other givers, an empty progress or completion text
+   filled in, a loot table linked to a creature (its LootID), a vendor or flight-master flag. A correction changes or
+   removes a fork row only while that row is still as the correction was written against, so a re-run never overwrites a newer
+   value from the fork, and once the fork catches up the correction no longer matches and does nothing.
 3. **The vote decides.** Every value comes from the weighted vote across sources (`source_weights.py`), and every row
    carries a note of which sources gave it. Close calls go on a review list, not into the world.
 4. **Held back, not guessed.** A row that needs something we don't have (an item the client lacks, an NPC with no
    model, a spawn with no height) is held back and listed with why, never filled with a made-up value.
 5. **Everything is an update file.** The import is ordinary TrinityCore update files, applied by the worldserver's own
-   updater like the fork's. Each file deletes what it wrote before writing again, so it can run any number of times.
+   updater like the fork's. A file is never changed once it is deployed: the updater would run it again, and with it
+   every later custom file, the fork's included, and some of the fork's files can't run twice. A later fix is a new
+   file. Each file is still safe to run again: it adds a row only where none exists, records the key of each row
+   it actually inserts, with its own file name, in a small table of our own (`everlake_import_rows`), and deletes only
+   rows listed there under its own name. A key is recorded only when the row was missing, never from a fixed list, so
+   a re-run never lists a row the fork has since added.
 6. **PTR first.** Every import goes to the PTR realm first (a test realm with few bots, decided but not built yet), gets played and botted there, and only then goes to the Forever realm.
 
 ## How a run works
 
 1. Pin and load the sources, load the fork's world (daily, as now).
 2. **Generate** the update files for one slice (below): the rows to add, the corrections, and the held-back list.
-3. **Dry run**: copy the fork's world (`tc_*`) to a scratch schema, run the generated files on it with the same
-   updater rules, and check:
-   - every fork row outside the corrections file is byte for byte unchanged;
+3. **Dry run**, twice, both with the updater's rules: once from scratch (the fork's world, then the fork's files and ours
+   in filename order, as a new realm builds it), and once stepping from the deployed pins to the new ones (a world built
+   at the old fork and data pins, with its `updates` rows, then the new files), as the realm will. Then check:
+   - every fork row outside the corrections files is byte for byte unchanged;
    - every new row points at things that exist (givers and enders, loot items, trainer spells, models, maps, factions);
    - no id or spawn guid collides with the fork's, and re-running the files changes nothing;
    - the gap report on the result shows the slice's gaps gone and nothing new.
@@ -74,17 +82,35 @@ Low risk and high value first. Each slice is its own pull request.
 Not in this plan: scripts (SmartAI, escorts, events) and gossip menus. The sources only show their effect, not the
 script; those stay hand work or come from the fork.
 
+## Where the import files live (decided 2026-11-08)
+
+Several sources are GPL-3.0 (Polestar's tables, QuestieDB, ForeverDB.net) and this repository is GPL-2.0, so the
+generated SQL lives in its own repository, `wow-everlake-world-data`, under GPL-3.0:
+
+- **What it holds.** The generated update files (`sql/world/`), the corrections files, the held-back list and the dry-run
+  report of each slice, and a NOTICE naming every source, its licence and its pin (EG Link is CC BY 4.0 and needs the
+  credit). No code: the generator stays here in `tools/forever-data`, and only reads the sources.
+- **How Everlake gets it.** The Dockerfile pins it by commit, like the fork (`WORLD_DATA_COMMIT`), clones it in a build
+  stage, and copies its `sql/world/` folder into `/src/TrinityCore/sql/custom/world/`, where the worldserver's updater
+  applies the files with the fork's custom files. (The step goes in with the first slice; a `COPY` of `*.sql` fails
+  while there are none.) Moving that pin is a pull request here, after the slice's own pull request in the data
+  repository is merged.
+- **File names.** `YYYY_MM_DD_NN_world_everlake_import_<slice>.sql`. The fork never uses `everlake_import`, so no
+  name of ours can replace or clash with one of the fork's.
+- **When the fork adds a row we added.** On the realm our row is already there, so a fork file that plainly INSERTs it
+  would stop the updater. Before the fork pin moves, the stepped dry run shows every such row. For each fork file that
+  adds them, a new handover file named to sort just before it deletes those rows, only where `everlake_import_rows`
+  lists them, and drops them from that table. Being new, it runs once without making anything else run again; if it
+  ever does run again, it finds nothing listed and deletes nothing, so the fork's row stays. The handover file and the
+  new data pin go in the same pull request as the new fork pin.
+
 ## What needs a decision
 
-1. **Where the import files live, and their licence.** Several sources are GPL-3.0 (Polestar's tables, QuestieDB,
-   ForeverDB.net), and this repository is GPL-2.0, so the generated SQL can't simply go into `sql/everlake/`. Options:
-   a separate data repository under GPL-3.0 that the image build copies in; or generating the files on the server at
-   deploy time from the pinned sources, so no data is committed anywhere.
-2. **Spawn guids.** The fork's world uses creature guids up to about 26 million and object guids up to about 34
+1. **Spawn guids.** The fork's world uses creature guids up to about 26 million and object guids up to about 34
    million. Imported spawns need a block of their own above that, kept in a small table so a re-run reuses the same
    guid for the same spawn point.
-3. **Loot chances.** How many recorded kills before a drop chance counts, and whether a drop seen once (a rare) goes in.
-4. **The PTR realm.** It is decided but not running yet; the first import needs it, or goes to a second test realm.
-5. **Read access to Everlake's live world database**, so the dry run can also compare against what is really there,
+2. **Loot chances.** How many recorded kills before a drop chance counts, and whether a drop seen once (a rare) goes in.
+3. **The PTR realm.** It is decided but not running yet; the first import needs it, or goes to a second test realm.
+4. **Read access to Everlake's live world database**, so the dry run can also compare against what is really there,
    not only against the world rebuilt here.
-6. **A ForeverDB.net API key** (theirs, free, needs a Battle.net login) for vendor stock beyond what EG Link saw.
+5. **A ForeverDB.net API key** (theirs, free, needs a Battle.net login) for vendor stock beyond what EG Link saw.
