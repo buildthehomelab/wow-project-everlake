@@ -414,7 +414,31 @@ test1_shots() {
 # login that the client shows only the current realm's data; these functions keep what the client stored after each run.
 SWITCH="$SUPPORT/switch"
 
-game_running() { pgrep -f "$COPY_NAME/Contents/MacOS" >/dev/null 2>&1; }
+# The game copy's own processes: pgrep -f also matches any command line that merely names the copy (another pgrep, e.g.
+# classic1's memory sampler, or a script given the path), so keep only processes whose executable is inside the copy.
+game_pids() {
+    local pid
+    for pid in $(pgrep -f "$COPY_NAME/Contents/MacOS" 2>/dev/null || true); do
+        case "$(ps -o comm= -p "$pid" 2>/dev/null || true)" in *"$COPY_NAME/Contents/MacOS/"*) echo "$pid" ;; esac
+    done
+}
+game_running() { [ -n "$(game_pids)" ]; }
+
+# Stops a test because the game is open, and sends what is running to the report drop, so nobody has to copy it.
+refuse_running() {
+    local f="$SUPPORT/game-running.txt" pid
+    mkdir -p "$SUPPORT"
+    {
+        echo "== $(date '+%Y-%m-%d %H:%M:%S') $1: the game copy is running"
+        for pid in $(game_pids); do ps -o pid=,lstart=,command= -p "$pid" 2>/dev/null | cut -c1-300; done
+        echo "-- every process naming the copy (pgrep -fl):"
+        pgrep -fl "$COPY_NAME" 2>/dev/null | cut -c1-300 || true
+    } > "$f"
+    cat "$f"
+    curl -s -m 10 -T "$f" "http://$(report_addr):8099/game-running-$(hostname -s)" >/dev/null \
+        && say "sent this list to the report drop ($(report_addr))" || say "list NOT sent (saved in $f)"
+    die "the game is running: quit it first (or stop the process listed above: kill <pid>)"
+}
 
 switch_snapshot() {
     # <game> <label>: the client's caches, its hotfix log and the addon's record, as they are now
@@ -468,7 +492,7 @@ switch_run() {
     shift 3
     say "---- run $run ----"
     for line in "$@"; do say "  $line"; done
-    if game_running; then die "the game is already running: quit it first"; fi
+    if game_running; then refuse_running "run $run"; fi
     "$0" play "$email" ${folder:+"$folder"} || die "play failed"
     while ! game_running && [ $n -lt 60 ]; do sleep 1; n=$((n + 1)); done
     game_running || die "the game did not start"
@@ -503,7 +527,7 @@ switch_test() {
     game="$(find_game "$folder")" || die "game folder not found"
     addr="$(server_addr)"; [ -n "$addr" ] || die "no server address saved: run setup first"
     nc -z -G 3 "$addr" 8095 2>/dev/null || die "realm 2 (port 8095 on the server) is not reachable: is worldserver2 running?"
-    if game_running; then die "the game is running: quit it first"; fi
+    if game_running; then refuse_running "start"; fi
     rm -rf "$SWITCH"; mkdir -p "$SWITCH"; touch "$SWITCH/mark"
     mkdir -p "$game/Interface/AddOns/EverlakeSwitch"
     cp "$HERE/../addons/EverlakeSwitch/EverlakeSwitch.toc" "$HERE/../addons/EverlakeSwitch/EverlakeSwitch.lua" \
@@ -584,7 +608,7 @@ classic1_test() {
     game="$(find_game "$folder")" || die "game folder not found"
     addr="$(server_addr)"; [ -n "$addr" ] || die "no server address saved: run setup first"
     nc -z -G 3 "$addr" 8095 2>/dev/null || die "realm 2 (port 8095 on the server) is not reachable: is worldserver2 running?"
-    if game_running; then die "the game is running: quit it first"; fi
+    if game_running; then refuse_running "start"; fi
     rm -rf "$SWITCH"; mkdir -p "$SWITCH"; touch "$SWITCH/mark"
     mkdir -p "$game/Interface/AddOns/EverlakeClassic1"
     cp "$HERE/../addons/EverlakeClassic1/EverlakeClassic1.toc" "$HERE/../addons/EverlakeClassic1/EverlakeClassic1.lua" \
