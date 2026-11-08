@@ -15,6 +15,7 @@
 #   ./everlake-client.sh fix-owner                  (gives the Everlake folder back to you after a run with sudo)
 #   ./everlake-client.sh switch <account email> [game folder]  (gate 5 realm switch test: guided, sends a report)
 #   ./everlake-client.sh classic1 <account email> [game folder]  (Classic hotfix test: guided, sends a report)
+#   ./everlake-client.sh classic1 <account email> baseline [game folder]  (the same runs on Everlake only: memory baseline)
 #   ./everlake-client.sh reports <address | server>  (where check, test1 and switch send reports and screenshots)
 #   ./everlake-client.sh cdn <address[:port] | server>  (where gate2 gets the patched build; default: the server, 8087)
 #   ./everlake-client.sh china-mode on|off [game folder]  (the client's own China setting, overrideArchive)
@@ -579,15 +580,28 @@ switch_test() {
 # Realm 2 "Everlake Two" sends about 89,000 hotfix rows (pushes 9600000-9600897) that turn Forever's spells, items and
 # skills into Classic Era's; realm 1 "Everlake" sends Forever's own. Measures what the first login on realm 2 costs (time,
 # the game's memory, the hotfix cache) and checks with the EverlakeClassic1 addon that each realm shows only its own data.
-# Reuses the switch test's snapshot, run and question helpers, in its own folder.
+# "classic1 <email> baseline" plays the same two runs on Everlake alone, with the hotfix cache moved aside first, so the
+# game's memory has something to be compared with. Reuses the switch test's snapshot, run and question helpers.
 classic1_memory() {
     # samples the game's resident memory every 5 s while it runs: "HH:MM:SS <MB>"
     local pid
     while true; do
-        pid="$(pgrep -f "$COPY_NAME/Contents/MacOS" | head -n 1 || true)"
+        pid="$(game_pids | head -n 1)"
         [ -n "$pid" ] && echo "$(date '+%H:%M:%S') $(( $(ps -o rss= -p "$pid" 2>/dev/null || echo 0) / 1024 ))"
         sleep 5
     done
+}
+
+classic1_memory_summary() {
+    # <memory.txt>: one line per game run (a gap of more than 20 s between samples starts a new run)
+    [ -s "$1" ] || { echo "    (no samples)"; return 0; }
+    awk '$2 > 0 {
+        split($1, t, ":"); s = t[1] * 3600 + t[2] * 60 + t[3]
+        if (n == 0 || s - last > 20) { if (n) out(); n = 0; sum = 0; hi = 0; first = $1 }
+        n++; sum += $2; if ($2 > hi) hi = $2; last = s; lastt = $1; lastmb = $2
+    }
+    function out() { printf "    run %d %s-%s: %d samples, highest %d MB, average %d MB, at the end %d MB\n", ++r, first, lastt, n, hi, sum / n, lastmb }
+    END { if (n) out() }' "$1"
 }
 
 classic1_hotfix_lines() {
@@ -603,74 +617,115 @@ classic1_hotfix_lines() {
 }
 
 classic1_test() {
-    local email="$1" folder="${2:-}" game addr report f mem_pid
-    SWITCH="$SUPPORT/classic1"
+    # <classic | baseline> <email> [game folder]
+    local mode="$1" email="$2" folder="${3:-}" game addr report f mem_pid name=classic1
+    [ "$mode" = baseline ] && name=classic1-baseline
+    SWITCH="$SUPPORT/$name"
     game="$(find_game "$folder")" || die "game folder not found"
     addr="$(server_addr)"; [ -n "$addr" ] || die "no server address saved: run setup first"
-    nc -z -G 3 "$addr" 8095 2>/dev/null || die "realm 2 (port 8095 on the server) is not reachable: is worldserver2 running?"
+    if [ "$mode" = classic ]; then
+        nc -z -G 3 "$addr" 8095 2>/dev/null || die "realm 2 (port 8095 on the server) is not reachable: is worldserver2 running?"
+    fi
     if game_running; then refuse_running "start"; fi
     rm -rf "$SWITCH"; mkdir -p "$SWITCH"; touch "$SWITCH/mark"
     mkdir -p "$game/Interface/AddOns/EverlakeClassic1"
     cp "$HERE/../addons/EverlakeClassic1/EverlakeClassic1.toc" "$HERE/../addons/EverlakeClassic1/EverlakeClassic1.lua" \
         "$game/Interface/AddOns/EverlakeClassic1/"
     say "addon EverlakeClassic1 installed in $game (build $(game_build "$game"))"
-    say "Two game runs, about 15 minutes. After each login the addon prints a line in chat: OK (green), MIXED (red)"
-    say "or PENDING (yellow, item data still loading; it checks again after 30 s)."
+    if [ "$mode" = baseline ]; then
+        # the baseline starts from no hotfix cache, the way the Classic test started without Classic rows; the game
+        # downloads Forever's rows again on the first login (and Classic's, next time Everlake Two is picked)
+        find "$game/Cache" -name DBCache.bin 2>/dev/null | while read -r f; do
+            mv "$f" "$SWITCH/DBCache-before.bin" && say "hotfix cache moved aside to $SWITCH/DBCache-before.bin"
+        done
+        say "Memory baseline: two game runs on Everlake only, about 10 minutes. Same steps as the Classic test, without"
+        say "Everlake Two, so the game's memory can be compared. The addon still prints its chat line after each login."
+    else
+        say "Two game runs, about 15 minutes. After each login the addon prints a line in chat: OK (green), MIXED (red)"
+        say "or PENDING (yellow, spell text or item data still loading; it checks again after 30 s)."
+    fi
     switch_snapshot "$game" 0-before >/dev/null || say "snapshot 0-before incomplete"
-    classic1_memory > "$SWITCH/memory.txt" 2>/dev/null &
+    classic1_memory >> "$SWITCH/memory.txt" 2>/dev/null &
     mem_pid=$!
-    switch_run "$email" "$folder" 1 \
-        "1. RULESET Normal (Everlake). Enter the world with any character. Wait for the chat line. Log out." \
-        "2. RULESET Roleplay (Everlake Two): this is where about 89,000 rows download. Note the time on a clock when" \
-        "   you pick the card, and again when the character list shows. Enter the world, wait for the chat line." \
-        "3. Open the spellbook or hover a few items: anything broken? Screenshot (Cmd+Shift+3) of the chat line." \
-        "4. Log out, RULESET Normal, enter the world, chat line, log out. Quit the game (Exit)."
-    switch_snapshot "$game" 1-after-run1 >/dev/null || say "snapshot 1-after-run1 incomplete"
-    switch_ask "Run 1: seconds from picking the Roleplay card to its character list? (a number, or 'hung')"
-    switch_ask "Run 1: did the game freeze, stutter or crash anywhere? (n, or where)"
-    switch_ask "Run 1: any red MIXED line? (n, or which realm)"
-    switch_run "$email" "$folder" 2 \
-        "The game restarts: realm 2's rows should now come from the cache." \
-        "1. RULESET Roleplay (Everlake Two) first. Seconds to the character list this time? Enter the world, chat line." \
-        "2. Log out, RULESET Normal, enter the world, chat line. Log out, RULESET Roleplay, chat line. Quit (Exit)."
-    switch_snapshot "$game" 2-after-run2 >/dev/null || say "snapshot 2-after-run2 incomplete"
-    kill "$mem_pid" 2>/dev/null || true
-    switch_ask "Run 2: seconds from picking the Roleplay card to its character list? (a number)"
-    switch_ask "Run 2: any red MIXED line, or anything else odd? (n, or what)"
+    if [ "$mode" = baseline ]; then
+        switch_run "$email" "$folder" 1 \
+            "RULESET Normal (Everlake) for the whole run: never pick Roleplay. Use the character from the Classic test (Kendrick)." \
+            "1. Enter the world. Wait for the chat line. Log out." \
+            "2. Enter the world again, chat line. Open the spellbook, hover a few items. Screenshot (Cmd+Shift+3)." \
+            "3. Log out, enter the world a third time, chat line. Quit the game (Exit). About 5 minutes in all."
+        switch_snapshot "$game" 1-after-run1 >/dev/null || say "snapshot 1-after-run1 incomplete"
+        switch_ask "Run 1: did the game freeze, stutter or crash anywhere? (n, or where)"
+        switch_ask "Run 1: any red MIXED line? (n, or when)"
+        switch_run "$email" "$folder" 2 \
+            "The game restarts: Forever's rows now come from the cache. RULESET Normal only, Kendrick again." \
+            "1. Enter the world, chat line, log out. Twice more: enter, chat line, log out." \
+            "2. Quit the game (Exit). About 3 minutes in all."
+        switch_snapshot "$game" 2-after-run2 >/dev/null || say "snapshot 2-after-run2 incomplete"
+        kill "$mem_pid" 2>/dev/null || true
+        switch_ask "Run 2: any red MIXED line, or anything else odd? (n, or what)"
+    else
+        switch_run "$email" "$folder" 1 \
+            "1. RULESET Normal (Everlake). Enter the world with any character. Wait for the chat line. Log out." \
+            "2. RULESET Roleplay (Everlake Two): this is where about 89,000 rows download. Note the time on a clock when" \
+            "   you pick the card, and again when the character list shows. Enter the world, wait for the chat line." \
+            "3. Open the spellbook or hover a few items: anything broken? Screenshot (Cmd+Shift+3) of the chat line." \
+            "4. Log out, RULESET Normal, enter the world, chat line, log out. Quit the game (Exit)."
+        switch_snapshot "$game" 1-after-run1 >/dev/null || say "snapshot 1-after-run1 incomplete"
+        switch_ask "Run 1: seconds from picking the Roleplay card to its character list? (a number, or 'hung')"
+        switch_ask "Run 1: did the game freeze, stutter or crash anywhere? (n, or where)"
+        switch_ask "Run 1: any red MIXED line? (n, or which realm)"
+        switch_run "$email" "$folder" 2 \
+            "The game restarts: realm 2's rows should now come from the cache." \
+            "1. RULESET Roleplay (Everlake Two) first. Seconds to the character list this time? Enter the world, chat line." \
+            "2. Log out, RULESET Normal, enter the world, chat line. Log out, RULESET Roleplay, chat line. Quit (Exit)."
+        switch_snapshot "$game" 2-after-run2 >/dev/null || say "snapshot 2-after-run2 incomplete"
+        kill "$mem_pid" 2>/dev/null || true
+        switch_ask "Run 2: seconds from picking the Roleplay card to its character list? (a number)"
+        switch_ask "Run 2: any red MIXED line, or anything else odd? (n, or what)"
+    fi
     report="$SWITCH/report.txt"
     {
-        say "classic1: game folder $game, build $(game_build "$game"); started $(stat -f '%Sm' "$SWITCH/mark" 2>/dev/null)"
+        say "$name: game folder $game, build $(game_build "$game"); started $(stat -f '%Sm' "$SWITCH/mark" 2>/dev/null)"
         for f in "$SWITCH"/[0-9]*; do
             [ -d "$f" ] || continue
             cat "$f/snapshot.txt" 2>/dev/null
             echo "-- Hotfix.log at this point:"
             classic1_hotfix_lines "$f/Hotfix.log"
         done
-        say "classic1: the game's memory (MB), every 5 s; highest $(sort -k2 -n "$SWITCH/memory.txt" 2>/dev/null | tail -n 1)"
+        say "$name: the game's memory per run (MB)"
+        classic1_memory_summary "$SWITCH/memory.txt"
+        if [ "$mode" = baseline ]; then
+            say "the last Classic test's memory per run, for comparison ($SUPPORT/classic1, started $(stat -f '%Sm' "$SUPPORT/classic1/mark" 2>/dev/null || echo -)):"
+            classic1_memory_summary "$SUPPORT/classic1/memory.txt"
+        fi
+        say "$name: the game's memory (MB), every 5 s; highest $(sort -k2 -n "$SWITCH/memory.txt" 2>/dev/null | tail -n 1)"
         sed 's/^/    /' "$SWITCH/memory.txt" 2>/dev/null | head -n 400
-        say "classic1: the answers you typed"
+        say "$name: the answers you typed"
         sed 's/^/    /' "$SWITCH/answers.txt" 2>/dev/null || echo "    (none)"
-        say "classic1: the addon's record, every login (EverlakeClassic1 saved variables):"
+        say "$name: the addon's record, every login (EverlakeClassic1 saved variables):"
         f="$(ls -d "$SWITCH"/[0-9]* 2>/dev/null | tail -n 1)"
         if [ -n "$f" ] && [ -f "$f/EverlakeClassic1.lua" ]; then sed 's/^/    /' "$f/EverlakeClassic1.lua" | head -n 600
         else echo "    (none: was the addon enabled?)"; fi
-        say "classic1: crash or error reports since the test started:"
+        say "$name: crash or error reports since the test started:"
         { find "$game/Errors" -type f -newer "$SWITCH/mark" 2>/dev/null || true; } | head -3 | while read -r f; do
             echo "  -- $(basename "$f")"; head -n 30 "$f" 2>/dev/null | cut -c1-200 | sed 's/^/    /' || true
         done
-    } > "$report" 2>&1 || echo "[everlake] classic1 report stopped early (exit $?)" >> "$report"
+    } > "$report" 2>&1 || echo "[everlake] $name report stopped early (exit $?)" >> "$report"
     say "logins the addon checked: $(grep -a -c '"verdict"] = "OK"' "$report" || true) OK," \
         "$(grep -a -c '"verdict"] = "MIXED"' "$report" || true) MIXED"
-    if curl -s -m 20 -T "$report" "http://$(report_addr):8099/classic1-$(hostname -s)" >/dev/null; then
+    classic1_memory_summary "$SWITCH/memory.txt"
+    if curl -s -m 20 -T "$report" "http://$(report_addr):8099/$name-$(hostname -s)" >/dev/null; then
         say "report sent to the server ($report)"
     else
         say "report NOT sent (saved in $report)"
     fi
-    for f in 1-after-run1 2-after-run2; do
-        [ -f "$SWITCH/$f/DBCache.bin" ] && curl -s -m 60 -T "$SWITCH/$f/DBCache.bin" \
-            "http://$(report_addr):8099/classic1-dbcache-$f-$(hostname -s).bin" >/dev/null && say "sent the hotfix cache after ${f#*-}"
-    done
-    send_shots classic1 "$SWITCH/shots" "$game" -newer "$SWITCH/mark"
+    if [ "$mode" = classic ]; then
+        for f in 1-after-run1 2-after-run2; do
+            [ -f "$SWITCH/$f/DBCache.bin" ] && curl -s -m 60 -T "$SWITCH/$f/DBCache.bin" \
+                "http://$(report_addr):8099/classic1-dbcache-$f-$(hostname -s).bin" >/dev/null && say "sent the hotfix cache after ${f#*-}"
+        done
+    fi
+    send_shots "$name" "$SWITCH/shots" "$game" -newer "$SWITCH/mark"
     say "done. Thanks!"
 }
 
@@ -969,8 +1024,9 @@ case "$cmd" in
         ;;
     classic1)
         # Classic hotfix test (docs/classic-on-forever.md): guided, two game runs, report sent to the server
-        [ $# -ge 1 ] || die "usage: $0 classic1 <account email> [game folder]   (e.g. classic1 TEST@TEST.COM)"
-        classic1_test "$@"
+        # "classic1 <email> baseline": the same two runs on Everlake alone, for the memory comparison
+        [ $# -ge 1 ] || die "usage: $0 classic1 <account email> [baseline] [game folder]   (e.g. classic1 TEST@TEST.COM)"
+        if [ "${2:-}" = baseline ]; then classic1_test baseline "$1" "${3:-}"; else classic1_test classic "$1" "${2:-}"; fi
         ;;
     switch)
         # gate 5 realm switch test (docs/era-data.md, tests 4-6): guided, two game runs, report sent to the server

@@ -1,6 +1,6 @@
 ## Interface: 11507, 11508, 16000, 16001, 16100, 120000, 120001
 ## Title: Everlake Classic 1
 ## Notes: Classic hotfix test (docs/classic-on-forever.md): at every login, checks that this realm shows Classic Era's or Forever's spells and items, never a mix, for everlake-client.sh classic1.
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariables: EverlakeClassic1DB
 EverlakeClassic1.lua
