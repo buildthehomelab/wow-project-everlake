@@ -43,7 +43,8 @@ services:
       args:
         TC_COMMIT: ${TC_COMMIT:-2ae1313e9f89ba34103fee1400dc3d4222efd8c4}
         BUILD_JOBS: ${BUILD_JOBS:-4}
-    image: everlake-trinitycore:latest
+        WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-}
+    image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-latest}
     command: ["worldserver"]
     networks: [everlake]
     restart: unless-stopped
@@ -67,7 +68,7 @@ services:
       - logs:/opt/trinitycore/logs
 
   bnetserver:
-    image: everlake-trinitycore:latest
+    image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-latest}
     pull_policy: never   # local image, built by the worldserver service
     command: ["bnetserver"]
     networks: [everlake]
@@ -101,7 +102,7 @@ services:
 
   # Game data extraction (Blizzard CDN by default, see docker/extract.sh): docker compose run --rm extractor
   extractor:
-    image: everlake-trinitycore:latest
+    image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-latest}
     pull_policy: never   # local image: run "docker compose build" first
     profiles: ["tools"]
     entrypoint: ["/usr/local/bin/extract.sh"]
