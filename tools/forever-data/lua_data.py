@@ -116,7 +116,7 @@ class _Parser:
 
     def table(self):
         self.take("{")
-        items, keyed, n = [], {}, 0
+        keyed, n = {}, 0
         while self.peek()[1] != "}":
             kind, text = self.peek()
             if text == "[":

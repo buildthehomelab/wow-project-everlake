@@ -56,7 +56,7 @@ if [ "${DBC_ONLY:-0}" = 1 ]; then
            && mv "$NEW/dbc" "$OUT/dbc" && mv "$NEW/gt" "$OUT/gt"; }; then
         echo "[extract] ERROR: could not swap in the new dbc and gt, putting the old ones back."
         for d in dbc gt; do
-            if [ -d "$OUT/$d.old" ]; then rm -rf "$OUT/$d"; mv "$OUT/$d.old" "$OUT/$d"; fi
+            if [ -d "$OUT/$d.old" ]; then rm -rf "${OUT:?}/$d"; mv "$OUT/$d.old" "$OUT/$d"; fi
         done
         exit 1
     fi

@@ -21,7 +21,6 @@ src_pins records which pin each table came from. The TrinityCore world is not he
 """
 import argparse
 import csv
-import glob
 import json
 import os
 import re
