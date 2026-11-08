@@ -130,6 +130,33 @@ services:
       - ./scripts/report-drop.py:/app/report-drop.py:ro
       - ./reports:/reports
 
+  # The patched client build for players' test copies (docs/custom-files.md): our added files from CDN_DIR, everything
+  # else passed through to Blizzard's CDN. Waits until cdn-build has written a build. Mac mini: everlake-client.sh cdn.
+  cdn:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    user: "${HOST_UID:-0}:${HOST_GID:-0}"
+    command: ["sh", "-c", "until [ -f /cdn/build.json ]; do sleep 30; done; exec python -I /app/tools/tact/cdn.py --dir /cdn --port 8087"]
+    ports:
+      - "${CDN_PORT:-8087}:8087"
+    volumes:
+      - ./tools/tact:/app/tools/tact:ro
+      - ${CDN_DIR:-./cdn}:/cdn:ro
+
+  # Writes the patched build the cdn service serves: docker compose run --rm cdn-build (scripts/cdn-build.sh)
+  cdn-build:
+    image: python:3.12-alpine
+    profiles: ["tools"]
+    command: ["sh", "/app/scripts/cdn-build.sh"]
+    environment:
+      HOST_UID: ${HOST_UID:-0}
+      HOST_GID: ${HOST_GID:-0}
+    volumes:
+      - ./tools:/app/tools:ro
+      - ./scripts/cdn-build.sh:/app/scripts/cdn-build.sh:ro
+      - ${CDN_DIR:-./cdn}:/cdn
+      - cdn-cache:/cache
+
 networks:
   everlake:
 
@@ -137,3 +164,4 @@ volumes:
   mysql-data:
   logs:
   casc-cache:
+  cdn-cache:
