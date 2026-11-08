@@ -1,0 +1,462 @@
+#!/usr/bin/env python3
+"""What live WoW Forever has that Everlake's world database lacks or has differently, zone by zone.
+
+    gap_report.py                         every zone
+    gap_report.py --zone "Elwynn Forest"  one zone
+    gap_report.py --out DIR               where everlake-gaps.md and .json go (default reports/)
+
+Everlake (the Forever realm) runs the TrinityCore `forever` fork with its world release (forever-tdb-2026-10-14),
+which load_tc.py keeps in acore_forever as the tc_* tables. Live Forever is every other loaded source (load_sources.py),
+weighed by source_weights.py. Reads only; writes the two report files.
+
+What it lists, per zone:
+- quests Forever has and the world release doesn't, split into seen in the live game (EG Link at a live build,
+  QuestieTrace, ForeverDB "seen") and known only from client or beta data;
+- quests whose name, givers or enders differ from what the sources agree on, and quests with no giver or no text;
+- NPCs Forever spawns or uses that have no template, NPCs with a template but no spawn, and extra spawn spots;
+- vendors whose stock the world lacks (EG Link's recorded stock against npc_vendor).
+
+Not applied: the fork's sql/custom world files the release doesn't already hold (its updates table, kept by load_tc.py as
+tc_updates, lists the ones it does); Everlake's worldserver applies them on top. Every gap whose id those files write or
+change is marked "custom SQL touches it", so it can be checked rather than trusted.
+"""
+import argparse
+import collections
+import datetime
+import json
+import os
+import re
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import candidates  # noqa: E402
+import source_weights  # noqa: E402
+from load_sources import SOURCES, connect  # noqa: E402
+
+F = candidates.F
+LIVE_BUILD = 70790           # first live Forever build (launch, 2026-11-04); EG Link rows from it on count as seen live
+NEW_SPOT_YARDS = 80          # a Forever spawn this far from every one of the world's spawns of that NPC is a new spot
+TEST_NAME = re.compile(r"^\s*<|\[(?:DNT|PH|Never used)\]|zzOLD|\b(?:UNUSED|DEPRECATED|TEST|OLD)\b")   # capitals only: "The Old Ways" is real
+LIVE_EVIDENCE = {"eg-link-live", "questietrace", "foreverdb-seen"}
+EXAMPLES = 15                # items per category in the Markdown; the JSON has them all
+
+CATEGORIES = [
+    ("missing_quests_live", "Quests seen live, not in the world"),
+    ("missing_quests_data", "Quests in client/beta data only, not in the world"),
+    ("renamed_quests", "Quests named differently"),
+    ("quests_no_giver", "Quests with no giver in the world"),
+    ("quests_giver_differs", "Quests with other givers"),
+    ("quests_no_ender", "Quests with no ender in the world"),
+    ("quests_ender_differs", "Quests with other enders"),
+    ("quests_no_text", "Quests with no quest text in the world"),
+    ("missing_npcs", "NPCs Forever uses, no template in the world"),
+    ("npcs_not_spawned", "NPCs with a template, never spawned"),
+    ("extra_spots", "Extra spawn spots"),
+    ("vendors_no_stock", "Vendors with no stock in the world"),
+    ("vendor_items_missing", "Vendors missing some items"),
+]
+
+
+def j(value):
+    return json.loads(value) if isinstance(value, (str, bytes)) else value
+
+
+def build_no(value):
+    try:
+        return int(str(value or "0").split(".")[-1])
+    except ValueError:
+        return 0
+
+
+def norm(name):
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+
+
+class Zones:
+    """Area id -> top zone, and world point -> zone through UiMapAssignment's bounds (smallest box wins)."""
+
+    def __init__(self, cur):
+        self.parent, self.names, self.maps = {}, {}, {}
+        self.boxes = collections.defaultdict(list)
+        for r in candidates.rows(cur, f"SELECT tbl, data FROM {F}.src_wago WHERE tbl IN ('AreaTable', 'Map', 'UiMapAssignment')"):
+            d = j(r["data"])
+            if r["tbl"] == "AreaTable":
+                self.parent[int(d["ID"])] = int(d.get("ParentAreaID") or 0)
+                self.names[int(d["ID"])] = d.get("AreaName_lang")
+            elif r["tbl"] == "Map":
+                self.maps[int(d["ID"])] = d.get("MapName_lang") or d.get("Directory")
+        for r in candidates.rows(cur, f"SELECT data FROM {F}.src_wago WHERE tbl = 'UiMapAssignment'"):
+            d = j(r["data"])
+            area = int(d.get("AreaID") or 0)
+            if area:
+                x0, y0, x1, y1 = (float(d[f"Region_{i}"]) for i in (0, 1, 3, 4))
+                self.boxes[int(d["MapID"])].append(((x1 - x0) * (y1 - y0), x0, y0, x1, y1, area))
+        for boxes in self.boxes.values():
+            boxes.sort()
+
+    def top(self, area):
+        seen = 0
+        while area and self.parent.get(area) and seen < 10:
+            area, seen = self.parent[area], seen + 1
+        return area or 0
+
+    def at(self, map_id, x, y):
+        for _, x0, y0, x1, y1, area in self.boxes.get(map_id, ()):
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                return self.top(area)
+        return -map_id - 1          # no zone box: keyed by map instead
+
+    def name(self, zone):
+        if not zone:
+            return "No zone"
+        if zone < 0:
+            return f"{self.maps.get(-zone - 1, 'map')} (map {-zone - 1})"
+        return self.names.get(zone) or f"area {zone}"
+
+    def main(self, points):
+        counts = collections.Counter(self.at(m, x, y) for m, x, y in points)
+        return counts.most_common(1)[0][0] if counts else None
+
+
+KEY_COLUMNS = {"entry", "id", "quest", "questid", "creatureid"}
+QUEST_ID_TABLES = {"quest_template", "quest_template_addon", "quest_offer_reward", "quest_request_items", "quest_details",
+                   "quest_template_classic_level", "quest_classic_level", "quest_classic_money"}     # tables whose ID is a quest id
+FIRST_KEY = {**{t: "id" for t in QUEST_ID_TABLES}, "creature_template": "entry", "creature_template_addon": "entry", "npc_vendor": "entry",
+             "creature_template_difficulty": "entry", "creature_template_model": "creatureid"}
+
+
+def custom_sql_mentions(sources, applied=frozenset()):
+    """{(table, key column): ids} that the fork's sql/custom world files the release doesn't already hold write or change: the key columns of INSERT and
+    REPLACE rows, and `key = N` / `key IN (...)` in UPDATE and DELETE conditions. A hint, not a full SQL parse: an id
+    found here means the custom files touch that row, so the gap may already be handled there."""
+    with open(os.path.join(sources, "manifest.json")) as handle:
+        pin = json.load(handle)["current"].get("tc-forever")
+    out = collections.defaultdict(set)
+    if not pin:
+        return out, None
+    folder = os.path.join(sources, pin["folder"], "sql", "custom", "world")
+    if not os.path.isdir(folder):
+        return out, None
+    head = re.compile(r"\b(UPDATE|INSERT\s+(?:IGNORE\s+)?INTO|REPLACE\s+INTO|DELETE\s+FROM)\s+`?(?:\w+`?\.`?)?(\w+)`?\s*", re.I)
+    cond = re.compile(r"`?\b(\w+)\b`?\s*(?:=\s*(\d+)\b|IN\s*\(([^)]*)\))", re.I)
+    files = []
+    for name in sorted(os.listdir(folder)):
+        if not name.endswith(".sql") or name in applied:
+            continue
+        files.append(name)
+        with open(os.path.join(folder, name), encoding="utf-8", errors="replace") as handle:
+            text = re.sub(r"--[^\n]*", "", handle.read())
+        for statement in text.split(";"):
+            m = head.search(statement)
+            if not m:
+                continue
+            verb, table, rest = m.group(1).upper(), m.group(2).lower(), statement[m.end():]
+            if verb.startswith(("INSERT", "REPLACE")):
+                cols = re.match(r"\(([^)]*)\)\s*VALUES", rest, re.I)
+                names = [c.strip(" `").lower() for c in cols.group(1).split(",")] if cols else None
+                values = rest[rest.upper().index("VALUES") + 6:] if "VALUES" in rest.upper() else ""
+                for row in re.findall(r"\(([^()]*)\)", values):
+                    cells = [c.strip() for c in row.split(",")]
+                    if names:
+                        picks = [(n, cells[k]) for k, n in enumerate(names) if n in KEY_COLUMNS and k < len(cells)]
+                    else:       # no column list: only tables whose first column is the key
+                        first = FIRST_KEY.get(table)
+                        picks = [(first, cells[0])] if first and cells else []
+                    for col, v in picks:
+                        if re.fullmatch(r"\d+", v):
+                            out[(table, col)].add(int(v))
+            else:
+                where = re.split(r"\bWHERE\b", rest, maxsplit=1, flags=re.I)
+                for col, one, many in cond.findall(where[1] if len(where) > 1 else ""):
+                    if col.lower() in KEY_COLUMNS:
+                        out[(table, col.lower())].update(int(n) for n in re.findall(r"\d+", one or many or ""))
+    return out, {"label": pin["label"], "files": files}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--zone", help="only this top-level zone (AreaTable name)")
+    ap.add_argument("--sources", default=SOURCES, help="the pinned sources folder (for the fork's sql/custom files)")
+    ap.add_argument("--out", default=os.path.join(HERE, "reports"))
+    args = ap.parse_args()
+    conn = connect()
+    cur = conn.cursor()
+    zones = Zones(cur)
+    try:
+        applied = {r["name"] for r in candidates.rows(cur, f"SELECT name FROM {F}.tc_updates")}
+    except Exception as error:  # noqa: BLE001
+        if "1146" not in str(error) and "doesn't exist" not in str(error):
+            raise
+        raise SystemExit("acore_forever.tc_updates is missing: run load_tc.py --force once so the release's update list is kept")
+    mentions, custom = custom_sql_mentions(args.sources, applied)
+
+    def quest_touched(qid):
+        return any(qid in ids for (t, col), ids in mentions.items()
+                   if (t in QUEST_ID_TABLES and col == "id") or (t.startswith("quest_") and col == "questid")
+                   or (t.endswith(("queststarter", "questender")) and col == "quest"))
+
+    def npc_touched(nid):
+        return any(nid in ids for (t, col), ids in mentions.items()
+                   if (t.startswith("creature_template") and col in ("entry", "creatureid")) or (t == "creature" and col == "id")
+                   or (t == "npc_vendor" and col == "entry"))
+
+    # ---- live Forever's quests: every id any source names, with what each source says about it
+    evidence = collections.defaultdict(set)
+    area_hint = {}
+    for r in candidates.rows(cur, f"SELECT id, JSON_EXTRACT(data, '$.zone_area') AS area FROM {F}.src_forever_db WHERE tbl = 'quest'"):
+        evidence[r["id"]].add("forever-db")
+        if (candidates.as_int(r["area"]) or 0) > 0:
+            area_hint[r["id"]] = candidates.as_int(r["area"])
+    eg_area = {}          # EG Link's zoneAreaId, newest build that has one
+    for r in candidates.rows(cur, f"SELECT id, JSON_UNQUOTE(JSON_EXTRACT(data, '$._build')) AS build, "
+                                  f"JSON_EXTRACT(data, '$.zoneAreaId') AS area FROM {F}.src_eg_link WHERE tbl = 'quests.enUS'"):
+        b = build_no(r["build"])
+        evidence[r["id"]].add("eg-link-live" if b >= LIVE_BUILD else "eg-link-beta")
+        area = candidates.as_int(r["area"]) or 0
+        if area > 0 and (r["id"] not in eg_area or b >= eg_area[r["id"]][0]):
+            eg_area[r["id"]] = (b, area)
+    for qid, (_, area) in eg_area.items():
+        area_hint.setdefault(qid, area)
+    for tbl, label in ((candidates.TRACE_QUEST, "questietrace"), (candidates.BASE_QUEST, "questiedb")):
+        for r in candidates.rows(cur, f"SELECT DISTINCT id FROM {F}.src_questiedb WHERE tbl = %s AND id IS NOT NULL", (tbl,)):
+            evidence[r["id"]].add(label)
+    for tbl, label in (("QuestForever.qfQuests", "foreverdb"), ("QuestForever.qfSeen", "foreverdb-seen")):
+        for r in candidates.rows(cur, f"SELECT DISTINCT id FROM {F}.src_foreverdb_net WHERE tbl = %s AND id IS NOT NULL", (tbl,)):
+            evidence[r["id"]].add(label)
+    for r in candidates.rows(cur, f"SELECT id FROM {F}.src_wowhead_tooltips WHERE tbl = 'quest' "
+                                  f"AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.status')) = 'ok'"):
+        evidence[r["id"]].add("wowhead")
+    evidence = {int(k): v for k, v in evidence.items() if k is not None}
+
+    tc_q = {r["ID"]: r for r in candidates.rows(cur, f"SELECT ID, LogTitle, QuestSortID, QuestDescription FROM {F}.tc_quest_template "
+                                                     f"WHERE ID IN ({candidates.ids_sql(evidence)})")}
+
+    def tc_rel(tables):
+        out = collections.defaultdict(set)
+        for table in tables:
+            kind = "npc" if table.startswith("creature") else "object"
+            for r in candidates.rows(cur, f"SELECT id, quest FROM {F}.tc_{table} WHERE quest IN ({candidates.ids_sql(evidence)})"):
+                out[r["quest"]].add((kind, r["id"]))
+        return out
+    tc_start = tc_rel(("creature_queststarter", "gameobject_queststarter"))
+    tc_end = tc_rel(("creature_questender", "gameobject_questender"))
+
+    # ---- where Forever's NPCs stand (forever-db spawns, EG Link sightings)
+    points = collections.defaultdict(set)
+    for r in candidates.rows(cur, f"SELECT data FROM {F}.src_forever_db WHERE tbl = 'spawn' "
+                                  f"AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.kind')) = 'npc'"):
+        d = j(r["data"])
+        if candidates.as_int(d.get("id")) is not None and d.get("map") is not None and d.get("x") is not None:
+            points[int(d["id"])].add((int(d["map"]), round(float(d["x"]), 1), round(float(d["y"]), 1)))
+    for r in candidates.rows(cur, f"SELECT id, data FROM {F}.src_eg_link WHERE tbl = 'npcs' AND id IS NOT NULL"):
+        for p in candidates.as_list(j(r["data"]).get("positions")):
+            if isinstance(p, dict) and p.get("worldX") is not None and p.get("instance") is not None:
+                points[int(r["id"])].add((int(p["instance"]), round(float(p["worldX"]), 1), round(float(p["worldY"]), 1)))
+    print(f"quests: {len(evidence)} known to Forever's sources, {len(tc_q)} of them in the world; voting ...", flush=True)
+    qc = candidates.quests(cur, set(evidence))
+
+    def others(cands):
+        return [c for c in cands if not c[1].startswith("tc-")]
+
+    def resolve(field, cands, setwise=False):
+        return (source_weights.resolve_set if setwise else source_weights.resolve)(field, others(cands))
+
+    found = collections.defaultdict(lambda: collections.defaultdict(list))
+    quest_zone, skipped_test, quest_npcs = {}, 0, collections.defaultdict(set)
+    for qid in sorted(evidence):
+        fields = qc.get(qid, {})
+        name = resolve("name", fields.get("name", []))
+        title = (name or {}).get("value") or (tc_q.get(qid) or {}).get("LogTitle")
+        if title and TEST_NAME.search(str(title)):
+            skipped_test += 1
+            continue
+        givers = resolve("quest_giver", fields.get("quest_giver", []), setwise=True)
+        enders = resolve("quest_ender", fields.get("quest_ender", []), setwise=True)
+        g_members = {tuple(m) for m in (givers or {}).get("members", []) if isinstance(m, (list, tuple)) and m[0] in ("npc", "object")}
+        e_members = {tuple(m) for m in (enders or {}).get("members", []) if isinstance(m, (list, tuple)) and m[0] in ("npc", "object")}
+        # zone: forever-db's area, EG Link's, the world's QuestSortID (an area when positive); else where a giver stands
+        area = area_hint.get(qid) or (candidates.as_int((tc_q.get(qid) or {}).get("QuestSortID")) or 0)
+        zone = zones.top(area) if area > 0 and area in zones.names else 0
+        if not zone:
+            spots = [p for kind, nid in sorted(g_members | e_members) if kind == "npc" for p in points.get(nid, ())]
+            zone = zones.main(spots) or 0
+        quest_zone[qid] = zone
+        ev = sorted(evidence[qid])
+        live = bool(LIVE_EVIDENCE & evidence[qid])
+        item_started = any(isinstance(m, (list, tuple)) and m[0] == "item" for m in (givers or {}).get("members", []))
+        for kind, nid in g_members | e_members:
+            if kind == "npc":
+                quest_npcs[nid].add(qid)
+        item = {"quest": qid, "name": title, "evidence": ev,
+                "custom_sql": quest_touched(qid)}
+        if qid not in tc_q:
+            item["givers"] = sorted(g_members)
+            found[zone]["missing_quests_live" if live else "missing_quests_data"].append(item)
+            continue
+        tc = tc_q[qid]
+        if name and not name["classic_only"] and norm(name["value"]) != norm(tc["LogTitle"]):
+            found[zone]["renamed_quests"].append(dict(item, world=tc["LogTitle"], sources=name["sources"], close_call=name["conflict"]))
+        for members, world, gone, differs, setv in ((g_members, tc_start.get(qid, set()), "quests_no_giver", "quests_giver_differs", givers),
+                                                    (e_members, tc_end.get(qid, set()), "quests_no_ender", "quests_ender_differs", enders)):
+            if not members or (gone == "quests_no_giver" and item_started):
+                continue
+            if not world:
+                found[zone][gone].append(dict(item, forever=sorted(members)))
+            elif members != world and not setv["classic_only"]:
+                found[zone][differs].append(dict(item, forever=sorted(members), world=sorted(world)))
+        if not (tc["QuestDescription"] or "").strip() and resolve("quest_text", fields.get("quest_text", [])):
+            found[zone]["quests_no_text"].append(item)
+
+    # ---- NPCs Forever spawns, uses as quest givers/enders, or sells from
+    stock = {}
+    for r in candidates.rows(cur, f"SELECT id, data FROM {F}.src_eg_link WHERE tbl = 'vendors' AND id IS NOT NULL"):
+        d = j(r["data"])
+        b = build_no(d.get("_build"))
+        entries = d.get("entries") or {}
+        entries = entries.values() if isinstance(entries, dict) else entries if isinstance(entries, list) else []
+        items = {candidates.as_int(e.get("itemId")) for e in entries if isinstance(e, dict)} - {None}
+        if items and (int(r["id"]) not in stock or b >= stock[int(r["id"])][0]):
+            stock[int(r["id"])] = (b, items)
+    npc_ids = set(points) | set(quest_npcs) | set(stock)
+    tc_npc = {r["entry"]: r["name"] for r in candidates.rows(cur, f"SELECT entry, name FROM {F}.tc_creature_template "
+                                                                    f"WHERE entry IN ({candidates.ids_sql(npc_ids)})")}
+    tc_points = collections.defaultdict(list)
+    for r in candidates.rows(cur, f"SELECT id, map, position_x, position_y FROM {F}.tc_creature WHERE id IN ({candidates.ids_sql(npc_ids)})"):
+        tc_points[r["id"]].append((r["map"], float(r["position_x"]), float(r["position_y"])))
+    tc_stock, refs = collections.defaultdict(set), collections.defaultdict(set)
+    for r in candidates.rows(cur, f"SELECT entry, item FROM {F}.tc_npc_vendor WHERE type = 1"):
+        (refs[r["entry"]].add(-r["item"]) if r["item"] < 0 else tc_stock[r["entry"]].add(r["item"]))
+    for entry in list(refs):                  # a negative item lists another vendor's stock; follow the chain
+        todo, seen = list(refs[entry]), {entry}
+        while todo:
+            other = todo.pop()
+            if other not in seen:
+                seen.add(other)
+                tc_stock[entry] |= tc_stock.get(other, set())
+                todo.extend(refs.get(other, ()))
+    print(f"npcs: {len(npc_ids)} Forever spawns, uses or sells from; {len(tc_npc)} have a template in the world; voting ...", flush=True)
+    nc = candidates.npcs(cur, npc_ids)
+
+    def npc_zone(nid):
+        z = zones.main(points.get(nid) or tc_points.get(nid) or ())
+        if z is None:
+            z = next((quest_zone[q] for q in sorted(quest_npcs.get(nid, ())) if quest_zone.get(q)), 0)
+        return z
+
+    skipped_test_npcs = 0
+    for nid in sorted(npc_ids):
+        name = resolve("name", nc.get(nid, {}).get("name", []))
+        title = (name or {}).get("value") or tc_npc.get(nid)
+        if title and TEST_NAME.search(str(title)):
+            skipped_test_npcs += 1
+            continue
+        zone = npc_zone(nid)
+        item = {"npc": nid, "name": title, "custom_sql": npc_touched(nid)}
+        if nid not in tc_npc:
+            found[zone]["missing_npcs"].append(dict(item, spots=len(points.get(nid, ())), quests=sorted(quest_npcs.get(nid, ())),
+                                                    sells=len(stock.get(nid, (0, ()))[1])))
+            continue
+        if points.get(nid) and not tc_points.get(nid):
+            found[zone]["npcs_not_spawned"].append(dict(item, spots=len(points[nid])))
+        elif points.get(nid):
+            far = far_points(points[nid], tc_points[nid], NEW_SPOT_YARDS)
+            if far:
+                found[zone]["extra_spots"].append(dict(item, spots=len(far), world_spawns=len(tc_points[nid])))
+        if nid in stock:
+            want = stock[nid][1]
+            if not tc_stock.get(nid):
+                found[zone]["vendors_no_stock"].append(dict(item, items=len(want), build=stock[nid][0]))
+            elif want - tc_stock[nid]:
+                found[zone]["vendor_items_missing"].append(dict(item, items=sorted(want - tc_stock[nid]), build=stock[nid][0]))
+
+    # ---- write
+    labels = {r["source"]: r["label"] for r in candidates.rows(cur, f"SELECT source, label FROM {F}.src_pins")}
+    by_name = {}
+    for zone, cats in found.items():
+        zname = zones.name(zone)
+        if args.zone and zname != args.zone:
+            continue
+        slot = by_name.setdefault(zname, collections.defaultdict(list))
+        for cat, items in cats.items():
+            slot[cat].extend(items)
+    totals = {cat: sum(len(z.get(cat, [])) for z in by_name.values()) for cat, _ in CATEGORIES}
+    report = {"made": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "pins": labels,
+              "custom_sql": custom, "skipped_test_quests": skipped_test, "skipped_test_npcs": skipped_test_npcs, "totals": totals,
+              "zones": {z: {c: v for c, v in cats.items()} for z, cats in sorted(by_name.items())}}
+    os.makedirs(args.out, exist_ok=True)
+    with open(os.path.join(args.out, "everlake-gaps.json"), "w") as handle:
+        json.dump(report, handle, indent=1, sort_keys=True, default=list)
+    with open(os.path.join(args.out, "everlake-gaps.md"), "w") as handle:
+        handle.write(markdown(report))
+    print(f"wrote {os.path.join(args.out, 'everlake-gaps.md')} and .json")
+    for cat, label in CATEGORIES:
+        print(f"  {label}: {totals[cat]}")
+
+
+def far_points(points, ours, yards):
+    """Points farther than `yards` from every point in `ours` on the same map."""
+    grid = collections.defaultdict(list)
+    for m, x, y in ours:
+        grid[(m, int(x // yards), int(y // yards))].append((x, y))
+    far = []
+    for m, x, y in points:
+        cx, cy = int(x // yards), int(y // yards)
+        if not any((x - ox) ** 2 + (y - oy) ** 2 <= yards * yards
+                   for dx in (-1, 0, 1) for dy in (-1, 0, 1) for ox, oy in grid.get((m, cx + dx, cy + dy), ())):
+            far.append((m, x, y))
+    return far
+
+
+def markdown(report):
+    def cell(text):
+        return str(text).replace("|", "\\|").replace("\n", " ")
+
+    out = ["# Everlake world vs live Forever", "",
+           f"Made by tools/forever-data/gap_report.py at {report['made']}. Everlake's world = the TrinityCore fork's world "
+           f"release in acore_forever (tc_* tables, {cell(report['pins'].get('tc-release', '?'))}); the fork's sql/custom world "
+           f"files the release doesn't already hold ({len((report['custom_sql'] or {}).get('files', []))} at "
+           f"{cell(str((report['custom_sql'] or {}).get('label', 'not pinned'))[:10])}) are not applied; gaps whose id they touch say so. "
+           f"Live Forever = every other source: " + ", ".join(f"{k} {cell(str(v)[:12])}" for k, v in sorted(report["pins"].items())
+                                                          if k != "tc-release") + ".", "",
+           f"{report['skipped_test_quests']} test or unused quests and {report['skipped_test_npcs']} NPCs (names like <UNUSED>, [DNT], "
+           "OLD in capitals) are left out. "
+           "Seen live = EG Link at build 70790 or later, QuestieTrace, or ForeverDB's seen list.", "",
+           "NPCs never spawned include creatures that scripts summon, and extra spots include points along patrol paths "
+           "(EG Link records where players saw an NPC): check those before adding spawns.", "", "## Totals", ""]
+    for cat, label in CATEGORIES:
+        out.append(f"- {label}: {report['totals'][cat]}")
+    short = [("missing_quests_live", "Quests missing (live)"), ("missing_quests_data", "Quests missing (data only)"),
+             ("renamed_quests", "Renamed"), ("quests_no_giver", "No giver"), ("quests_giver_differs", "Other givers"),
+             ("quests_no_ender", "No ender"), ("quests_ender_differs", "Other enders"),
+             ("quests_no_text", "No text"), ("missing_npcs", "NPCs missing"), ("npcs_not_spawned", "NPCs not spawned"),
+             ("extra_spots", "Extra spots"), ("vendors_no_stock", "Vendors no stock"), ("vendor_items_missing", "Vendor items")]
+    out += ["", "## By zone", "", "| Zone | " + " | ".join(s for _, s in short) + " |", "|---" * (len(short) + 1) + "|"]
+    ranked = sorted(report["zones"].items(), key=lambda kv: -sum(len(v) for v in kv[1].values()))
+    for zone, cats in ranked:
+        out.append(f"| {cell(zone)} | " + " | ".join(str(len(cats.get(c, []))) for c, _ in short) + " |")
+    out += ["", "## Examples", "", f"Up to {EXAMPLES} per kind, live first; everlake-gaps.json has every one.", ""]
+    for cat, label in CATEGORIES:
+        items = [dict(i, zone=z) for z, cats in report["zones"].items() for i in cats.get(cat, [])]
+        if not items:
+            continue
+        items.sort(key=lambda i: (not (set(i.get("evidence", [])) & LIVE_EVIDENCE), i.get("quest") or i.get("npc")))
+        out += [f"### {label} ({len(items)})", ""]
+        for i in items[:EXAMPLES]:
+            what = f"quest {i['quest']}" if "quest" in i else f"NPC {i['npc']}"
+            extra = []
+            for key in ("world", "forever", "givers", "spots", "sells", "items", "evidence"):
+                if i.get(key) not in (None, [], 0):
+                    v = i[key]
+                    extra.append(f"{key}: {len(v)} items" if key == "items" and isinstance(v, list) and len(v) > 6 else f"{key}: {v}")
+            if i.get("custom_sql"):
+                extra.append("custom SQL touches it")
+            if i.get("close_call"):
+                extra.append("close call between sources")
+            out.append(f"- {what} {cell(i.get('name') or '?')} ({cell(i['zone'])}) - " + cell("; ".join(map(str, extra))))
+        out.append("")
+    return "\n".join(out) + "\n"
+
+
+if __name__ == "__main__":
+    main()
