@@ -4,8 +4,9 @@ and completion texts, for quests Everlake's world already has.
 
     import_slice1.py                          write the slice into world-data/ (gitignored, see below)
     import_slice1.py --date 2026_11_08        the update files' date (default: today, UTC)
-    import_slice1.py --objective-flags 32,0   write objective rows with these Flags,Flags2 (no public source records
-                                              them; without this option every objective row is held back)
+    import_slice1.py --objective-flags F,F2   objective rows' Flags,Flags2 (default 32,0, decided 2026-11-08: no public
+                                              source records them; 32 is what 94% of sniffed Forever objectives use);
+                                              "none" holds every objective row back
     import_slice1.py --out DIR                write somewhere else
     import_slice1.py --world SCHEMA.PREFIX    compare with another copy of the fork world (default acore_forever.tc_)
 
@@ -49,6 +50,8 @@ OBJECTIVE_KIND = {0: "npc", 1: "item", 2: "object", 3: "npc"}
 FDB_KIND = {"kill": "npc", "talk": "npc", "item": "item", "object": "object"}
 # Inserts name only the columns that get a value of their own; the rest take the table's defaults (0, Visible 1), so a
 # later fork change to other columns can't make a re-run fail.
+# objective Flags,Flags2: no public source records them; decided 2026-11-08 (docs/forever-import.md)
+OBJECTIVE_FLAGS = "32,0"
 OBJECTIVE_COLUMNS = ["ID", "QuestID", "Type", "Order", "StorageIndex", "ObjectID", "Amount", "Flags", "Flags2", "Description"]
 TEXT_COLUMN = {"quest_request_items": "CompletionText", "quest_offer_reward": "RewardText"}
 CUSTOM_FILE = "a fork custom file not loaded into the world yet writes this quest's rows"
@@ -86,7 +89,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--date", default=datetime.datetime.now(datetime.timezone.utc).strftime("%Y_%m_%d"))
-    ap.add_argument("--objective-flags", help="FLAGS,FLAGS2 for objective rows (else they are held back)")
+    ap.add_argument("--objective-flags", default=OBJECTIVE_FLAGS, help="FLAGS,FLAGS2 for objective rows, or none to hold them back")
     ap.add_argument("--world", default=candidates.WORLD, help="the fork world as SCHEMA.PREFIX (default acore_forever.tc_)")
     ap.add_argument("--sources", default=SOURCES, help="the pinned sources folder (for fork custom files not loaded yet)")
     ap.add_argument("--replace", action="store_true", help="overwrite update files that differ (only before they are deployed)")
@@ -94,10 +97,10 @@ def main():
     if not re.fullmatch(r"\d{4}_\d{2}_\d{2}", args.date):
         raise SystemExit("--date: YYYY_MM_DD")
     flags = None
-    if args.objective_flags:
+    if args.objective_flags != "none":
         m = re.fullmatch(r"(\d+),(\d+)", args.objective_flags)
         if not m:
-            raise SystemExit("--objective-flags: FLAGS,FLAGS2 (two numbers)")
+            raise SystemExit("--objective-flags: FLAGS,FLAGS2 (two numbers) or none")
         flags = (int(m.group(1)), int(m.group(2)))
     gap_report.set_world(args.world)
     W = candidates.WORLD
@@ -391,22 +394,26 @@ def main():
             continue
         problems = []
         if flags is None:
-            problems.append("objective Flags and Flags2 aren't recorded by any source (sniffed Forever objectives use "
-                            "Flags 32 for 94% and Flags2 0 or 1): decide them with --objective-flags")
+            problems.append(("flags", "objective rows held back by --objective-flags none"))
         for o in objs:
             if o.get("id") in taken:
-                problems.append(f"objective id {o['id']} is the fork's objective of quest {taken[o['id']]}")
+                problems.append(("id", f"objective id {o['id']} is the fork's objective of quest {taken[o['id']]}"))
             kind = OBJECTIVE_KIND.get(o.get("typeId"))
             if kind is None:
-                problems.append(f"objective {o.get('id')} is a {o.get('type') or 'type ' + str(o.get('typeId'))} objective, "
-                                "which needs more than a quest_objectives row (area trigger or reputation set-up): not in slice 1")
+                problems.append(("kind", f"objective {o.get('id')} is a {o.get('type') or 'type ' + str(o.get('typeId'))} objective, "
+                                 "which needs more than a quest_objectives row (area trigger or reputation set-up): not in slice 1"))
             elif o.get("objectId") not in known[kind]:
-                problems.append(f"objective {o.get('id')}'s {kind} {o.get('objectId')} isn't in the world")
+                problems.append(("target", f"objective {o.get('id')}'s {kind} {o.get('objectId')} isn't in the world"))
         if custom_touched(qid):
-            problems.append("a fork custom file not loaded into the world yet writes this quest's rows")
+            problems.append(("custom", CUSTOM_FILE))
         if problems:
-            sl.held.append(dict(entry, why="; ".join(dict.fromkeys(problems)),
-                                reason="objectives: " + ("Flags not recorded" if flags is None else "see why")))
+            reasons = {"flags": "objectives: held back by --objective-flags none",
+                       "id": "objectives: an objective id is the fork's",
+                       "kind": "objectives: area trigger or reputation objectives (need more than a row)",
+                       "target": "objectives: a target NPC or object isn't in the world (slice 5)",
+                       "custom": CUSTOM_FILE}
+            sl.held.append(dict(entry, why="; ".join(dict.fromkeys(text for _, text in problems)),
+                                reason=reasons[problems[0][0]]))
             sl.outcome(cat, qid, "held back")
             continue
         for order, o in enumerate(objs):

@@ -119,7 +119,7 @@ generated SQL lives in its own repository, `wow-everlake-world-data`, under GPL-
 4. **Read access to Everlake's live world database**, so the dry run can also compare against what is really there,
    not only against the world rebuilt here.
 5. **A ForeverDB.net API key** (theirs, free, needs a Battle.net login) for vendor stock beyond what EG Link saw.
-6. **Quest objective flags.** No public source records an objective's `Flags` and `Flags2`; sniffed Forever objectives
-   use 32 for nearly all and 0 or 1. Until that is decided, slice 1 holds every objective row back. Most quests with no
-   objectives (151 of 173 on 2026-11-08) also lack Forever's objective ids: they wait for EG Link to record them, or
-   for a decision to use an id block of our own.
+6. **Quest objective ids.** Most quests with no objectives (151 of 173 on 2026-11-08) lack Forever's objective ids:
+   they wait for EG Link to record them, or for a decision to use an id block of our own. (Objective `Flags` and
+   `Flags2`, which no public source records, were decided on 2026-11-08: 32 and 0, as 94% of sniffed Forever
+   objectives have 32.)
