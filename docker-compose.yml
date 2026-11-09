@@ -60,7 +60,7 @@ services:
       args:
         # The same core and bots as the PTR (docker-compose.ptr.yml): when EVERLAKE_IMAGE_TAG names a PTR image that is
         # not built yet, this app builds it, and it must come out the same as the PTR's, never a core without the bots.
-        TC_COMMIT: ${TC_COMMIT:-dab8f8aa45b325d085bef5585f27c5709e216456}
+        TC_COMMIT: ${TC_COMMIT:-f03d26da453dcc3b5413a024e371cbc667ff48a7}
         PLAYERBOTS: ${PLAYERBOTS:-1}
         BUILD_JOBS: ${BUILD_JOBS:-4}
         WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-}
