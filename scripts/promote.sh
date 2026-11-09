@@ -22,13 +22,13 @@ die() { echo "promote: $*" >&2; exit 1; }
 
 image_id() { $DOCKER image inspect --format '{{.Id}}' "$1" 2>/dev/null || true; }
 
-# The newest container (running or stopped) of a compose service, filtered by project when given
+# The image of a compose service's container: a running one first, else the newest stopped one. Service names are
+# unique across this folder's compose files (worldserver = the live realm, worldserver-ptr = the PTR, worldserver2 =
+# realm 2), so no project name is needed.
 service_image() {
-    local service=$1 project=${2:-}
-    local filter=(--filter "label=com.docker.compose.service=$service")
-    [ -n "$project" ] && filter+=(--filter "label=com.docker.compose.project=$project")
-    local c
-    c="$($DOCKER ps -a "${filter[@]}" --format '{{.ID}}' | head -1)"
+    local filter=(--filter "label=com.docker.compose.service=$1") c
+    c="$($DOCKER ps "${filter[@]}" --format '{{.ID}}' | head -1)"
+    [ -n "$c" ] || c="$($DOCKER ps -a "${filter[@]}" --format '{{.ID}}' | head -1)"
     [ -n "$c" ] && $DOCKER inspect --format '{{.Image}}' "$c" 2>/dev/null || true
 }
 
@@ -76,8 +76,7 @@ status() {
     describe live "$REPO:live"
     describe live-previous "$REPO:live-previous"
     local running ptr
-    running="$(service_image worldserver ix-everlake)"
-    [ -n "$running" ] || running="$(service_image worldserver everlake)"
+    running="$(service_image worldserver)"
     if [ -n "$running" ]; then describe "running now" "$running"; else printf '  %-14s %s\n' "running now" "no worldserver container"; fi
     echo "PTR (everlake-ptr app):"
     ptr="$(service_image worldserver-ptr)"
@@ -104,8 +103,7 @@ promote() {
     else
         # first use: keep what live runs now as the way back
         local running
-        running="$(service_image worldserver ix-everlake)"
-        [ -n "$running" ] || running="$(service_image worldserver everlake)"
+        running="$(service_image worldserver)"
         if [ -n "$running" ]; then $DOCKER tag "$running" "$REPO:live-previous"; echo "promote: first use, the image live runs now is kept as live-previous"; fi
     fi
     $DOCKER tag "$source_id" "$REPO:live"
