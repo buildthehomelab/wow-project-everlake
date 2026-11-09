@@ -135,6 +135,8 @@ COPY sql/everlake/2026_11_07_09_auth_name_reservation.sql sql/everlake/2026_11_0
      /src/TrinityCore/sql/custom/auth/
 COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql sql/everlake/2026_11_08_08_hotfixes_live_tact_keys.sql \
      /src/TrinityCore/sql/custom/hotfixes/
+# Our world rules as update files: dynamic respawn groups (quest targets, herb and ore nodes)
+COPY sql/everlake/2026_11_09_00_world_dynamic_respawn.sql /src/TrinityCore/sql/custom/world/
 # The world import's update files (empty unless WORLD_DATA_COMMIT is set; see the worlddata stage)
 COPY --from=worlddata /world-data/ /src/TrinityCore/sql/custom/world/
 # worldserver's auto-setup imports TDB_full_*.sql from its working directory

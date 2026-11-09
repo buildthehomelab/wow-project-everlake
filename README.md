@@ -94,6 +94,13 @@ The bots need three things the server didn't before:
 The first start with bots creates the bots' accounts and characters in the background, which takes a while; bot log
 lines go to `logs/Playerbot.log`.
 
+**Dynamic respawns.** With hundreds of bots, quest mobs and herb/ore nodes would be camped empty. Every realm runs
+`Respawn.DynamicMode = 1`, and `sql/everlake/2026_11_09_00_world_dynamic_respawn.sql` (in the image, applied by
+worldserver) puts 56,330 quest creatures, 9,250 quest objects and 20,789 herb and ore nodes into the core's dynamic
+spawn groups (2 and 4). Up to 10 players in a zone (bots count), nothing changes; at 20, they respawn twice as fast; at
+150, 15 times as fast, never under 10 s (`Respawn.DynamicRateCreature`, `Respawn.DynamicMinimumCreature` and the
+GameObject pair in `overrides/worldserver.conf`).
+
 ### PTR
 
 The PTR (realm 73, "Everlake PTR", port 8097) is where a new build runs before a live realm: its own image, its own
