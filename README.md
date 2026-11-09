@@ -39,7 +39,7 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 
 | What | Value |
 |---|---|
-| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `b70ee2f0` (fork `everlake`: advocaite's `forever` 2ae1313e + forever-bots + the reviewed advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-B, Karrz v0.1.33 world data and scripts), bots on. The live app and the PTR app build the same commit, so either one makes the same image |
+| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `48180822` (fork `everlake`: advocaite's `forever` 2ae1313e + forever-bots + the reviewed advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-C, Karrz v0.1.33 world data and scripts), bots on. The live app and the PTR app build the same commit, so either one makes the same image |
 | Client | WoW Forever **1.60.1.70862**; 1.60.1.70790 clients are also let in (`Realm.AlsoAcceptBuilds`) |
 | World DB | `forever-tdb-2026-10-14` release of the same repository |
 | ForeverTracker | [buildthehomelab/wow-forever-tracker](https://github.com/buildthehomelab/wow-forever-tracker) @ `9fcbdd22` (`docker-compose.tracker.yml`) |
