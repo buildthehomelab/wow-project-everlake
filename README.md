@@ -77,8 +77,8 @@ bnetaccount create mail@example.com Password
 ### Bots
 
 `PLAYERBOTS=1` (the default; with a core commit that has the module, `src/modules/PlayerbotV2`: the fork's `everlake` branch) builds
-the WoW Forever Bots into the image, switched on with the module's own defaults: up to 250 world bots (around players, in towns and at start zones), the auction house bot,
-raid bots and dungeon finder fill. Change any setting in `overrides/playerbot.conf` (`Key = Value` lines, read after
+the WoW Forever Bots into the image, switched on with the module's own defaults, except on the live realm: 500 world bots, a modest crowd around each player (30 in a leveling zone, 80 in a town, 15 in a start zone) and the rest waiting in towns and quest hubs all over the world (`BOTS_*` in `.env`, see `.env.example`), the auction house bot,
+raid bots and dungeon finder fill. Change any other setting in `overrides/playerbot.conf` (`Key = Value` lines, read after
 the defaults); the keys are in the module's `playerbot.conf.dist` and `zz-forever-bots.conf`. Realm 2 runs no world,
 auction house or dungeon finder bots.
 

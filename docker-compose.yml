@@ -79,6 +79,20 @@ services:
       IMAGE_TAG: ${EVERLAKE_IMAGE_TAG:-latest}   # the entrypoint checks a PTR tag against what the image was built from
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PACKET_LOG: ${PACKET_LOG:-0}   # 1 = packet log (diagnostics, holds chat)
+      # Bots (images built with them; an image without the bots ignores these). The module's defaults are sized for a
+      # home PC: 250 bots and a 6,000 MB memory cap, which stopped live at ~50 bots (worldserver ~4.5 GB + ~31 MB a bot).
+      # Live: 500 bots and room for them, a lived-in world that doesn't crowd you: GlobalFill puts the bots no player
+      # needs in towns and quest hubs all over the world, and the crowd around each player stays modest (within
+      # ActivityRadius 600 y: 30 in a leveling zone, 80 in a town, 15 in a start zone, 40 elsewhere; at most 8 within 45 y
+      # of one another outdoors). These win over overrides/playerbot.conf (environment comes last): change them in .env.
+      TC_PLAYERBOT_WORLD_MAX_BOTS: ${BOTS_MAX:-500}
+      TC_PLAYERBOT_WORLD_RSS_BUDGET_MB: ${BOTS_RSS_BUDGET_MB:-32000}
+      TC_PLAYERBOT_WORLD_GLOBAL_FILL: ${BOTS_GLOBAL_FILL:-1}
+      TC_PLAYERBOT_WORLD_ZONE_BOTS: ${BOTS_ZONE:-30}
+      TC_PLAYERBOT_WORLD_CITY_BOTS: ${BOTS_CITY:-80}
+      TC_PLAYERBOT_WORLD_START_ZONE_BOTS: ${BOTS_START_ZONE:-15}
+      TC_PLAYERBOT_WORLD_BOTS_PER_PLAYER: ${BOTS_PER_PLAYER:-40}
+      TC_PLAYERBOT_WORLD_AREA_CAP_OUTDOORS: ${BOTS_AREA_CAP:-8}
     # interactive console: docker compose attach worldserver  (leave with Ctrl+P, Ctrl+Q)
     stdin_open: true
     tty: true
