@@ -26,7 +26,9 @@ Bots are skipped: characters of Battle.net accounts named *@PLAYERBOT-V2.LOCAL o
 playerbot_v2_account table. Bots never reserve names.
 
 Reaching MySQL: by default `docker compose exec -T mysql` from the repo root (like scripts/realm2-setup.sh), as
-MySQL's root user. --compose "-p NAME -f FILE" selects another compose project (the scratch test stack).
+MySQL's root user, so it needs Docker access (sudo on Patronus). --compose "-p NAME -f FILE" selects another compose
+project: on Patronus the TrueNAS app is project ix-everlake (sudo python3 tools/name-reservation/backfill.py
+--compose "-p ix-everlake"); the scratch test stack is its own. A failed connection stops the tool with mysql's error.
 """
 import argparse
 import os
@@ -42,27 +44,36 @@ BOT_EMAIL_SUFFIX = "@PLAYERBOT-V2.LOCAL"
 
 class MySQL:
     def __init__(self, compose_args):
+        # mysql's own exit status comes back (not the password-warning filter's), so a failed connection is an error
+        # and never an empty result
         self.base = ["docker", "compose"] + shlex.split(compose_args) + [
             "exec", "-T", "mysql", "sh", "-c",
-            'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" --default-character-set=utf8mb4 -N -B "$@" 2>&1 '
-            '| grep -v "Using a password"', "sh"]
+            'out=$(mysql -uroot -p"$MYSQL_ROOT_PASSWORD" --default-character-set=utf8mb4 -N -B "$@" 2>&1); rc=$?; '
+            'printf "%s\\n" "$out" | grep -v "Using a password"; exit $rc', "sh"]
+
+    def _fail(self, out, what):
+        msg = (out.stdout.strip() + " " + out.stderr.strip()).strip() or f"exit status {out.returncode}"
+        sys.exit(f"mysql failed{what}: {msg}\n"
+                 "  (MySQL is reached with `docker compose exec mysql` from this folder: run the tool with sudo, and on "
+                 "TrueNAS pass the app's project, e.g. --compose \"-p ix-everlake\")")
 
     def rows(self, sql):
         out = subprocess.run(self.base + ["-e", sql], cwd=HERE, capture_output=True, text=True)
-        text = out.stdout
-        if out.returncode not in (0, 1) or text.startswith("ERROR"):
-            sys.exit(f"mysql failed: {text.strip() or out.stderr.strip()}\n  query: {sql}")
+        if out.returncode != 0 or out.stdout.startswith("ERROR"):
+            self._fail(out, f" (query: {sql})")
         result = []
-        for line in text.splitlines():
+        for line in out.stdout.splitlines():
+            if not line:
+                continue
             if line.startswith("ERROR"):
-                sys.exit(f"mysql failed: {line}\n  query: {sql}")
+                self._fail(out, f" (query: {sql})")
             result.append([None if v == "NULL" else v for v in line.split("\t")])
         return result
 
     def run_script(self, sql):
         out = subprocess.run(self.base, input=sql, cwd=HERE, capture_output=True, text=True)
-        if "ERROR" in out.stdout or out.returncode not in (0, 1):
-            sys.exit(f"mysql failed while writing: {out.stdout.strip()} {out.stderr.strip()}")
+        if "ERROR" in out.stdout or out.returncode != 0:
+            self._fail(out, " while writing")
 
 
 def q(value):
