@@ -7,8 +7,9 @@
 #
 # A TrueNAS custom app of its own beside the running "everlake" app, from the same folder; it never edits that app.
 # Everything that needs Docker happens inside this app, so nobody runs docker or sudo on the host:
-#   - worldserver-ptr's image is built from this folder when it is missing, with the bots on. Its tag names the core
-#     commit, so a new PTR_TC_COMMIT is built on the next start (that start takes as long as the build).
+#   - worldserver-ptr's image is built from this folder when it is missing, with the bots on and the live realm's
+#     WORLD_DATA_COMMIT. Its tag names both commits (ptr-<core>-<world data or none>), so a new one is built on the
+#     next start (that start takes as long as the build).
 #   - ptr-init sets up the databases and the realm row (scripts/ptr-setup.sh init, MySQL's root over the network)
 #   - ptr-mmaps builds the bots' navigation meshes into the data folder when there are none yet
 #   - worldserver-ptr starts once both have finished
@@ -18,8 +19,8 @@
 # It reads this folder's .env (DB_PASSWORD, MYSQL_ROOT_PASSWORD, DB_USER, DATA_DIR). Network: the everlake app's
 # (project ix-everlake); another project name: EVERLAKE_NETWORK=<project>_everlake in .env.
 #
-# A tried PTR image goes live without a rebuild: EVERLAKE_IMAGE_TAG=ptr-<core commit> in .env, then restart the live
-# apps (and the bots' database and MMAP_PATHFINDING=1 for the live realm first: README, Bots).
+# A tried PTR image goes live without a rebuild: EVERLAKE_IMAGE_TAG=<its tag> and MMAP_PATHFINDING=1 in .env, then
+# restart the everlake app (README, Bots). Realm 2 stays on REALM2_IMAGE_TAG.
 services:
   ptr-init:
     image: mysql:8.0
@@ -36,7 +37,7 @@ services:
       - ./scripts:/ptr/scripts:ro
 
   ptr-mmaps:
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-3d77575743c2037170fde63fe42cd1dd45366fda}
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-dab8f8aa45b325d085bef5585f27c5709e216456}-${WORLD_DATA_COMMIT:-none}
     pull_policy: never   # built by worldserver-ptr
     restart: "no"
     entrypoint: ["/usr/local/bin/extract.sh"]
@@ -52,11 +53,13 @@ services:
     build:
       context: .
       args:
-        # core fork commit: everlake (forever + forever-bots) + Playerbot.AccountPrefix (wow-trinitycore-everlake PR #4)
-        TC_COMMIT: ${PTR_TC_COMMIT:-3d77575743c2037170fde63fe42cd1dd45366fda}
+        # core fork commit: everlake (forever + forever-bots + Playerbot.AccountPrefix, PR #4 merged)
+        TC_COMMIT: ${PTR_TC_COMMIT:-dab8f8aa45b325d085bef5585f27c5709e216456}
+        # the live realm's world import (.env), so the PTR image is exactly the next live image
+        WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-}
         PLAYERBOTS: "1"
         BUILD_JOBS: ${PTR_BUILD_JOBS:-32}
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-3d77575743c2037170fde63fe42cd1dd45366fda}
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-dab8f8aa45b325d085bef5585f27c5709e216456}-${WORLD_DATA_COMMIT:-none}
     command: ["worldserver"]
     networks: [everlake]
     restart: unless-stopped

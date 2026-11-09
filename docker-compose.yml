@@ -37,6 +37,23 @@ services:
       retries: 30
       start_period: 30s
 
+  # The bots' database (docker/mysql-init/02-playerbot.sh, over the network): created if missing, then this exits.
+  # worldserver loads its schema on the first start of an image with the bots.
+  bots-init:
+    image: mysql:8.0
+    networks: [everlake]
+    restart: "no"
+    entrypoint: ["bash", "/init/02-playerbot.sh"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      DB_USER: ${DB_USER:-trinity}
+    volumes:
+      - ./docker/mysql-init:/init:ro
+
   worldserver:
     build:
       context: .
@@ -52,6 +69,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      bots-init:
+        condition: service_completed_successfully
     environment:
       <<: *trinity-env
       MMAP_PATHFINDING: ${MMAP_PATHFINDING:-0}

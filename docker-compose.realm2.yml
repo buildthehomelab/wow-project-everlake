@@ -9,7 +9,8 @@
 # overrides/*.conf (game rules) apply here too.
 services:
   worldserver2:
-    image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-latest}
+    # Its own tag: realm 1 moving to a new image (EVERLAKE_IMAGE_TAG, e.g. the bots) leaves realm 2 where it is
+    image: everlake-trinitycore:${REALM2_IMAGE_TAG:-latest}
     pull_policy: never   # local image, built by the worldserver service
     command: ["worldserver"]
     networks: [everlake]
