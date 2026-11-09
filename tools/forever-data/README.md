@@ -9,6 +9,7 @@ release (the `tc_*` tables here); every other source is a view of the live game.
 | Pin the public sources | `pin_sources.py` (`--verify` rechecks the hashes) | files + `manifest.json` with sha256, `CREDITS.md` |
 | Load each source | `load_sources.py` | `src_<source>` tables + `src_pins` |
 | Load the fork's world | `load_tc.py` | `tc_<table>` (TrinityCore layout): the release plus the fork's `sql/updates` and `sql/custom` world files, run as Everlake's worldserver runs them; `tc_updates` lists every update file in it |
+| Load DatabaseForever's world | `load_dbf.py` | `dbf_<table>` (its own, older TrinityCore layout): EmuForever's world database, to compare with |
 | What Everlake's world lacks | `gap_report.py [--zone NAME] [--world SCHEMA.PREFIX]` | `reports/everlake-gaps.md` + `.json` |
 | Write an import slice | `import_slice1.py`, `import_slice2.py`, `import_slice3.py` | update files, review and held-back lists in `world-data/` (gitignored) |
 | Dry-run them | `import_dryrun.py` | two worlds in `acore_world_dryrun` (`elscratch_*`, `elstep_*`), `world-data/slices/<newest>/dry-run.md` |
@@ -26,6 +27,7 @@ export FOREVER_DB_USER=... FOREVER_DB_PASS=...         # a login with all rights
 python3 pin_sources.py                                 # --only NAME,NAME: some sources; --wowhead-only: the tooltips
 python3 load_sources.py                                # --only NAME,NAME: some sources
 python3 load_tc.py
+python3 load_dbf.py                                    # after pin_sources.py --only databaseforever
 python3 gap_report.py
 ```
 
@@ -58,6 +60,7 @@ Every `src_` table has the same columns: `tbl` (the source's table or file), `n`
 | `src_wowhead`, `src_wowhead_tooltips` | Wowhead's public Forever tooltips (quests, NPCs, objects, items, spells) | reference only |
 | `src_item_history` | Items and spells per build and hotfix ([ericbtaylorjr/forever-db](https://github.com/ericbtaylorjr/forever-db)) | none stated: reference only, never copied into Everlake |
 | `tc_*` | [TrinityCore `forever`](https://github.com/advocaite/TrinityCore/tree/forever) world release | GPL-2.0 |
+| `dbf_*` | [DatabaseForever](https://github.com/EmuForever/DatabaseForever): the world database of the [EmuForever](https://github.com/EmuForever/EmuForever) emulator, cut down to Forever content plus about 4,400 NPCs of its own (1,400 of them spawned, 15,700 spawns), loot, vendors and trainers. Its added spawns are placed from map pins (a 0.1% grid, all facing 0, 120 s respawn) | none stated: reference only, never copied into Everlake and never named in import files (`import_sql.REFERENCE_ONLY`) |
 
 `CREDITS.md`, written by `pin_sources.py` into the sources folder, has to travel with anything made from this data.
 Game content such as names and text belongs to Blizzard Entertainment.
@@ -87,6 +90,11 @@ Quest text keeps retail text tokens (`$1oa` and the like): the Forever client sh
 - vendor stock (EG Link's recorded stock against `npc_vendor`, following list references);
 - objects missing or never spawned, loot missing recorded drops, trainers missing spells, quests with no objectives,
   missing reward items, or no progress or completion text.
+
+When `dbf_*` is loaded, every gap DatabaseForever has rows for says what it holds there (a template and spawns, items,
+spells, givers), with a count per kind under "What DatabaseForever has rows for". DatabaseForever never adds a gap: its
+additions are an emulator's guesses, not a sighting in the live game. In the vote it speaks only for NPCs the fork's
+world lacks (on shared NPCs its values are the fork's or bulk defaults), at weights below Wowhead's.
 
 `load_tc.py` runs the fork's `sql/updates` and `sql/custom` world files on top of the release by the same rules as the
 fork's own updater at worldserver start (`custom_sql.UpdatePlan`): new files are applied; a changed file is applied again,
