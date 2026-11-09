@@ -104,6 +104,15 @@ SOURCES = {
                   "by ericbtaylorjr, used as a reference.",
         "keep": lambda p: p.startswith("data/") and (p.endswith(".jsonl") or p.endswith(".json")),
     },
+    "databaseforever": {
+        "repo": "EmuForever/DatabaseForever",
+        "licence": "none stated (reference only until the author agrees)",
+        "credit": "World database of the [EmuForever](https://github.com/EmuForever/EmuForever) server emulator from "
+                  "[DatabaseForever](https://github.com/EmuForever/DatabaseForever), used as a reference.",
+        # its world tables, one mysqldump each (TrinityCore layout); locale, website (armory_), views and backups left out
+        "keep": lambda p: bool(re.match(r"World/[a-z0-9_]+\.sql$", p))
+                          and not re.search(r"(_locale|^armory_|^vw_|_bak|_backup_|^updates_include)", os.path.basename(p)[:-4]),
+    },
 }
 # The fork world everything is compared against. FOREVER_TC_REPO / FOREVER_TC_REF switch it, e.g. to Everlake's own core
 # (buildthehomelab/wow-trinitycore-everlake, branch everlake) or to the exact commit Everlake's Dockerfile pins.

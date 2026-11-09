@@ -250,6 +250,7 @@ def npcs(cur, ids):
     for r in rows(cur, f"SELECT CreatureID, GROUP_CONCAT(CreatureDisplayID ORDER BY Idx) AS displays, MAX(VerifiedBuild) AS vb "
                        f"FROM {WORLD}creature_template_model WHERE CreatureID IN ({s}) GROUP BY CreatureID"):
         add(r["CreatureID"], "model", [int(x) for x in r["displays"].split(",")], tc_source(r["vb"]), r["vb"])
+    dbf_npcs(cur, s, add)
     for r in rows(cur, f"SELECT id, data FROM {F}.src_forever_db WHERE tbl = 'npc' AND id IN ({s})"):
         d = j(r["data"])
         add(r["id"], "name", d.get("name"), "forever-db")
@@ -284,3 +285,35 @@ def npcs(cur, ids):
         if m:
             add(r["id"], "level", [int(m.group(1)), int(m.group(2) or m.group(1))], "wowhead")
     return out
+
+
+DBF = f"{F}.dbf_"
+
+
+def has_dbf(cur):
+    """Whether load_dbf.py has loaded DatabaseForever (dbf_* tables) into acore_forever."""
+    cur.execute("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = %s AND table_name = 'dbf_creature_template'", (F,))
+    return cur.fetchone()[0] > 0
+
+
+def dbf_npcs(cur, s, add):
+    """DatabaseForever's NPC fields, as source "databaseforever", for the NPCs the fork world lacks only. It started from
+    the same fork world as tc_*: on the NPCs both have, its values are the fork's (counting them would count the fork
+    twice) or bulk defaults (faction 35 on 15,000 of them), so they don't vote."""
+    if not has_dbf(cur):
+        return
+    sql = (f"SELECT d.entry, d.name, d.subname, d.faction, d.Classification, dl.level_min, dl.level_max, "
+           f"GROUP_CONCAT(m.CreatureDisplayID ORDER BY m.Idx) AS displays "
+           f"FROM {DBF}creature_template d LEFT JOIN {WORLD}creature_template t ON t.entry = d.entry "
+           f"LEFT JOIN {DBF}creature_classic_level dl ON dl.entry = d.entry "
+           f"LEFT JOIN {DBF}creature_template_model m ON m.CreatureID = d.entry "
+           f"WHERE d.entry IN ({s}) AND t.entry IS NULL GROUP BY d.entry")
+    for r in rows(cur, sql):
+        add(r["entry"], "name", r["name"], "databaseforever")
+        add(r["entry"], "subname", r["subname"], "databaseforever")
+        add(r["entry"], "faction", r["faction"], "databaseforever")
+        add(r["entry"], "rank", r["Classification"], "databaseforever")
+        if r["level_min"]:
+            add(r["entry"], "level", [r["level_min"], r["level_max"] or r["level_min"]], "databaseforever")
+        if r["displays"]:
+            add(r["entry"], "model", [int(x) for x in r["displays"].split(",")], "databaseforever")
