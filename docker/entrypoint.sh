@@ -168,6 +168,35 @@ configure_playerbots() {
     grep -E '^Playerbot\.World\.(Enable|MaxBots) ' "$BOT_CONF_DIR/playerbot.conf" | sed 's/^/[entrypoint]   /' || true
 }
 
+# IMAGE_TAG (compose: the tag this container was started as). A PTR tag, ptr-<core commit>-<world data commit or none>,
+# promises what the image holds; /opt/trinitycore/image-build.env says what it was built from. They differ when the
+# wrong app built the tag first: the everlake app builds a missing image from its own build args, and the PTR app then
+# finds that image and runs it too. Say so loudly at every start. Images from before image-build.env: the bot check only.
+check_image_build() {
+    local tag="${IMAGE_TAG:-}" info="$ROOT/image-build.env" core="" wd="" bots="" want_core want_wd problems=()
+    [[ "$tag" == ptr-* ]] || return 0
+    [ -f "$ETC/worldserver.conf.d/playerbot.conf.dist" ] || problems+=("it has no bots (built without PLAYERBOTS=1)")
+    if [ -f "$info" ]; then
+        core="$(sed -n 's/^TC_COMMIT=//p' "$info")"
+        wd="$(sed -n 's/^WORLD_DATA_COMMIT=//p' "$info")"
+        bots="$(sed -n 's/^PLAYERBOTS=//p' "$info")"
+        if [[ "$tag" =~ ^ptr-([0-9a-f]{40})(-([0-9a-f]{40}|none))?$ ]]; then
+            want_core="${BASH_REMATCH[1]}"
+            want_wd="${BASH_REMATCH[3]:-}"
+            [ "$want_wd" = none ] && want_wd=""
+            [ "$core" = "$want_core" ] || problems+=("its core is ${core:-unknown}, the tag says $want_core")
+            [ -z "${BASH_REMATCH[2]}" ] || [ "$wd" = "$want_wd" ] \
+                || problems+=("its world data is ${wd:-none}, the tag says ${want_wd:-none}")
+        fi
+        [ "$bots" = 1 ] || [ "${#problems[@]}" -gt 0 ] || problems+=("it was built with PLAYERBOTS=${bots:-unset}")
+    fi
+    [ "${#problems[@]}" -gt 0 ] || { echo "[entrypoint] image $tag: built from what its tag says"; return 0; }
+    echo "[entrypoint] ERROR: image $tag is not the PTR build its tag names:"
+    printf '[entrypoint]   %s\n' "${problems[@]}"
+    echo "[entrypoint] Another app built it first. Remove that tag (docker image rm everlake-trinitycore:$tag),"
+    echo "[entrypoint] start the everlake-ptr app so it builds the image, then restart this one (README, PTR)."
+}
+
 # The bots' shared database (PLAYERBOT_DB, default `playerbot`; the worldserver's Playerbot.SharedDatabase must name the
 # same one): docker/mysql-init creates `playerbot` on a new MySQL volume, docker/mysql-init/02-playerbot.sh on an
 # existing one, scripts/ptr-setup.sh the PTR's `playerbot_ptr`. Its schema and static data (names, templates, dungeon
@@ -314,6 +343,7 @@ case "${1:-worldserver}" in
     worldserver)
         shift || true
         show_last_sql_errors
+        check_image_build
         configure_worldserver
         write_client_build_override
         check_data

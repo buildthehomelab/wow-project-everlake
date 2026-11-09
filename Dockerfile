@@ -8,6 +8,15 @@
 # Stage 3: slim runtime image
 
 ARG UBUNTU_VERSION=24.04
+# The core commit and the bots switch, declared here so the build stage uses them and the runtime stage records them
+# (/opt/trinitycore/image-build.env, checked by the entrypoint against the image tag it was started as).
+# The live realms: our fork's everlake branch with the bots (dab8f8aa: forever 2ae1313e + forever-bots + PR #4), the
+# same commit the PTR builds (docker-compose.ptr.yml), so the live app and the PTR app build one identical image.
+# Client 1.60.1.70862 (realms on 70862; bnetserver and the worldservers also let 70790 in, docker/entrypoint.sh).
+ARG TC_COMMIT=dab8f8aa45b325d085bef5585f27c5709e216456
+# PLAYERBOTS=1: the WoW Forever Bots module (src/modules/PlayerbotV2; the core commit must have it, as the fork's
+# everlake branch does since PR #2). 0 builds the core without bots.
+ARG PLAYERBOTS=1
 
 ############################ build ############################
 FROM ubuntu:${UBUNTU_VERSION} AS build
@@ -19,10 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 ARG TC_REPO=https://github.com/buildthehomelab/wow-trinitycore-everlake.git
-# The live realms: forever 2026-11-08 (2ae1313e, the fork's base): client 1.60.1.70862 (realms on 70862; bnetserver and
-# the worldservers also let 70790 in, docker/entrypoint.sh). The PTR builds a newer fork commit with the bots
-# (docker-compose.ptr.yml); a commit goes live only after the PTR.
-ARG TC_COMMIT=2ae1313e9f89ba34103fee1400dc3d4222efd8c4
+ARG TC_COMMIT
 RUN git init -q /src/TrinityCore \
     && git -C /src/TrinityCore remote add origin "${TC_REPO}" \
     && git -C /src/TrinityCore fetch -q --depth 1 origin "${TC_COMMIT}" \
@@ -37,9 +43,7 @@ RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; echo "applying $p"; g
 
 # BUILD_JOBS: lower it on small machines (GCC needs ~2 GB RAM per job on the biggest files)
 ARG BUILD_JOBS=4
-# PLAYERBOTS=1: the WoW Forever Bots module (src/modules/PlayerbotV2; the core commit must have it, as the fork's
-# everlake branch does since PR #2). Off for the live realms until a bots build has run on the PTR.
-ARG PLAYERBOTS=0
+ARG PLAYERBOTS
 # TOOLS=1: also build mapextractor / vmap4extractor / vmap4assembler / mmaps_generator
 ARG TOOLS=1
 WORKDIR /src/TrinityCore/build
@@ -136,8 +140,15 @@ COPY --from=worlddata /world-data/ /src/TrinityCore/sql/custom/world/
 # worldserver's auto-setup imports TDB_full_*.sql from its working directory
 COPY --from=tdb /tdb/ /opt/trinitycore/bin/
 COPY docker/entrypoint.sh docker/extract.sh /usr/local/bin/
+# What this image was built from: the entrypoint compares it with the tag it runs as (IMAGE_TAG), so an image built by
+# the wrong app under a PTR tag (e.g. without the bots) says so at start instead of running quietly without them.
+ARG TC_COMMIT
+ARG PLAYERBOTS
+ARG WORLD_DATA_COMMIT
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/extract.sh \
-    && mkdir -p /opt/trinitycore/data /opt/trinitycore/logs /opt/trinitycore/certs /opt/trinitycore/overrides
+    && mkdir -p /opt/trinitycore/data /opt/trinitycore/logs /opt/trinitycore/certs /opt/trinitycore/overrides \
+    && printf 'TC_COMMIT=%s\nPLAYERBOTS=%s\nWORLD_DATA_COMMIT=%s\n' "${TC_COMMIT}" "${PLAYERBOTS}" "${WORLD_DATA_COMMIT}" \
+        > /opt/trinitycore/image-build.env
 
 ENV LD_LIBRARY_PATH=/opt/trinitycore/lib
 WORKDIR /opt/trinitycore/bin
