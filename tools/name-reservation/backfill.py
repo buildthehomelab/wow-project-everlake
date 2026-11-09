@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Reserves the names of characters that existed before name reservation, on every realm.
+"""Reserves the full names of characters that existed before name reservation, on every realm.
 
-The core patch (docker/patches/0008-everlake-name-reservation.patch) reserves a name when a character is created or
-renamed. Characters made before it have no reservation, so another account could take their names on another realm.
-This tool reads every realm's characters and writes the missing rows to the login database:
+The core (buildthehomelab/wow-trinitycore-everlake, NameReservationMgr) reserves a full name (name + surname, the surname
+compared without regard to case or accents) when a character is created or renamed. Characters made before it have no
+reservation, so another account could take their full names on another realm. This tool reads every realm's characters
+and writes the missing rows to the login database:
 
     tools/name-reservation/backfill.py                          report only (default): what it would write, and clashes
     tools/name-reservation/backfill.py --apply                  write the rows that have one clear owner
     tools/name-reservation/backfill.py --realm 70=characters --realm 71=characters2
 
-A CLASH is a name used by characters of more than one Battle.net account (on different realms), or by a character
-whose account does not own the name's existing reservation. Clashes are listed and left alone: nothing picks a
+A CLASH is a full name used by characters of more than one Battle.net account (on different realms), or by a character
+whose account does not own the full name's existing reservation. Two accounts may both have a "Bob" with different
+surnames: that is no clash. Clashes are listed and left alone: nothing picks a
 winner. Resolve them by hand (a forced rename: `.character rename <name>` on the realm of the character that gives
 the name up), then run the tool again.
 
@@ -30,6 +32,7 @@ import argparse
 import os
 import shlex
 import subprocess
+import unicodedata
 import sys
 from collections import defaultdict
 
@@ -73,6 +76,17 @@ def normalise(name):
     return name[:1].upper() + name[1:].lower()
 
 
+def surname_key(surname):
+    """Surnames compare like their utf8mb4_unicode_ci column: without regard to case or accents, outer blanks trimmed."""
+    surname = surname.strip(" \t ​‌‍‎‏﻿")
+    folded = unicodedata.normalize("NFKD", surname.casefold())
+    return "".join(ch for ch in folded if not unicodedata.combining(ch))
+
+
+def full_name(name, surname):
+    return f"{name} {surname}" if surname else name
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--realm", action="append", metavar="ID=DATABASE",
@@ -86,7 +100,7 @@ def main():
     db = MySQL(args.compose)
     auth = args.auth_db
     if not db.rows(f"SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = {q(auth)} AND TABLE_NAME = 'name_reservation'"):
-        sys.exit(f"{auth}.name_reservation is missing: apply sql/everlake/2026_11_07_09_auth_name_reservation.sql first")
+        sys.exit(f"{auth}.name_reservation is missing: start a worldserver on the fork's core first (its updater applies sql/custom/auth/2026_11_07_09 and 2026_11_09_00)")
 
     realms = {}
     for spec in args.realm or ["70=characters", "71=characters2"]:
@@ -100,7 +114,8 @@ def main():
         sys.exit("no realm databases found (use --realm ID=DATABASE)")
 
     # every player character with a name, on every realm
-    users = defaultdict(list)       # name -> [(realm, guid, bnet, account, surname, level)]
+    # a reservation is for a full name (name + surname): several characters may share a name
+    users = defaultdict(list)       # (name, surname key) -> [(realm, guid, bnet, account, surname, level)]
     skipped = []
     for realm_id, schema in realms.items():
         has_pool = db.rows(f"SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = {q(schema)} AND TABLE_NAME = 'playerbot_v2_account'")
@@ -118,58 +133,68 @@ def main():
             if any(ch.isdigit() for ch in name):
                 skipped.append(f"realm {realm_id} character {name} (guid {guid}): temporary name, renamed at its next login")
                 continue
-            users[normalise(name)].append((realm_id, int(guid), int(bnet), int(account), surname, int(level)))
+            users[(normalise(name), surname_key(surname))].append((realm_id, int(guid), int(bnet), int(account), surname, int(level)))
 
-    existing = {name: (int(owner), freed) for name, owner, freed in
-                db.rows(f"SELECT name, battlenet_account, freed_at FROM {auth}.name_reservation")}
-    attached = {(int(r), int(g)): n for r, g, n in
-                db.rows(f"SELECT realm_id, character_guid, name FROM {auth}.name_reservation_character")}
+    # needs the full-name key (core sql/custom/auth/2026_11_09_00_auth_name_reservation_full_name.sql)
+    if not db.rows(f"SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = {q(auth)} AND TABLE_NAME = 'name_reservation_character' AND COLUMN_NAME = 'surname'"):
+        sys.exit(f"{auth}.name_reservation_character has no surname: start a worldserver on the new core first (its updater "
+                 "applies 2026_11_09_00_auth_name_reservation_full_name.sql)")
+    existing = {(name, surname_key(surname)): (int(owner), freed, surname) for name, surname, owner, freed in
+                db.rows(f"SELECT name, surname, battlenet_account, freed_at FROM {auth}.name_reservation")}
+    attached = {(int(r), int(g)): (n, surname_key(sn)) for r, g, n, sn in
+                db.rows(f"SELECT realm_id, character_guid, name, surname FROM {auth}.name_reservation_character")}
 
     writes, clashes, reserved, kept = [], [], 0, 0
-    for name, chars in sorted(users.items()):
+    for key, chars in sorted(users.items()):
+        name = key[0]
         owners = {c[2] for c in chars}
-        row = existing.get(name)
+        row = existing.get(key)
         if row:
             owners.add(row[0])
         if len(owners) > 1:
-            clashes.append((name, chars, row))
+            clashes.append((key, chars, row))
             continue
         owner = owners.pop()
-        missing = [c for c in chars if attached.get((c[0], c[1])) != name]
+        missing = [c for c in chars if attached.get((c[0], c[1])) != key]
         if row and not missing and row[1] is None:
             kept += 1
             continue
         realm_id, guid, _, _, surname, _ = chars[0]
+        # an existing row keeps the surname as first written (the same full name, perhaps in other capitals)
+        surname = row[2] if row else surname
         writes.append(f"INSERT INTO {auth}.name_reservation (name, surname, battlenet_account, realm_id, character_guid) "
                       f"VALUES ({q(name)}, {q(surname)}, {owner}, {realm_id}, {guid}) "
                       f"ON DUPLICATE KEY UPDATE freed_at = IF(battlenet_account = {owner}, NULL, freed_at);")
         for realm_id, guid, *_ in missing:
-            writes.append(f"REPLACE INTO {auth}.name_reservation_character (realm_id, character_guid, name) "
-                          f"VALUES ({realm_id}, {guid}, {q(name)});")
+            writes.append(f"REPLACE INTO {auth}.name_reservation_character (realm_id, character_guid, name, surname) "
+                          f"VALUES ({realm_id}, {guid}, {q(name)}, {q(surname)});")
         reserved += 1
 
     # character rows whose character is gone from its realm (only for realms this run read)
     live = {(c[0], c[1]) for chars in users.values() for c in chars}
-    gone = [(r, g, n) for (r, g), n in attached.items() if r in realms and (r, g) not in live]
-    for realm_id, guid, name in gone:
+    gone = [(r, g, k) for (r, g), k in attached.items() if r in realms and (r, g) not in live]
+    for realm_id, guid, _ in gone:
         writes.append(f"DELETE FROM {auth}.name_reservation_character WHERE realm_id = {realm_id} AND character_guid = {guid};")
-    # names nobody uses that were never freed (unfinished creates, and the names of the gone characters above)
-    gone_names = {n for _, _, n in gone}
+    # full names nobody uses that were never freed (unfinished creates, and the full names of the gone characters above);
+    # the surname comparison in SQL ignores case like the key does
+    gone_keys = {k for _, _, k in gone}
     in_use = set(users)
-    stale = [n for n, (_, freed) in existing.items() if freed is None and n not in in_use]
-    for name in sorted(set(stale) | gone_names):
-        writes.append(f"UPDATE {auth}.name_reservation r SET r.freed_at = NOW() WHERE r.name = {q(name)} AND r.freed_at IS NULL "
-                      f"AND NOT EXISTS (SELECT 1 FROM {auth}.name_reservation_character c WHERE c.name = r.name);")
+    stale = [k for k, (_, freed, _) in existing.items() if freed is None and k not in in_use]
+    for key in sorted(set(stale) | gone_keys):
+        stored_surname = existing[key][2] if key in existing else key[1]
+        writes.append(f"UPDATE {auth}.name_reservation r SET r.freed_at = NOW() WHERE r.name = {q(key[0])} AND r.surname = {q(stored_surname)} "
+                      f"AND r.freed_at IS NULL AND NOT EXISTS (SELECT 1 FROM {auth}.name_reservation_character c "
+                      f"WHERE c.name = r.name AND c.surname = r.surname);")
 
     print(f"realms read: {', '.join(f'{r} ({s})' for r, s in sorted(realms.items()))}")
-    print(f"player names: {len(users)}; already reserved: {kept}; to reserve: {reserved}; clashes: {len(clashes)}")
+    print(f"player full names: {len(users)}; already reserved: {kept}; to reserve: {reserved}; clashes: {len(clashes)}")
     print(f"character rows of characters that are gone: {len(gone)}; never-freed names with no character: {len(stale)}")
     for line in skipped:
         print(f"  skipped: {line}")
     if clashes:
         print("\nCLASHES (left alone; rename all but one by hand, then run again):")
-        for name, chars, row in clashes:
-            print(f"  {name}" + (f"  (reserved by Battle.net account {row[0]}{', freed ' + row[1] if row[1] else ''})" if row else ""))
+        for key, chars, row in clashes:
+            print(f"  {full_name(key[0], chars[0][4])}" + (f"  (reserved by Battle.net account {row[0]}{', freed ' + str(row[1]) if row[1] else ''})" if row else ""))
             for realm_id, guid, bnet, account, surname, level in chars:
                 print(f"    realm {realm_id}  guid {guid}  level {level}  Battle.net account {bnet} (game account {account})"
                       + (f"  surname {surname}" if surname else ""))

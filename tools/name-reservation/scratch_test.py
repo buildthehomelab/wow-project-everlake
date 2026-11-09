@@ -119,10 +119,11 @@ def wait_ready(service, timeout, since=None):
     return False
 
 
-def reservation(name):
-    """(owner bnet id, freed?, number of characters using it) or None"""
+def reservation(name, surname=""):
+    """(owner bnet id, freed?, number of characters using it) or None, for the full name (dump loads have no surname)"""
     row = sql(f"SELECT r.battlenet_account, r.freed_at IS NOT NULL, (SELECT COUNT(*) FROM auth.name_reservation_character c "
-              f"WHERE c.name = r.name) FROM auth.name_reservation r WHERE r.name = '{name}'")
+              f"WHERE c.name = r.name AND c.surname = r.surname) FROM auth.name_reservation r "
+              f"WHERE r.name = '{name}' AND r.surname = '{surname}'")
     return (int(row[0][0]), row[0][1] == "1", int(row[0][2])) if row else None
 
 

@@ -129,11 +129,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=build /opt/trinitycore /opt/trinitycore
 # The updater looks for sql/ under the source directory baked in at build time
 COPY --from=build /src/TrinityCore/sql /src/TrinityCore/sql
-# Our login-database tables the core patches need, applied by the updater on start like the fork's own custom files
-# (name reservation: docker/patches/0008), the one ruleset card at login (Forever), and the TACT keys live Forever sends
-# that the core lacks (tools/live-hotfixes/tact_keys.py). The other sql/everlake files are data and stay manual.
-COPY sql/everlake/2026_11_07_09_auth_name_reservation.sql sql/everlake/2026_11_08_06_auth_one_ruleset.sql \
-     /src/TrinityCore/sql/custom/auth/
+# Our login-database rows, applied by the updater on start like the fork's own custom files: the one ruleset card at
+# login (Forever), and the TACT keys live Forever sends that the core lacks (tools/live-hotfixes/tact_keys.py). Name
+# reservation's tables are the fork's own now (sql/custom/auth/2026_11_07_09 and 2026_11_09_00). The other
+# sql/everlake files are data and stay manual.
+COPY sql/everlake/2026_11_08_06_auth_one_ruleset.sql /src/TrinityCore/sql/custom/auth/
 COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql sql/everlake/2026_11_08_08_hotfixes_live_tact_keys.sql \
      /src/TrinityCore/sql/custom/hotfixes/
 # Our world rules as update files: dynamic respawn groups (quest targets, herb and ore nodes)
