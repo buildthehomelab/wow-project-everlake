@@ -19,8 +19,8 @@
 # It reads this folder's .env (DB_PASSWORD, MYSQL_ROOT_PASSWORD, DB_USER, DATA_DIR). Network: the everlake app's
 # (project ix-everlake); another project name: EVERLAKE_NETWORK=<project>_everlake in .env.
 #
-# A tried PTR image goes live without a rebuild: EVERLAKE_IMAGE_TAG=<its tag> and MMAP_PATHFINDING=1 in .env, then
-# restart the everlake app (README, Bots). Realm 2 stays on REALM2_IMAGE_TAG.
+# A tried PTR image goes live without a rebuild: sudo scripts/promote.sh (the everlake app runs everlake-trinitycore:live),
+# then restart the everlake app (README, PTR). Realm 2 stays on REALM2_IMAGE_TAG.
 services:
   ptr-init:
     image: mysql:8.0

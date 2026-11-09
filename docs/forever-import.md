@@ -97,7 +97,7 @@ generated SQL lives in its own repository, `wow-everlake-world-data`, under GPL-
   applies the files with the fork's custom files. The pin is empty by default, so a build takes no import files. The
   files land in the world database (realm 2 shares realm 1's) and in the image every worldserver of the project runs,
   so `WORLD_DATA_COMMIT` (a full commit SHA) is set only in a compose project with its own world database and its own
-  `EVERLAKE_IMAGE_TAG`: the PTR realm first (rule 6). The build stops on anything in `sql/world/` that isn't a file
+  image: the PTR realm first (rule 6), then live by `scripts/promote.sh`. The build stops on anything in `sql/world/` that isn't a file
   named like ours. Moving a realm's pin forward comes after the slice's own pull request in the data repository is
   merged.
 - **File names.** `YYYY_MM_DD_NN_world_everlake_import_<slice>.sql`. The fork never uses `everlake_import`, so no

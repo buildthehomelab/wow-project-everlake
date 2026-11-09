@@ -113,10 +113,17 @@ its image (bots on, the live realm's `WORLD_DATA_COMMIT`) if it's missing, sets 
 but `git pull`.
 
 1. `git pull`, then start (or restart) the `everlake-ptr` app, and try it.
-2. Good: in `.env`, `EVERLAKE_IMAGE_TAG=` the PTR's image tag (`ptr-<core commit>-<world data commit>`, the
-   `worldserver-ptr` image in the TrueNAS app) and `MMAP_PATHFINDING=1`, then restart the `everlake` app. No rebuild:
-   realm 1 and the login server run the image the PTR ran. Realm 2 keeps its own (`REALM2_IMAGE_TAG`, default `latest`).
-3. Back: remove `EVERLAKE_IMAGE_TAG` (or set it to `latest`) and restart the `everlake` app.
+2. Good: `sudo scripts/promote.sh`, then restart the `everlake` app. No rebuild and no `.env` edit: realm 1, the login
+   server and the extractor run `everlake-trinitycore:live`, and the script points that tag at the image the PTR's
+   worldserver ran (the one before stays as `live-previous`). Realm 2 keeps its own (`REALM2_IMAGE_TAG`, default `latest`).
+3. Back: `sudo scripts/promote.sh rollback` (swaps `live` and `live-previous`), then restart the `everlake` app.
+
+`sudo scripts/promote.sh status` shows what `live`, `live-previous` and the PTR run and what each was built from, and
+the worldserver prints it at every start (`[entrypoint] image live: core ..., world data ..., bots ...`). The first
+promote also keeps the image live is running as `live-previous` and comments out an old `EVERLAKE_IMAGE_TAG` line in
+`.env` (with a dated backup), which would otherwise win over the `live` tag. `MMAP_PATHFINDING=1` stays in `.env`.
+Don't run `docker compose build` for the `everlake` app on a server that has a `live` image: it would replace `live`
+with an untested build. The app builds by itself only when there is no `live` image yet (a new install).
 
 Start the PTR app first, so it builds the tag. Both apps build the same core with the bots, but only the PTR has run it.
 Every worldserver started as a PTR tag checks the image against the tag (`image-build.env`, written at build) and prints

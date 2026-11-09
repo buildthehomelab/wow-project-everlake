@@ -58,13 +58,14 @@ services:
     build:
       context: .
       args:
-        # The same core and bots as the PTR (docker-compose.ptr.yml): when EVERLAKE_IMAGE_TAG names a PTR image that is
-        # not built yet, this app builds it, and it must come out the same as the PTR's, never a core without the bots.
+        # Live runs everlake-trinitycore:live, the image scripts/promote.sh took from the PTR (README, PTR). This app builds
+        # only when that tag is missing (a new install), with the same core and bots as the PTR (docker-compose.ptr.yml),
+        # never a core without the bots. Don't run "docker compose build" here: it would overwrite live with an untested build.
         TC_COMMIT: ${TC_COMMIT:-b70ee2f066600967eaef626557fe8bde3561fb6b}
         PLAYERBOTS: ${PLAYERBOTS:-1}
         BUILD_JOBS: ${BUILD_JOBS:-4}
         WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-}
-    image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-latest}
+    image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-live}
     command: ["worldserver"]
     networks: [everlake]
     restart: unless-stopped
@@ -76,7 +77,7 @@ services:
     environment:
       <<: *trinity-env
       MMAP_PATHFINDING: ${MMAP_PATHFINDING:-0}
-      IMAGE_TAG: ${EVERLAKE_IMAGE_TAG:-latest}   # the entrypoint checks a PTR tag against what the image was built from
+      IMAGE_TAG: ${EVERLAKE_IMAGE_TAG:-live}   # the entrypoint checks a PTR tag against what the image was built from
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PACKET_LOG: ${PACKET_LOG:-0}   # 1 = packet log (diagnostics, holds chat)
       # Bots (images built with them; an image without the bots ignores these). The module's defaults are sized for a
@@ -105,7 +106,7 @@ services:
       - logs:/opt/trinitycore/logs
 
   bnetserver:
-    image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-latest}
+    image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-live}
     pull_policy: never   # local image, built by the worldserver service
     command: ["bnetserver"]
     networks: [everlake]
@@ -139,8 +140,8 @@ services:
 
   # Game data extraction (Blizzard CDN by default, see docker/extract.sh): docker compose run --rm extractor
   extractor:
-    image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-latest}
-    pull_policy: never   # local image: run "docker compose build" first
+    image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-live}
+    pull_policy: never   # local image: the live tag (scripts/promote.sh)
     profiles: ["tools"]
     entrypoint: ["/usr/local/bin/extract.sh"]
     user: "${HOST_UID:-0}:${HOST_GID:-0}"

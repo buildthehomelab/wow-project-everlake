@@ -177,6 +177,16 @@ configure_playerbots() {
 # finds that image and runs it too. Say so loudly at every start. Images from before image-build.env: the bot check only.
 check_image_build() {
     local tag="${IMAGE_TAG:-}" info="$ROOT/image-build.env" core="" wd="" bots="" want_core want_wd problems=()
+    # `live` (scripts/promote.sh moves it to the image the PTR ran) names no build: say what this one was built from
+    if [ "$tag" = live ]; then
+        if [ -f "$info" ]; then
+            echo "[entrypoint] image live: core $(sed -n 's/^TC_COMMIT=//p' "$info"), world data" \
+                "$(sed -n 's/^WORLD_DATA_COMMIT=//p' "$info" | sed 's/^$/none/'), bots $(sed -n 's/^PLAYERBOTS=//p' "$info")"
+        fi
+        [ -f "$ETC/worldserver.conf.d/playerbot.conf.dist" ] \
+            || echo "[entrypoint] ERROR: image live has no bots: promote a PTR image (scripts/promote.sh, README, PTR)"
+        return 0
+    fi
     [[ "$tag" == ptr-* ]] || return 0
     [ -f "$ETC/worldserver.conf.d/playerbot.conf.dist" ] || problems+=("it has no bots (built without PLAYERBOTS=1)")
     if [ -f "$info" ]; then
