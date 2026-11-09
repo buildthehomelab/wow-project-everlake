@@ -50,6 +50,11 @@ changelog compares the two.
 Later runs: *Run again* in the Forge. A new fork commit: change the pin in `docker-compose.tracker.yml` (or
 `TRACKER_COMMIT` in `.env`) and restart the app.
 
+Since fork `a77090dc`, *New in Forever* means not in the Classic Era client (Season of Discovery rows no longer count),
+the work list shows each fix once, and the analysis asks Wowhead for the names of new quests the server lacks
+(`FT_WOWHEAD`, on by default; quests Wowhead does not know are hidden tracking quests). The first start of that image
+analyses again by itself; the quest lookup makes that run longer the first time, then it is cached.
+
 ## Not used here
 
 - ForeverScribe (records vendors, loot and quest givers while playing on the official realms): the container has

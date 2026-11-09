@@ -42,7 +42,7 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 | Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `48180822` (fork `everlake`: advocaite's `forever` 2ae1313e + forever-bots + the reviewed advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-C, Karrz v0.1.33 world data and scripts), bots on. The live app and the PTR app build the same commit, so either one makes the same image |
 | Client | WoW Forever **1.60.1.70862**; 1.60.1.70790 clients are also let in (`Realm.AlsoAcceptBuilds`) |
 | World DB | `forever-tdb-2026-10-14` release of the same repository |
-| ForeverTracker | [buildthehomelab/wow-forever-tracker](https://github.com/buildthehomelab/wow-forever-tracker) @ `9fcbdd22` (`docker-compose.tracker.yml`) |
+| ForeverTracker | [buildthehomelab/wow-forever-tracker](https://github.com/buildthehomelab/wow-forever-tracker) @ `a77090dc` (`docker-compose.tracker.yml`) |
 
 The server, the client and the extracted data must all be the same build. Battle.net updates the client on its own,
 so freeze it before testing, and check the CDN build before extracting:
