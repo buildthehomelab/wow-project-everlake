@@ -139,21 +139,33 @@ configure_worldserver() {
     configure_playerbots
 }
 
-# Bots (WoW Forever Bots, src/modules/PlayerbotV2): worldserver.conf.d/playerbot.conf from its .dist on every start, then
-# overrides/playerbot.conf. The build's own active defaults (zz-forever-bots.conf: world bots, auction house bot, raid
-# bots; zz-forever-lfg.conf: dungeon finder fill) stay as installed; overrides/playerbot.conf is read last and wins.
+# Bots (WoW Forever Bots, src/modules/PlayerbotV2): the build installs playerbot.conf.dist and its active defaults
+# (zz-forever-bots.conf: world bots, auction house bot, raid bots, bot logging; zz-forever-lfg.conf: dungeon finder
+# fill) into etc/worldserver.conf.d. worldserver reads a config folder's files in the order the filesystem lists them,
+# not by name, so .dist (world bots off) could be read after zz-forever-bots.conf (on) and win. Merge them into one
+# file instead, in a fixed order: the .dist, the zz-* files by name, then overrides/playerbot.conf; the last value of
+# a key wins (one file, since a key twice in one file is an error). worldserver reads that folder (BOT_CONF_DIR).
+BOT_CONF_DIR="$ETC/worldserver.conf.d.everlake"
 configure_playerbots() {
-    local dir="$ETC/worldserver.conf.d"
+    local dir="$ETC/worldserver.conf.d" files=()
+    rm -rf "$BOT_CONF_DIR"
     [ -f "$dir/playerbot.conf.dist" ] || return 0
-    cp "$dir/playerbot.conf.dist" "$dir/playerbot.conf"
-    apply_overrides "$dir/playerbot.conf" playerbot
-    # worldserver reads worldserver.conf.d in name order, so the zz-* defaults would win over playerbot.conf:
-    # put the overrides in a file read after them too
-    if [ -f "$OVERRIDES/playerbot.conf" ]; then
-        { echo "[worldserver]"; grep -E '^[[:space:]]*[A-Za-z][A-Za-z0-9_.]*[[:space:]]*=' "$OVERRIDES/playerbot.conf"; } > "$dir/zz-9-overrides.conf"
-    else
-        rm -f "$dir/zz-9-overrides.conf"
-    fi
+    files+=("$dir/playerbot.conf.dist")
+    while IFS= read -r f; do files+=("$f"); done < <(find "$dir" -maxdepth 1 -name 'zz-*.conf' | sort)
+    [ -f "$OVERRIDES/playerbot.conf" ] && files+=("$OVERRIDES/playerbot.conf")
+    mkdir -p "$BOT_CONF_DIR"
+    awk '
+        { sub(/\r$/, "") }
+        /^[[:space:]]*[A-Za-z][A-Za-z0-9_.]*[[:space:]]*=/ {
+            i = index($0, "="); k = substr($0, 1, i - 1); v = substr($0, i + 1)
+            gsub(/^[ \t]+|[ \t]+$/, "", k); gsub(/^[ \t]+|[ \t]+$/, "", v)
+            if (!(k in val)) order[++n] = k
+            val[k] = v
+        }
+        END { print "[worldserver]"; for (j = 1; j <= n; j++) print order[j] " = " val[order[j]] }
+    ' "${files[@]}" > "$BOT_CONF_DIR/playerbot.conf"
+    echo "[entrypoint] bot settings: $(($(wc -l < "$BOT_CONF_DIR/playerbot.conf") - 1)) keys from ${files[*]##*/}"
+    grep -E '^Playerbot\.World\.(Enable|MaxBots) ' "$BOT_CONF_DIR/playerbot.conf" | sed 's/^/[entrypoint]   /' || true
 }
 
 # The bots' shared database (PLAYERBOT_DB, default `playerbot`; the worldserver's Playerbot.SharedDatabase must name the
@@ -307,7 +319,11 @@ case "${1:-worldserver}" in
         check_data
         wait_for_mysql
         prepare_playerbot_db
-        exec "$ROOT/bin/worldserver" -c "$ETC/worldserver.conf" "$@"
+        # worldserver looks for its config folder in the working directory (bin/worldserver.conf.d), not beside
+        # worldserver.conf, so without this the bots' settings were never read (World.Enable=0 at start)
+        conf_d=()
+        [ -d "$BOT_CONF_DIR" ] && conf_d=(--config-dir "$BOT_CONF_DIR")
+        exec "$ROOT/bin/worldserver" -c "$ETC/worldserver.conf" "${conf_d[@]}" "$@"
         ;;
     bnetserver)
         shift || true
