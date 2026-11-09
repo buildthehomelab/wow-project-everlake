@@ -2,7 +2,7 @@
 # It joins the everlake app's network, where MySQL answers as "mysql", and reads this folder's .env (DB_PASSWORD).
 # Apps -> Discover Apps -> Custom App -> Install via YAML, name e.g. everlake-realm2:
 #   include:
-#     - /mnt/NVME/docker/everlake/docker-compose.realm2-app.yml
+#     - <this folder>/docker-compose.realm2-app.yml
 # Databases and the realm row first: scripts/realm2-setup.sh (dbs, then realm2 or classic). The network is the
 # everlake app's (project ix-everlake); another project name: EVERLAKE_NETWORK=<project>_everlake in .env.
 # After a new image, restart this app as well as the everlake one.

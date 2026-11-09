@@ -15,7 +15,7 @@
 #   - worldserver-ptr starts once both have finished
 # Apps -> Discover Apps -> Custom App -> Install via YAML, name everlake-ptr:
 #   include:
-#     - /mnt/NVME/docker/everlake/docker-compose.ptr.yml
+#     - <this folder>/docker-compose.ptr.yml
 # It reads this folder's .env (DB_PASSWORD, MYSQL_ROOT_PASSWORD, DB_USER, DATA_DIR). Network: the everlake app's
 # (project ix-everlake); another project name: EVERLAKE_NETWORK=<project>_everlake in .env.
 #

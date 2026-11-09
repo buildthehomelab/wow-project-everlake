@@ -131,13 +131,13 @@ docker compose -f docker-compose.yml -f docker-compose.realm2.yml up -d worldser
 docker compose -f docker-compose.yml -f docker-compose.realm2.yml logs worldserver2 | grep -i -E "hotfix|error"
 ```
 
-On Patronus (TrueNAS app `everlake`, project `ix-everlake`) the setup steps need the project name,
+On a TrueNAS host (app `everlake`, so project `ix-everlake`) the setup steps need the project name,
 `sudo env COMPOSE_PROJECT_NAME=ix-everlake scripts/realm2-setup.sh ...`, and realm 2 runs as a **second custom app** so
 the running one is never edited: Apps → Discover Apps → Custom App → Install via YAML, name `everlake-realm2`, with
 
 ```yaml
 include:
-  - /mnt/NVME/docker/everlake/docker-compose.realm2-app.yml
+  - <Everlake folder>/docker-compose.realm2-app.yml
 ```
 
 Its log: `sudo docker logs ix-everlake-realm2-worldserver2-1 2>&1 | grep -i -E "hotfix|error"`. Stopping or deleting

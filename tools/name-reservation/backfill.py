@@ -26,8 +26,8 @@ Bots are skipped: characters of Battle.net accounts named *@PLAYERBOT-V2.LOCAL o
 playerbot_v2_account table. Bots never reserve names.
 
 Reaching MySQL: by default `docker compose exec -T mysql` from the repo root (like scripts/realm2-setup.sh), as
-MySQL's root user, so it needs Docker access (sudo on Patronus). --compose "-p NAME -f FILE" selects another compose
-project: on Patronus the TrueNAS app is project ix-everlake (sudo python3 tools/name-reservation/backfill.py
+MySQL's root user, so it needs Docker access (often sudo). --compose "-p NAME -f FILE" selects another compose
+project: a TrueNAS app named everlake is project ix-everlake (sudo python3 tools/name-reservation/backfill.py
 --compose "-p ix-everlake"); the scratch test stack is its own. A failed connection stops the tool with mysql's error.
 """
 import argparse
