@@ -29,8 +29,8 @@ services:
   tracker:
     build:
       # the fork at a pinned commit (bump on purpose, like the core)
-      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-c5dfb0440110ff9f5f3e1499e14b2ebbb3e6f7ac}
-    image: forever-tracker:${TRACKER_COMMIT:-c5dfb0440110ff9f5f3e1499e14b2ebbb3e6f7ac}
+      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-9fcbdd2241e3905b64be6bf2974447548c59b620}
+    image: forever-tracker:${TRACKER_COMMIT:-9fcbdd2241e3905b64be6bf2974447548c59b620}
     networks: [everlake]
     restart: unless-stopped
     depends_on:
@@ -50,6 +50,7 @@ services:
       FT_ADMIN_USER: ${TRACKER_ADMIN_USER:-admin}
       FT_ADMIN_PASSWORD: ${TRACKER_ADMIN_PASSWORD:-}
       FT_SITE_NAME: ${TRACKER_SITE_NAME:-Everlake Tracker}
+      FT_LANGUAGES: en   # English only: no French names (the upstream tool is French first) and no language switch
       FT_PUBLIC: ${TRACKER_PUBLIC:-0}
       FT_LOCATE: ${TRACKER_LOCATE:-1}
     ports:
