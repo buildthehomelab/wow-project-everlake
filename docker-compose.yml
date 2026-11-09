@@ -79,6 +79,13 @@ services:
       IMAGE_TAG: ${EVERLAKE_IMAGE_TAG:-latest}   # the entrypoint checks a PTR tag against what the image was built from
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PACKET_LOG: ${PACKET_LOG:-0}   # 1 = packet log (diagnostics, holds chat)
+      # Bots (images built with them; an image without the bots ignores these). The module's defaults are sized for a
+      # home PC: 250 bots and a 6,000 MB memory cap, which stopped live at ~50 bots (worldserver ~4.5 GB + ~31 MB a bot).
+      # Live: 500 bots and room for them. GlobalFill 1 also logs in bots away from players to reach the total; 0 keeps
+      # them in the bubble around each player (BotsPerPlayer, 150 by default). README, Bots.
+      TC_PLAYERBOT_WORLD_MAX_BOTS: ${BOTS_MAX:-500}
+      TC_PLAYERBOT_WORLD_RSS_BUDGET_MB: ${BOTS_RSS_BUDGET_MB:-32000}
+      TC_PLAYERBOT_WORLD_GLOBAL_FILL: ${BOTS_GLOBAL_FILL:-0}
     # interactive console: docker compose attach worldserver  (leave with Ctrl+P, Ctrl+Q)
     stdin_open: true
     tty: true
