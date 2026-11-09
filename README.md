@@ -84,9 +84,9 @@ auction house or dungeon finder bots.
 
 The bots need three things the server didn't before:
 
-1. **Their database** (`playerbot`). A new MySQL volume gets it from `docker/mysql-init`; on an existing one, once:
-   `docker compose exec mysql bash /docker-entrypoint-initdb.d/02-playerbot.sh`. worldserver fills it on its next start.
-2. **Navigation meshes** (`data/mmaps`), from the maps and vmaps already extracted:
+1. **Their database** (`playerbot`): the `bots-init` service creates it before worldserver starts
+   (`docker/mysql-init/02-playerbot.sh`), and worldserver fills it on its first start with the bots.
+2. **Navigation meshes** (`data/mmaps`): the PTR app builds them when there are none (`ptr-mmaps`), or
    `MMAPS_ONLY=1 docker compose run --rm extractor` (long: tens of minutes on many cores).
 3. **`MMAP_PATHFINDING=1`** in `.env`, so worldserver loads them. Without 2 and 3 the bots stand still, and
    worldserver says so at start.
@@ -99,11 +99,15 @@ lines go to `logs/Playerbot.log`.
 The PTR (realm 73, "Everlake PTR", port 8097) is where a new build runs before a live realm: its own image, its own
 `world_ptr`, `hotfixes_ptr`, `characters_ptr` and `playerbot_ptr` databases, few bots, GM accounts only. It is a
 TrueNAS app of its own from this folder (`docker-compose.ptr.yml`), and does everything itself when it starts: builds
-its image (bots on) if it's missing, sets up its databases and realm row (`scripts/ptr-setup.sh init`), builds the
-mmaps if there are none, then starts its worldserver. Nothing runs on the host but `git pull`.
+its image (bots on, the live realm's `WORLD_DATA_COMMIT`) if it's missing, sets up its databases and realm row
+(`scripts/ptr-setup.sh init`), builds the mmaps if there are none, then starts its worldserver. Nothing runs on the host
+but `git pull`.
 
 1. `git pull`, then start (or restart) the `everlake-ptr` app, and try it.
-2. Good: `EVERLAKE_IMAGE_TAG=ptr-<core commit>` in `.env` (and the Bots steps above), then restart the live apps.
+2. Good: in `.env`, `EVERLAKE_IMAGE_TAG=` the PTR's image tag (`ptr-<core commit>-<world data commit>`, the
+   `worldserver-ptr` image in the TrueNAS app) and `MMAP_PATHFINDING=1`, then restart the `everlake` app. No rebuild:
+   realm 1 and the login server run the image the PTR ran. Realm 2 keeps its own (`REALM2_IMAGE_TAG`, default `latest`).
+3. Back: remove `EVERLAKE_IMAGE_TAG` (or set it to `latest`) and restart the `everlake` app.
 
 ## Play from a Mac
 
