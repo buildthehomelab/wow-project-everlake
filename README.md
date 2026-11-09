@@ -38,7 +38,7 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 
 | What | Value |
 |---|---|
-| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `2ae1313e` (advocaite's `forever`, 2026-11-08), bots off. The PTR builds `3d775757` (fork `everlake` with the bots, PR #4) |
+| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `dab8f8aa` (fork `everlake`: advocaite's `forever` 2ae1313e + forever-bots + PR #4), bots on. The live app and the PTR app build the same commit, so either one makes the same image |
 | Client | WoW Forever **1.60.1.70862**; 1.60.1.70790 clients are also let in (`Realm.AlsoAcceptBuilds`) |
 | World DB | `forever-tdb-2026-10-14` release of the same repository |
 
@@ -76,7 +76,7 @@ bnetaccount create mail@example.com Password
 
 ### Bots
 
-`PLAYERBOTS=1` (with a core commit that has the module, `src/modules/PlayerbotV2`: the fork's `everlake` branch) builds
+`PLAYERBOTS=1` (the default; with a core commit that has the module, `src/modules/PlayerbotV2`: the fork's `everlake` branch) builds
 the WoW Forever Bots into the image, switched on with the module's own defaults: up to 250 world bots (around players, in towns and at start zones), the auction house bot,
 raid bots and dungeon finder fill. Change any setting in `overrides/playerbot.conf` (`Key = Value` lines, read after
 the defaults); the keys are in the module's `playerbot.conf.dist` and `zz-forever-bots.conf`. Realm 2 runs no world,
@@ -108,6 +108,12 @@ but `git pull`.
    `worldserver-ptr` image in the TrueNAS app) and `MMAP_PATHFINDING=1`, then restart the `everlake` app. No rebuild:
    realm 1 and the login server run the image the PTR ran. Realm 2 keeps its own (`REALM2_IMAGE_TAG`, default `latest`).
 3. Back: remove `EVERLAKE_IMAGE_TAG` (or set it to `latest`) and restart the `everlake` app.
+
+Start the PTR app first, so it builds the tag. Both apps build the same core with the bots, but only the PTR has run it.
+Every worldserver started as a PTR tag checks the image against the tag (`image-build.env`, written at build) and prints
+`[entrypoint] ERROR: image ... is not the PTR build its tag names` when they differ, e.g. an image an older checkout of
+the `everlake` app built without the bots. Then remove that tag (`docker image rm everlake-trinitycore:<tag>`), start the
+`everlake-ptr` app so it builds it again, and restart the `everlake` app.
 
 ## Play from a Mac
 

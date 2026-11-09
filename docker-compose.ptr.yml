@@ -75,6 +75,7 @@ services:
       DB_USER: ${DB_USER:-trinity}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       MMAP_PATHFINDING: "1"   # the bots walk on the navigation meshes
+      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-dab8f8aa45b325d085bef5585f27c5709e216456}-${WORLD_DATA_COMMIT:-none}
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PLAYERBOT_DB: playerbot_ptr   # the entrypoint loads the bots' schema into it on the first start
       TC_REALM_ID: "73"

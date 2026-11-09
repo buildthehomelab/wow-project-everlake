@@ -58,8 +58,10 @@ services:
     build:
       context: .
       args:
-        TC_COMMIT: ${TC_COMMIT:-2ae1313e9f89ba34103fee1400dc3d4222efd8c4}
-        PLAYERBOTS: ${PLAYERBOTS:-0}
+        # The same core and bots as the PTR (docker-compose.ptr.yml): when EVERLAKE_IMAGE_TAG names a PTR image that is
+        # not built yet, this app builds it, and it must come out the same as the PTR's, never a core without the bots.
+        TC_COMMIT: ${TC_COMMIT:-dab8f8aa45b325d085bef5585f27c5709e216456}
+        PLAYERBOTS: ${PLAYERBOTS:-1}
         BUILD_JOBS: ${BUILD_JOBS:-4}
         WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-}
     image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-latest}
@@ -74,6 +76,7 @@ services:
     environment:
       <<: *trinity-env
       MMAP_PATHFINDING: ${MMAP_PATHFINDING:-0}
+      IMAGE_TAG: ${EVERLAKE_IMAGE_TAG:-latest}   # the entrypoint checks a PTR tag against what the image was built from
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PACKET_LOG: ${PACKET_LOG:-0}   # 1 = packet log (diagnostics, holds chat)
     # interactive console: docker compose attach worldserver  (leave with Ctrl+P, Ctrl+Q)
