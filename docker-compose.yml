@@ -94,6 +94,13 @@ services:
       TC_PLAYERBOT_WORLD_START_ZONE_BOTS: ${BOTS_START_ZONE:-15}
       TC_PLAYERBOT_WORLD_BOTS_PER_PLAYER: ${BOTS_PER_PLAYER:-40}
       TC_PLAYERBOT_WORLD_AREA_CAP_OUTDOORS: ${BOTS_AREA_CAP:-8}
+      # Dynamic respawns (quest targets, herb and ore nodes; README): bots count as players in a zone. The core's default
+      # (rate 10, floor 10 s) made a zone with one player and ~40 bots respawn 4x as fast, mobs back in 10 s. Gentler:
+      # unchanged up to 20 in a zone, 2x at 40, never under 30 s for mobs and 60 s for herbs, ore and quest objects.
+      TC_RESPAWN_DYNAMIC_RATE_CREATURE: ${RESPAWN_RATE_CREATURE:-20}
+      TC_RESPAWN_DYNAMIC_MINIMUM_CREATURE: ${RESPAWN_MIN_CREATURE:-30}
+      TC_RESPAWN_DYNAMIC_RATE_GAME_OBJECT: ${RESPAWN_RATE_OBJECT:-20}
+      TC_RESPAWN_DYNAMIC_MINIMUM_GAME_OBJECT: ${RESPAWN_MIN_OBJECT:-60}
     # interactive console: docker compose attach worldserver  (leave with Ctrl+P, Ctrl+Q)
     stdin_open: true
     tty: true

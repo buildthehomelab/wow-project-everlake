@@ -132,7 +132,7 @@ configure_worldserver() {
     setkey "$f" Classic.Shop.Enabled 1
     setkey "$f" AccountInstancesPerHour 5
     # Dynamic respawns: quest targets and herb/ore nodes (spawn groups 2 and 4, sql/everlake/2026_11_09_00) come back
-    # faster when a zone holds more than 10 players, bots included: 20 in the zone = twice as fast, never under 10 s.
+    # faster when a zone holds more players, bots included (rates and floors: RESPAWN_* in .env, set by the compose files).
     setkey "$f" Respawn.DynamicMode 1
     setkey "$f" PlayerSave.Stats.MinLevel 1
     # At character select a client asks this worldserver for another ruleset's realm (the ruleset picker): it checks the

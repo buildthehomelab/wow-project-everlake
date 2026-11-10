@@ -99,9 +99,9 @@ lines go to `logs/Playerbot.log`.
 **Dynamic respawns.** With hundreds of bots, quest mobs and herb/ore nodes would be camped empty. Every realm runs
 `Respawn.DynamicMode = 1`, and `sql/everlake/2026_11_09_00_world_dynamic_respawn.sql` (in the image, applied by
 worldserver) puts 56,330 quest creatures, 9,250 quest objects and 20,789 herb and ore nodes into the core's dynamic
-spawn groups (2 and 4). Up to 10 players in a zone (bots count), nothing changes; at 20, they respawn twice as fast; at
-150, 15 times as fast, never under 10 s (`Respawn.DynamicRateCreature`, `Respawn.DynamicMinimumCreature` and the
-GameObject pair in `overrides/worldserver.conf`).
+spawn groups (2 and 4). Up to 20 players in a zone (bots count), nothing changes; at 40, they respawn twice as fast; at
+100, five times as fast, never under 30 s for mobs and 60 s for herbs, ore and quest objects (`RESPAWN_*` in `.env`,
+set as the core's `Respawn.Dynamic*` keys by the compose files; a restart applies them).
 
 ### PTR
 

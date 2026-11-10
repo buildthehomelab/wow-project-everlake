@@ -94,6 +94,11 @@ services:
       TC_PLAYERBOT_WORLD_ZONE_BOTS: "15"
       TC_PLAYERBOT_WORLD_START_ZONE_BOTS: "10"
       TC_PLAYERBOT_WORLD_POOL_MAX: "120"
+      # Dynamic respawns as live (docker-compose.yml)
+      TC_RESPAWN_DYNAMIC_RATE_CREATURE: ${RESPAWN_RATE_CREATURE:-20}
+      TC_RESPAWN_DYNAMIC_MINIMUM_CREATURE: ${RESPAWN_MIN_CREATURE:-30}
+      TC_RESPAWN_DYNAMIC_RATE_GAME_OBJECT: ${RESPAWN_RATE_OBJECT:-20}
+      TC_RESPAWN_DYNAMIC_MINIMUM_GAME_OBJECT: ${RESPAWN_MIN_OBJECT:-60}
       # The bots' log (logs/Playerbot.log) on the console too, so the log viewer shows why world bots don't appear
       # ("[world] ..." lines: no navmesh around the player, memory budget, roster, spawns)
       TC_LOGGER_PLAYERBOT_V_2: "3,Console Playerbot"   # the core names Logger.playerbot.v2 so ("v2" -> V_2)
