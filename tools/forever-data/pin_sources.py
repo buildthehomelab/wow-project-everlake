@@ -49,7 +49,7 @@ FOREVER_DB_TABLES = ("npc", "object", "quest", "quest_start", "quest_end", "ques
                      "spawn", "item", "item_source", "ui_map", "mechanic", "step")
 WAGO_TABLES = ("AreaTable", "AreaPOI", "GameObjects", "Light", "LightParams", "SoundAmbience", "TaxiNodes", "TaxiPath",
                "TaxiPathNode", "ZoneIntroMusicTable", "ZoneMusic", "Faction", "FactionTemplate", "SoundKit", "SoundKitEntry",
-               "UiMap", "UiMapAssignment", "Map")
+               "UiMap", "UiMapAssignment", "Map", "SpellEffect")
 
 SOURCES = {
     "eg-link": {
