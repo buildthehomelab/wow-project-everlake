@@ -237,6 +237,20 @@ def newest_windows(cur, tbl):
     return {npc: (d.get("_product"), rank[0], d) for npc, (rank, d) in out.items()}
 
 
+def taught_spell_aliases(cur):
+    """Map a trainer's teaching spell to the spell it grants in the pinned Forever client."""
+    aliases = collections.defaultdict(set)
+    for row in candidates.rows(cur, f"""SELECT
+            CAST(data->>'$.SpellID' AS UNSIGNED) AS teacher,
+            CAST(data->>'$.EffectTriggerSpell' AS SIGNED) AS learned
+        FROM {F}.src_wago
+        WHERE tbl = 'SpellEffect' AND data->>'$.Effect' = '36' AND data->>'$.DifficultyID' = '0'"""):
+        # Effect 36 is SPELL_EFFECT_LEARN_SPELL. Other triggered spells are not trainer aliases.
+        if row["teacher"] and row["learned"] and row["learned"] > 0:
+            aliases[row["teacher"]].add(row["learned"])
+    return aliases
+
+
 def set_world(world):
     """Compare another copy of the world: SCHEMA.PREFIX, e.g. acore_world_dryrun.elstep_ (names checked: they go into SQL)."""
     global WORLD
@@ -528,10 +542,12 @@ def main():
     trainer_of = collections.defaultdict(set)
     for r in candidates.rows(cur, f"SELECT CreatureID, TrainerID FROM {WORLD}creature_trainer WHERE CreatureID IN ({candidates.ids_sql(teach)})"):
         trainer_of[r["CreatureID"]].add(r["TrainerID"])
+    aliases = taught_spell_aliases(cur)
     taught = collections.defaultdict(set)
     for r in candidates.rows(cur, f"SELECT TrainerId, SpellId FROM {WORLD}trainer_spell "
                                   f"WHERE TrainerId IN ({candidates.ids_sql({t for v in trainer_of.values() for t in v})})"):
         taught[r["TrainerId"]].add(r["SpellId"])
+        taught[r["TrainerId"]].update(aliases.get(r["SpellId"], ()))
     flags = {r["entry"]: int(r["npcflag"]) for r in candidates.rows(cur, f"SELECT entry, npcflag FROM {WORLD}creature_template "
                                                                        f"WHERE entry IN ({candidates.ids_sql(flight)})")}
     for nid in sorted(with_tpl):
@@ -598,7 +614,7 @@ def main():
             found[zone]["quests_no_completion_text"].append(item)
 
     if candidates.has_dbf(cur):
-        dbf_fills(cur, found)
+        dbf_fills(cur, found, aliases)
 
     # ---- write
     labels = {r["source"]: r["label"] for r in candidates.rows(cur, f"SELECT source, label FROM {F}.src_pins")}
@@ -631,7 +647,7 @@ DBF_CATEGORIES = ("missing_npcs", "npcs_not_spawned", "vendors_no_stock", "vendo
                   "quests_no_ender")
 
 
-def dbf_fills(cur, found):
+def dbf_fills(cur, found, aliases):
     """Marks each gap that DatabaseForever (load_dbf.py, dbf_* tables) has rows for, as item["dbf"]: what it holds there.
     A mark is a lead to check, not evidence that live Forever has it: its added spawns are placed from map pins."""
     D = candidates.DBF
@@ -690,6 +706,7 @@ def dbf_fills(cur, found):
     for r in q(f"SELECT c.CreatureID, s.SpellId FROM {D}creature_trainer c JOIN {D}trainer_spell s ON s.TrainerId = c.TrainerID "
                f"WHERE c.CreatureID IN ({ns})"):
         teaches[r["CreatureID"]].add(r["SpellId"])
+        teaches[r["CreatureID"]].update(aliases.get(r["SpellId"], ()))
     has_trainer = {r["CreatureID"] for r in q(f"SELECT DISTINCT CreatureID FROM {D}creature_trainer WHERE CreatureID IN ({ns})")}
     obj_template = {r["entry"] for r in q(f"SELECT entry FROM {D}gameobject_template WHERE entry IN ({os_})")}
     obj_spawns = {r["id"]: r["n"] for r in q(f"SELECT id, COUNT(*) AS n FROM {D}gameobject WHERE id IN ({os_}) GROUP BY id")}
