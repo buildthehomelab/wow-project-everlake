@@ -124,6 +124,68 @@ def read_foreverdb_net(pin, folder):
                 yield tbl, None, None, None, {"value": value}
 
 
+def read_norgannondb(pin, folder):
+    """Read generated tables without running addon Lua, keeping each entity's upstream provenance."""
+    def read(path):
+        with open(os.path.join(folder, path), encoding="utf-8") as handle:
+            return handle.read()
+
+    source_names = {1: "questie", 2: "pfquest", 3: "questie+pfquest", 4: "collector"}
+    provenance = lua_data.assignments(read("data/provenance.lua"))["packedProvenance"]
+    info = lua_data.assignments(read("data/info.lua"))["info"]
+    yield "info", None, None, None, info
+    for kind in ("quests", "npcs", "objects", "items"):
+        origins = {}
+        exceptions = provenance["except"].get(kind, {})
+        if isinstance(exceptions, list):
+            exceptions = dict(enumerate(exceptions, 1))
+        for code, encoded in exceptions.items():
+            if len(encoded) % 4 or any(not 40 <= ord(char) < 104 for char in encoded):
+                raise ValueError(f"NorgannonDB: invalid packed provenance for {kind}")
+            for a, b, c, d in zip(encoded[::4], encoded[1::4], encoded[2::4], encoded[3::4]):
+                rid = ((ord(a) - 40) * 64 + ord(b) - 40) * 4096 + (ord(c) - 40) * 64 + ord(d) - 40
+                origins[rid] = source_names[int(code)]
+        default = source_names[provenance["default"][kind]]
+        count = 0
+        for line in read(f"data/{kind}.lua").split("\n"):
+            if line.startswith("R("):
+                # The generated call is R(id, name, optional long string of fields).
+                rid, name, *packed = lua_data.parse_value("{" + line[2:-1] + "}")
+                fields = lua_data.parse_value("{" + packed[0] + "}") if packed else {}
+                yield kind, rid, rid, None, dict(fields, name=name, _provenance=origins.get(rid, default))
+                count += 1
+        if count != info["stats"][kind]:
+            raise ValueError(f"NorgannonDB: expected {info['stats'][kind]} {kind}, read {count}")
+    recipe_text = re.sub(r"^do local function f\(\) ", "", read("data/recipes.lua"), flags=re.M)
+    recipes = lua_data.assignments(recipe_text)["recipes"]
+    if len(recipes) != info["stats"]["recipes"]:
+        raise ValueError("NorgannonDB: unexpected recipe count")
+    for key, row in recipes.items():
+        yield "recipes", key, as_id(key), as_id(row.get("item")), row
+
+
+def read_everloot(pin, folder):
+    for path in sorted(pin["files"]):
+        with open(os.path.join(folder, path), encoding="utf-8") as handle:
+            page = json.load(handle)
+        if path == "settled.json":
+            yield "settled", page["build"], None, None, page
+            continue
+        for group in ("rates", "measuredZeros"):
+            for row in page[group]:
+                yield group, None, as_id(row.get("itemId")), as_id(row.get("sourceNpcId") or row.get("sourceObjectId")), \
+                    dict(row, _dataAsOf=page["dataAsOf"], _attribution=page["attribution"])
+
+
+def read_zephras_talents(pin, folder):
+    with open(os.path.join(folder, "index.json"), encoding="utf-8") as handle:
+        index = json.load(handle)
+    with open(os.path.join(folder, "talents.json"), encoding="utf-8") as handle:
+        data = json.load(handle)
+    yield "export", index["latest"], None, None, data
+    yield "index", index["latest"], None, None, index
+
+
 def read_allthethings(pin, folder):
     for path in sorted(p for p in pin["files"] if p.endswith(".lua")):
         yield "file", path, None, None, {"path": path, "text": open(os.path.join(folder, path), encoding="utf-8").read()}
@@ -197,7 +259,8 @@ READERS = {
     "forever-db": read_forever_db, "eg-link": read_eg_link, "questiedb": read_questiedb, "foreverdb-net": read_foreverdb_net,
     "allthethings": read_allthethings, "wago": read_wago, "wowhead": read_wowhead, "item-history": read_item_history,
     "questietrace-own": read_questietrace_own, "wowhead-tooltips": read_wowhead_tooltips,
-    "live-hotfixes": read_live_hotfixes,
+    "live-hotfixes": read_live_hotfixes, "norgannondb": read_norgannondb,
+    "everloot": read_everloot, "zephras-talents": read_zephras_talents,
 }
 
 
