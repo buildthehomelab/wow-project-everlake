@@ -37,7 +37,7 @@ services:
       - ./scripts:/ptr/scripts:ro
 
   ptr-mmaps:
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-029c5dd9caee8521eb27dbee2bd1fe515b31331e}-${WORLD_DATA_COMMIT:-none}
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-none}
     pull_policy: never   # built by worldserver-ptr
     restart: "no"
     entrypoint: ["/usr/local/bin/extract.sh"]
@@ -54,12 +54,12 @@ services:
       context: .
       args:
         # core fork commit: everlake (forever + forever-bots + Playerbot.AccountPrefix, PR #4 merged)
-        TC_COMMIT: ${PTR_TC_COMMIT:-029c5dd9caee8521eb27dbee2bd1fe515b31331e}
+        TC_COMMIT: ${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}
         # the live realm's world import (.env), so the PTR image is exactly the next live image
         WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-}
         PLAYERBOTS: "1"
         BUILD_JOBS: ${PTR_BUILD_JOBS:-32}
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-029c5dd9caee8521eb27dbee2bd1fe515b31331e}-${WORLD_DATA_COMMIT:-none}
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-none}
     command: ["worldserver"]
     networks: [everlake]
     restart: unless-stopped
@@ -75,7 +75,7 @@ services:
       DB_USER: ${DB_USER:-trinity}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       MMAP_PATHFINDING: "1"   # the bots walk on the navigation meshes
-      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-029c5dd9caee8521eb27dbee2bd1fe515b31331e}-${WORLD_DATA_COMMIT:-none}
+      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-none}
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PLAYERBOT_DB: playerbot_ptr   # the entrypoint loads the bots' schema into it on the first start
       TC_REALM_ID: "73"
