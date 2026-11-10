@@ -242,6 +242,31 @@ def read_wowhead_tooltips(pin, folder):
         yield kind, str(rid), rid, None, row
 
 
+ICYVEINS_REF = {"addon_points": "ui_map_id", "addon_levels": "ui_map_id", "addon_drops": "item_id", "addon_sells": "item_id",
+                "addon_trains": "spell_id", "addon_quests": "quest_id", "objective_of_quests": "id"}
+
+
+def read_icyveins(pin, folder):
+    """Icy Veins' NPC data, newest fetch per NPC across all parts (missing ones left out). tbl "npc" = the creature row
+    (entity, children, history); every other tbl is one of its relations, one row each, id = the NPC: addon_points
+    (ref UiMap), addon_levels (ref UiMap), addon_drops / addon_sells (ref item), addon_trains (ref spell), addon_quests
+    (ref quest; starts / ends), objective_of_quests (ref quest), addon_loot, addon_services, addon_gossip."""
+    newest = {}
+    for path in sorted(pin["files"]):
+        with open(os.path.join(folder, path), encoding="utf-8") as handle:
+            for line in handle:
+                row = json.loads(line)
+                newest[row["id"]] = row
+    for npc, row in sorted(newest.items()):
+        if row["status"] != "ok":
+            continue
+        data = row["data"]
+        yield "npc", str(npc), npc, None, dict({k: v for k, v in data.items() if k != "relations"}, _fetched=row["fetched"])
+        for tbl, items in sorted((data.get("relations") or {}).items()):
+            for item in items or ():
+                yield tbl, None, npc, as_id(item.get(ICYVEINS_REF.get(tbl, ""))), dict(item, _fetched=row["fetched"])
+
+
 def read_live_hotfixes(pin, folder):
     """Live Forever's hotfix cache, every record of every push in file order: tbl = the table hash as 0xXXXXXXXX
     (DB2 name hash), k = "<record>@<push>", id = record id, ref = push id (-1: sent with every connection).
@@ -260,7 +285,7 @@ READERS = {
     "allthethings": read_allthethings, "wago": read_wago, "wowhead": read_wowhead, "item-history": read_item_history,
     "questietrace-own": read_questietrace_own, "wowhead-tooltips": read_wowhead_tooltips,
     "live-hotfixes": read_live_hotfixes, "norgannondb": read_norgannondb,
-    "everloot": read_everloot, "zephras-talents": read_zephras_talents,
+    "everloot": read_everloot, "zephras-talents": read_zephras_talents, "icyveins": read_icyveins,
 }
 
 
