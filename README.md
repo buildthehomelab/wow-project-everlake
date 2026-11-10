@@ -55,6 +55,12 @@ curl -s http://us.patch.battle.net:1119/wowf/versions | grep '^us|'
 about 80 other tables, compared file by file on Blizzard's CDN on 2026-11-08). Data extracted from 70790 still loads.
 To bring the tables up to 70862 without redoing maps, vmaps and mmaps: `DBC_ONLY=1 docker compose run --rm extractor`.
 
+Some maps exist only on the server: map 3200, the Ring of Law arena, is Blackrock Depths (230) under its own id, with
+its Map row in the hotfixes database, so the client files have nothing for it. The extractor copies map 230's maps,
+vmaps and mmaps to 3200 after every extract and mmaps run (`MAP_COPIES`, default `3200:230`), and the PTR does it on
+each start (`ptr-mmaps`). On data that is already extracted: `MAP_COPIES_ONLY=1 docker compose run --rm extractor`
+(seconds).
+
 ## Run it
 
 Needs Docker, about 8 GB of RAM to build (4 GB to run) and about 20 GB of disk.

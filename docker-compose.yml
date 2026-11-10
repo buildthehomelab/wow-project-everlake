@@ -161,6 +161,8 @@ services:
       MMAPS_ONLY: ${MMAPS_ONLY:-0}
       MMAP_THREADS: ${MMAP_THREADS:-}
       SKIP_MAPS: ${SKIP_MAPS:-0}
+      MAP_COPIES: ${MAP_COPIES-3200:230}
+      MAP_COPIES_ONLY: ${MAP_COPIES_ONLY:-0}
     volumes:
       - "${WOW_DIR:-./wow-not-set}:/wow:ro"
       - ${DATA_DIR:-./data}:/opt/trinitycore/data
