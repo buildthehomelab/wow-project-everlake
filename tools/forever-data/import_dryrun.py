@@ -585,6 +585,12 @@ def simulate_slice1(cur, conn, manifest, ours, mapping, checks):
     rel = next((f for f in manifest["fixes"] if f["kind"] == "relations" and f["delete"]), None)
     if rel and fixes:
         d = rel["delete"][0]
+        cur.execute(f"SELECT COUNT(*) FROM `{STEP}{d['table']}` WHERE id = %s AND quest = %s", (d["id"], d["quest"]))
+        if cur.fetchone()[0]:           # the fork changed the quest's givers since: the correction's guard left the row
+            checks.add(f"{d['table']} {d['id']} for quest {d['quest']}: the correction left it (the fork's rows changed since "
+                       f"it was written), nothing to put back", True)
+            rel = None
+    if rel and fixes:
         cur.execute(f"INSERT INTO `{STEP}{d['table']}` (id, quest, VerifiedBuild) VALUES (%s, %s, 70900)", (d["id"], d["quest"]))
         conn.commit()
         run_file(cur, conn, ours[fixes].decode("utf-8"), mapping)
