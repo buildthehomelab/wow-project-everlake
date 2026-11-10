@@ -4,7 +4,8 @@
     pin_sources.py                 pin the newest of everything
     pin_sources.py --verify        check every pinned file against its recorded sha256
     pin_sources.py --wowhead-only [--wowhead-max N]   only the Wowhead tooltips
-    pin_sources.py --only NAME,NAME                  only these GitHub sources (eg-link, forever-db, tc-forever ...)
+    pin_sources.py --only NAME,NAME                  only these sources (eg-link, forever-db, wago, tc-forever ...)
+    pin_sources.py --only wago --wago-build VERSION  pin DB2 tables for a specific Forever build
 
 The folder is $FOREVER_SOURCES, else data/forever-sources in this repo (gitignored). Each source lands in
 <folder>/<name>/<commit or build or date>/. manifest.json records where every file came from, its
@@ -49,7 +50,8 @@ FOREVER_DB_TABLES = ("npc", "object", "quest", "quest_start", "quest_end", "ques
                      "spawn", "item", "item_source", "ui_map", "mechanic", "step")
 WAGO_TABLES = ("AreaTable", "AreaPOI", "GameObjects", "Light", "LightParams", "SoundAmbience", "TaxiNodes", "TaxiPath",
                "TaxiPathNode", "ZoneIntroMusicTable", "ZoneMusic", "Faction", "FactionTemplate", "SoundKit", "SoundKitEntry",
-               "UiMap", "UiMapAssignment", "Map")
+               "UiMap", "UiMapAssignment", "Map", "SpellEffect", "SpellName", "SpellMisc", "SkillLine", "SkillLineAbility",
+               "Item", "ItemSparse", "ItemEffect", "ItemXItemEffect", "ItemExtendedCost", "PlayerCondition", "Mount")
 
 SOURCES = {
     "eg-link": {
@@ -233,9 +235,9 @@ def pin_repo(name, source, manifest):
     return True
 
 
-def pin_wago(manifest):
+def pin_wago(manifest, build=None):
     """One pin per build. A table added to WAGO_TABLES later is fetched into the same pin, the others left as they are."""
-    build = newest_forever_build()
+    build = build or newest_forever_build()
     current = manifest["current"].get("wago")
     folder = os.path.join(ROOT, "wago", build)
     if current and current["label"] == build:
@@ -576,11 +578,22 @@ def main():
         save(manifest)
         return
     only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None
+    wago_build = None
+    if "--wago-build" in sys.argv:
+        values = sys.argv[sys.argv.index("--wago-build") + 1:]
+        if not values or not re.fullmatch(r"1\.60\.\d+\.\d+", values[0]):
+            raise SystemExit("--wago-build requires a Forever client version such as 1.60.1.70862")
+        if only is not None and "wago" not in only:
+            raise SystemExit("--wago-build requires wago in --only")
+        wago_build = values[0]
     for name, source in SOURCES.items():
         if (only is None and not source.get("opt_in")) or (only is not None and name in only):
             pin_repo(name, source, manifest)
             save(manifest)
     if only is not None:
+        if "wago" in only:
+            pin_wago(manifest, wago_build)
+            save(manifest)
         for name, pinner in {"live-hotfixes": pin_live_hotfixes, "everloot": pin_everloot,
                              "zephras-talents": pin_zephras_talents}.items():
             if name in only:
@@ -589,7 +602,7 @@ def main():
         write_credits()
         save(manifest)
         return
-    pin_wago(manifest)
+    pin_wago(manifest, wago_build)
     pin_wowhead(manifest)
     pin_tc_release(manifest)
     save(manifest)
