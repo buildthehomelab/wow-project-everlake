@@ -26,6 +26,8 @@ export FOREVER_SOURCES=/path/to/forever-sources      # default: data/forever-sou
 export FOREVER_DB_USER=... FOREVER_DB_PASS=...         # a login with all rights on acore_forever
 python3 pin_sources.py                                 # --only NAME,NAME: some sources; --wowhead-only: the tooltips
 python3 load_sources.py                                # --only NAME,NAME: some sources
+python3 pin_sources.py --only wago --wago-build 1.60.1.70862
+python3 load_sources.py --only wago
 python3 load_tc.py
 python3 load_dbf.py                                    # after pin_sources.py --only databaseforever
 python3 gap_report.py
@@ -55,7 +57,7 @@ Every `src_` table has the same columns: `tbl` (the source's table or file), `n`
 | `src_questiedb` | [QuestieDB](https://github.com/Questie/QuestieDB) Forever files, with QuestieTrace corrections players recorded since launch | GPL-3.0 |
 | `src_foreverdb_net` | [ForeverDB.net](https://foreverdb.net) addon data: quests, vendors, trainers, dungeons, loot | GPL-3.0, credit "Data from ForeverDB.net" |
 | `src_allthethings` | [AllTheThings](https://github.com/ATTWoWAddon/AllTheThings) Forever zone and dungeon files (raw Lua text) | MIT |
-| `src_wago` | Forever client tables through [wago.tools](https://wago.tools) (areas, maps, taxis, factions, sounds) | Blizzard data |
+| `src_wago` | Forever client tables through [wago.tools](https://wago.tools) (areas, maps, taxis, factions, sounds, spells, items, skill lines, mounts and player conditions). Use `--only wago --wago-build` to reproduce a specific spell acquisition comparison. | Blizzard data |
 | `src_live_hotfixes` | Live Forever's hotfix cache (`DBCache.bin`, [public mirror](https://storage.googleapis.com/raidbots-static/wow/forever/enUS/DBCache.bin) that [wowsims/forever](https://github.com/wowsims/forever) builds from): every hotfixed record live sends (spells, talents, items, TACT keys). `tbl` = table hash, `id` = record, `ref` = push; record bytes raw (hex), decoding needs the build's layouts. Pinned per content (`<build>-<sha>`), `--only live-hotfixes` alone. Reader: [`tools/live-hotfixes`](../live-hotfixes/README.md) | Blizzard data |
 | `src_wowhead`, `src_wowhead_tooltips` | Wowhead's public Forever tooltips (quests, NPCs, objects, items, spells) | reference only |
 | `src_norgannondb` | [NorgannonDB v1.4.7](https://github.com/zmarotrix/NorgannonDB/releases/tag/v1.4.7): quests, NPCs, objects, items and recipes | GPL-3.0; pinned NOTICE identifies bundled sources |
