@@ -4,7 +4,7 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-09): Everlake builds from the fork at `48180822`, which adds TrinityCore master batches A-C (fork #23, #24, #26)
+Status (2026-11-10): Everlake builds from the fork at `029c5dd9`, which adds TrinityCore master batches A-D (fork #23, #24, #26, #28)
 and Karrz's v0.1.33 world data (#22) and Classic scripts (#25, with build fix #27) from the `karrz-releases` branch (fork `docs/karrz-releases.md`,
 `docs/upstream-prs/karrz-*.md`). All 99 advocaite pull requests open on 2026-11-08 are
 reviewed (fork PRs #5-#17, one log per pull request in the fork's `docs/upstream-prs/`); patches 0003 (upstream #291) and

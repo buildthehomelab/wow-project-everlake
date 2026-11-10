@@ -61,7 +61,7 @@ services:
         # Live runs everlake-trinitycore:live, the image scripts/promote.sh took from the PTR (README, PTR). This app builds
         # only when that tag is missing (a new install), with the same core and bots as the PTR (docker-compose.ptr.yml),
         # never a core without the bots. Don't run "docker compose build" here: it would overwrite live with an untested build.
-        TC_COMMIT: ${TC_COMMIT:-481808222d931c94c517dbf21f6813014d27df49}
+        TC_COMMIT: ${TC_COMMIT:-029c5dd9caee8521eb27dbee2bd1fe515b31331e}
         PLAYERBOTS: ${PLAYERBOTS:-1}
         BUILD_JOBS: ${BUILD_JOBS:-4}
         WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-}
