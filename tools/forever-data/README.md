@@ -58,9 +58,28 @@ Every `src_` table has the same columns: `tbl` (the source's table or file), `n`
 | `src_wago` | Forever client tables through [wago.tools](https://wago.tools) (areas, maps, taxis, factions, sounds) | Blizzard data |
 | `src_live_hotfixes` | Live Forever's hotfix cache (`DBCache.bin`, [public mirror](https://storage.googleapis.com/raidbots-static/wow/forever/enUS/DBCache.bin) that [wowsims/forever](https://github.com/wowsims/forever) builds from): every hotfixed record live sends (spells, talents, items, TACT keys). `tbl` = table hash, `id` = record, `ref` = push; record bytes raw (hex), decoding needs the build's layouts. Pinned per content (`<build>-<sha>`), `--only live-hotfixes` alone. Reader: [`tools/live-hotfixes`](../live-hotfixes/README.md) | Blizzard data |
 | `src_wowhead`, `src_wowhead_tooltips` | Wowhead's public Forever tooltips (quests, NPCs, objects, items, spells) | reference only |
+| `src_norgannondb` | [NorgannonDB v1.4.7](https://github.com/zmarotrix/NorgannonDB/releases/tag/v1.4.7): quests, NPCs, objects, items and recipes | GPL-3.0; pinned NOTICE identifies bundled sources |
+| `src_everloot` | [Everloot](https://everloot.app/docs/api): aggregate drop rates with sample counts and a separate build-specific settled-coverage index | CC BY-SA 4.0, with attribution on each drop row |
+| `src_zephras_talents` | [Zephras talent export](https://zephras.com/data/): latest versioned class and Legacy talent JSON and its index | CC BY 4.0 for Zephras's work; Blizzard content excluded |
+| Pinned files only | [Sakhwoow/WoWForever](https://github.com/Sakhwoow/WoWForever/tree/forever): custom world and hotfix SQL for diffing against the core | GPL-2.0 repository; upstream comparison |
 | `src_item_history` | Items and spells per build and hotfix ([ericbtaylorjr/forever-db](https://github.com/ericbtaylorjr/forever-db)) | none stated: reference only, never copied into Everlake |
 | `tc_*` | [TrinityCore `forever`](https://github.com/advocaite/TrinityCore/tree/forever) world release | GPL-2.0 |
 | `dbf_*` | [DatabaseForever](https://github.com/EmuForever/DatabaseForever): the world database of the [EmuForever](https://github.com/EmuForever/EmuForever) emulator, cut down to Forever content plus about 4,400 NPCs of its own (1,400 of them spawned, 15,700 spawns), loot, vendors and trainers. Its added spawns are placed from map pins (a 0.1% grid, all facing 0, 120 s respawn) | none stated: reference only, never copied into Everlake and never named in import files (`import_sql.REFERENCE_ONLY`) |
+
+To refresh just the new sources and stage their readable data in the lake:
+
+```bash
+python3 pin_sources.py --only norgannondb,everloot,zephras-talents,sakhwoow-forever
+python3 pin_sources.py --verify
+python3 load_sources.py --only norgannondb,everloot,zephras-talents
+```
+
+NorgannonDB is included in the usual pin run. Everloot, Zephras and the Sakhwoow SQL snapshot are opt-in.
+NorgannonDB's entity rows carry the upstream `_provenance` label. A Questie or pfQuest label shares that
+source's evidence. A collector label applies to the record and does not establish the origin of every field.
+Everloot's aggregate drop rows are distinct from its build-specific consensus list. The Zephras export contains
+talents and Legacy data. These three tables are available for comparison before any candidate weighting or import.
+Sakhwoow files stay in the snapshot directory for row-by-row diffing. The loader does not execute their SQL.
 
 `CREDITS.md`, written by `pin_sources.py` into the sources folder, has to travel with anything made from this data.
 Game content such as names and text belongs to Blizzard Entertainment.

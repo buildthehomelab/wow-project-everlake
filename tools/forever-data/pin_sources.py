@@ -97,6 +97,24 @@ SOURCES = {
         # (the fork's); locale catalogs (tens of MB each) left out
         "keep": lambda p: p == "COPYING" or (re.match(r"sql/(custom|updates)/(world|hotfixes)/(?:[^/]+/)*[^/]+\.sql$", p) and "locale" not in p),
     },
+    "norgannondb": {
+        "repo": "zmarotrix/NorgannonDB",
+        "branch": "v1.4.7",
+        "licence": "GPL-3.0; see NOTICE.md for bundled sources",
+        "credit": "Quest, NPC, item and recipe data from [NorgannonDB](https://github.com/zmarotrix/NorgannonDB), GPL-3.0. "
+                  "Its packed provenance and NOTICE accompany the pin.",
+        "files": ("LICENSE", "NOTICE.md", "SPEC.md", "data/info.lua", "data/provenance.lua", "data/quests.lua",
+                  "data/npcs.lua", "data/objects.lua", "data/items.lua", "data/recipes.lua"),
+    },
+    "sakhwoow-forever": {
+        "repo": "Sakhwoow/WoWForever",
+        "branch": "forever",
+        "opt_in": True,
+        "licence": "GPL-2.0 (repository); upstream comparison only",
+        "credit": "World and hotfix SQL from [Sakhwoow/WoWForever](https://github.com/Sakhwoow/WoWForever/tree/forever), "
+                  "kept for upstream comparison.",
+        "keep": lambda p: p == "COPYING" or bool(re.fullmatch(r"sql/custom/(world|hotfixes)/[^/]+\.sql", p)),
+    },
     "item-history": {
         "repo": "ericbtaylorjr/forever-db",
         "licence": "none stated (reference only until the author agrees)",
@@ -121,6 +139,8 @@ if os.environ.get("FOREVER_TC_REPO") or os.environ.get("FOREVER_TC_REF"):
                                  branch=os.environ.get("FOREVER_TC_REF") or SOURCES["tc-forever"]["branch"])
 TC_RELEASE = {"repo": "advocaite/TrinityCore", "tag_prefix": "forever-tdb-"}
 FOREVERDB_NET = "https://foreverdb.net/"
+EVERLOOT = "https://everloot.app"
+ZEPHRAS_TALENTS = "https://zephras.com/data/forever/enUS/talents"
 # Blizzard's live Forever hotfix cache, mirrored publicly and refreshed daily (wowsims/forever, MIT, builds from it)
 LIVE_HOTFIXES_URL = "https://storage.googleapis.com/raidbots-static/wow/forever/enUS/DBCache.bin"
 CREDITS_EXTRA = (
@@ -129,6 +149,8 @@ CREDITS_EXTRA = (
     "Live Forever hotfixes from Blizzard's hotfix cache, through the public mirror that "
     "[wowsims/forever](https://github.com/wowsims/forever) builds from.",
     "Vendor, trainer and quest data from [ForeverDB.net](https://foreverdb.net): Data from ForeverDB.net, GPL-3.0.",
+    "Data from [Everloot](https://everloot.app), CC BY-SA 4.0. Kept as source evidence, without applying it to the world.",
+    "Talent data: [Zephras](https://zephras.com), CC BY 4.0 for Zephras's contributions; stored without changes.",
     "Game content such as names and text belongs to Blizzard Entertainment.",
 )
 
@@ -292,6 +314,74 @@ def pin_live_hotfixes(manifest):
                                        "records": len(records), "url": LIVE_HOTFIXES_URL,
                                        "licence": "Blizzard data; public mirror (wowsims/forever, MIT, builds from it)"})
     print(f"live-hotfixes: pinned {label}, {len(records)} records")
+
+
+def pin_snapshot(name, version, payloads, manifest, licence):
+    """Keep each validated HTTP response with its URL and hash under a content-derived label."""
+    digest = hashlib.sha256()
+    for path, (url, data) in sorted(payloads.items()):
+        digest.update(f"{path} {url} {hashlib.sha256(data).hexdigest()}\n".encode())
+    label = f"{version}-{digest.hexdigest()[:16]}"
+    if manifest["current"].get(name, {}).get("label") == label:
+        print(f"{name}: unchanged at {label}")
+        return
+    folder = os.path.join(ROOT, name, label)
+    files = {path: dict(write(folder, path, data), url=url) for path, (url, data) in payloads.items()}
+    record(manifest, name, {"label": label, "folder": os.path.relpath(folder, ROOT),
+                            "pinned": now(), "files": files, "licence": licence})
+    print(f"{name}: pinned {label}, {len(files)} files")
+
+
+def pin_everloot(manifest):
+    """Store the complete aggregate rollup and the separate build-specific consensus index."""
+    build = newest_forever_build()
+    settled_url = f"{EVERLOOT}/api/coverage/settled?build={build}"
+    settled = fetch(settled_url)
+    coverage = json.loads(settled)
+    if coverage.get("schema") != "everloot.settled/1" or coverage.get("build") != build or not coverage.get("dataAsOf"):
+        raise ValueError("Everloot: invalid settled coverage response")
+    payloads = {"settled.json": (settled_url, settled)}
+    offset = 0
+    snapshot = None
+    while True:
+        url = f"{EVERLOOT}/api/rollups/drops?limit=500&offset={offset}"
+        data = fetch(url)
+        page = json.loads(data)
+        stamp, total = page.get("dataAsOf"), page.get("total")
+        rows = page.get("rates"), page.get("measuredZeros")
+        if page.get("unreachable") is not False or not stamp or type(total) is not int or total < 0 \
+                or page.get("offset") != offset or not all(isinstance(group, list) for group in rows) \
+                or page.get("attribution", {}).get("licence") != "CC BY-SA 4.0":
+            raise ValueError("Everloot: invalid or unavailable drop rollup")
+        if snapshot is not None and snapshot != (stamp, total):
+            raise ValueError("Everloot: drop rollup changed during paging, retry the pin")
+        snapshot = stamp, total
+        payloads[f"drops-{offset:09d}.json"] = (url, data)
+        count = sum(len(group) for group in rows)
+        offset += count
+        if offset == total and not page.get("next"):
+            break
+        if not count or offset >= total or not page.get("next"):
+            raise ValueError("Everloot: incomplete drop rollup")
+    pin_snapshot("everloot", build, payloads, manifest, "CC BY-SA 4.0 (Everloot player data)")
+
+
+def pin_zephras_talents(manifest):
+    index_url = f"{ZEPHRAS_TALENTS}/index.json"
+    index_data = fetch(index_url)
+    index = json.loads(index_data)
+    build = index["latest"]
+    if index.get("format") != "zephras-talents-index/1" or not re.fullmatch(r"\d+\.\d+\.\d+\.\d+", build):
+        raise ValueError("Zephras: invalid talents index")
+    entry = next(row for row in index["files"] if row["build"] == build)
+    url = f"{ZEPHRAS_TALENTS}/{build}.json"
+    if entry["url"] != url or index.get("license", {}).get("name") != "CC BY 4.0":
+        raise ValueError("Zephras: unexpected export URL or licence")
+    data = fetch(url)
+    if len(data) != entry["bytes"] or json.loads(data).get("format") != "zephras-talents/1":
+        raise ValueError("Zephras: invalid talent export")
+    pin_snapshot("zephras-talents", build, {"index.json": (index_url, index_data), "talents.json": (url, data)},
+                 manifest, "CC BY 4.0 (Zephras contributions); Blizzard content excluded")
 
 
 def pin_foreverdb_net(manifest):
@@ -487,12 +577,15 @@ def main():
         return
     only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None
     for name, source in SOURCES.items():
-        if only is None or name in only:
+        if (only is None and not source.get("opt_in")) or (only is not None and name in only):
             pin_repo(name, source, manifest)
             save(manifest)
-    if only is not None:              # pin_sources.py --only NAME,NAME: just those GitHub sources (or live-hotfixes)
-        if "live-hotfixes" in only:
-            pin_live_hotfixes(manifest)
+    if only is not None:
+        for name, pinner in {"live-hotfixes": pin_live_hotfixes, "everloot": pin_everloot,
+                             "zephras-talents": pin_zephras_talents}.items():
+            if name in only:
+                pinner(manifest)
+                save(manifest)
         write_credits()
         save(manifest)
         return
