@@ -143,7 +143,7 @@ def not_others(table, quest_col, other_key, s_quest="s.`quest`"):
 
 
 # sources we compare with but never build published rows from (no licence): left out of import files and manifests
-REFERENCE_ONLY = {"databaseforever"}
+REFERENCE_ONLY = {"databaseforever", "icyveins"}
 
 
 def public_pins(pins):

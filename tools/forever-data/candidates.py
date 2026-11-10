@@ -290,6 +290,13 @@ def npcs(cur, ids):
 DBF = f"{F}.dbf_"
 
 
+def has_source(cur, source):
+    """Whether load_sources.py has loaded this source (its src_ table exists in acore_forever)."""
+    cur.execute("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = %s AND table_name = %s",
+                (F, "src_" + re.sub(r"[^a-z0-9]", "_", source.lower())))
+    return cur.fetchone()[0] > 0
+
+
 def has_dbf(cur):
     """Whether load_dbf.py has loaded DatabaseForever (dbf_* tables) into acore_forever."""
     cur.execute("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = %s AND table_name = 'dbf_creature_template'", (F,))
