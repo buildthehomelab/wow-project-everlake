@@ -4,7 +4,7 @@ Use the existing Roleplay test realm, ID 71 on port 8095. Its current login, rul
 
 Stage the combined server data in a separate directory on the host. Start from the matching core image's existing extracted data, then add the verified map 9000 terrain, collision models and navigation files. Set `CLASSIC_DATA_DIR` to that directory. The app mounts it read-only. The Mac test copy must have the corresponding combined client build with WDT FileDataID 40011612 and must use the existing hosted login.
 
-From the Everlake checkout holding the server's `.env`, provision the database copies with `COMPOSE_PROJECT_NAME=ix-everlake scripts/classic-setup.sh`. On TrueNAS, run the command with the host's usual Docker permissions. The script checks the existing realm row and aborts if either target schema exists. If it stops during import, inspect the partial target schemas before retrying.
+From the pulled Everlake checkout on TrueNAS, run `sudo ./scripts/classic-setup.sh`. It connects directly to the running `ix-everlake-mysql-1` container and uses its configured database user. Classic's world tables live in `world_classic` on that server. The script checks the existing realm row and aborts if either target schema exists. If it stops during import, inspect the partial target schemas before retrying.
 
 Apply the override to the existing Roleplay app. For a Compose deployment, use the existing app project name and combine the files in this order:
 
