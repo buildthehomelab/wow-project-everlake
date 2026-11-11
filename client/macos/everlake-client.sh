@@ -17,6 +17,8 @@
 #   ./everlake-client.sh classic1 <account email> [game folder]  (Classic hotfix test: guided, sends a report)
 #   ./everlake-client.sh classic1 <account email> baseline [game folder]  (the same runs on Everlake only: memory baseline)
 #   ./everlake-client.sh reports <address | server>  (where check, test1 and switch send reports and screenshots)
+#   ./everlake-client.sh era-maps [era checkout]  (download donor maps to the Era workspace)
+#   ./everlake-client.sh era-maps-status [era checkout]
 #   ./everlake-client.sh cdn <address[:port] | server>  (where gate2 gets the patched build; default: the server, 8087)
 #   ./everlake-client.sh china-mode on|off [game folder]  (the client's own China setting, overrideArchive)
 #
@@ -875,6 +877,17 @@ case "$cmd" in
         else
             say "report NOT sent (saved in $REPORT)"
         fi
+        ;;
+    era-maps|era-maps-status)
+        era_dir="${1:-${EVERLAKE_ERA_DIR:-$HERE/../../../everlake-era}}"
+        if [ ! -f "$era_dir/profiles/targets.json" ] && [ $# -eq 0 ] && [ -f "$PWD/profiles/targets.json" ]; then
+            era_dir="$PWD"
+        fi
+        [ -f "$era_dir/profiles/targets.json" ] || die "pass the everlake-era checkout path: $0 $cmd /path/to/everlake-era"
+        if [ "$cmd" = era-maps-status ]; then
+            exec python3 "$HERE/../../tools/era/maps/map_catalog.py" "$era_dir" --status
+        fi
+        exec python3 "$HERE/../../tools/era/maps/map_catalog.py" "$era_dir"
         ;;
     cdn)
         # where gate2 gets the patched build: "server" = the game server again
