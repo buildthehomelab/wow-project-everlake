@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# Run from the existing Everlake Compose project with its usual .env.
+# Provision Classic schemas in the shared TrueNAS MySQL container.
 set -euo pipefail
 sql_dir="$(cd "$(dirname "$0")/../sql/classic" && pwd)"
-db_user=${DB_USER:-trinity}
+mysql_container=ix-everlake-mysql-1
+if [[ $(docker inspect --format '{{.State.Running}}' "$mysql_container") != true ]]; then
+    echo "Expected running MySQL container $mysql_container" >&2
+    exit 1
+fi
+db_user=$(docker exec "$mysql_container" sh -c 'printf "%s" "${DB_USER:-trinity}"')
 [[ $db_user =~ ^[a-zA-Z0-9_]+$ ]] || { echo "Invalid DB_USER" >&2; exit 1; }
 
 mysql_root() {
-    docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot "$@"' sh "$@"
+    docker exec -i "$mysql_container" sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot "$@"' sh "$@"
 }
 
 dump() {
-    docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot --single-transaction --no-tablespaces "$@"' sh "$@"
+    docker exec -i "$mysql_container" sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot --single-transaction --no-tablespaces "$@"' sh "$@"
 }
 
 roleplay=$(mysql_root -N -e 'SELECT COUNT(*) FROM auth.realmlist WHERE id=71 AND port=8095 AND contentSetId=138')
