@@ -108,7 +108,7 @@ RUN mkdir -p /world-data \
             [ -e "$f" ] || continue; \
             [ -f "$f" ] || { echo "world data: $f is not a file"; exit 1; }; \
             # only our own names: they can never replace or clash with one of the fork's update files
-            case "$(basename "$f")" in [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9]_world_everlake_import_*.sql) ;; \
+            case "$(basename "$f")" in [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9]_world_everlake_import_*.sql|[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9][0-9]_world_everlake_*.sql) ;; \
                 *) echo "world data: unexpected file name $f"; exit 1 ;; esac; \
             cp "$f" /world-data/; \
         done \
