@@ -29,8 +29,8 @@ services:
   tracker:
     build:
       # the fork at a pinned commit (bump on purpose, like the core)
-      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-172ef4d570e68572a47c1a3932333ab8ebf62400}
-    image: forever-tracker:${TRACKER_COMMIT:-172ef4d570e68572a47c1a3932333ab8ebf62400}
+      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-415632725dddcfc4eea691576798e9e74da3b7ac}
+    image: forever-tracker:${TRACKER_COMMIT:-415632725dddcfc4eea691576798e9e74da3b7ac}
     networks: [everlake]
     restart: unless-stopped
     depends_on:
@@ -57,6 +57,10 @@ services:
       FT_FORGE_TRAINER_SKIP_IDS: ${TRACKER_TRAINER_SKIP_IDS:-400000-499999}
       # trainer spells come from imports (NorgannonDB) only: no guessing from the client's skill lines
       FT_FORGE_TRAINER_GUESS: ${TRACKER_TRAINER_GUESS:-0}
+      # AtlasLoot Classic Forever: CurseForge checked every N hours, a new version becomes an import card (0 = never);
+      # TRACKER_ATLASLOOT_GUESS=0 leaves out its drops that have no measured chance instead of an even share
+      FT_ATLASLOOT_EVERY_HOURS: ${TRACKER_ATLASLOOT_EVERY_HOURS:-6}
+      FT_ATLASLOOT_GUESS: ${TRACKER_ATLASLOOT_GUESS:-1}
     ports:
       - "${TRACKER_PORT:-8090}:80"
     volumes:
