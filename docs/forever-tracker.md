@@ -77,7 +77,7 @@ drops and vendors for items players cannot get, givers/enders for quests that ha
 players saw trainers teach. Apply on the PTR, test, export to world-data (credit NorgannonDB in its NOTICE). Trainer
 guessing is off (`TRACKER_TRAINER_GUESS=0`). The export also no longer adds loot rows twice when a file runs again.
 
-Since fork `b252b462`: Forge › Imports also imports **EG Link** (CC BY 4.0), **ForeverDB.net** (GPL-3.0, credit
+Since fork `1f787ac9`: Forge › Imports also imports **EG Link** (CC BY 4.0), **ForeverDB.net** (GPL-3.0, credit
 "Data from ForeverDB.net") and **Icy Veins** (no licence stated: our server only; runs in the background, about an hour
 the first time), each aimed at the analysis' gaps under the same rules as NorgannonDB (fork `docs/SOURCES.md`). Apply
 on the PTR, test, export to world-data with the source's credit in its NOTICE.
