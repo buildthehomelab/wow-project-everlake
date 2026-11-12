@@ -86,7 +86,9 @@ source's evidence. A collector label applies to the record and does not establis
 `acore_world_dryrun.elstep_`) and the Forever Tracker's work list (`--tracker`, its To add > Export CSV), and splits each
 drop or stock line the world lacks by who else shows it: EG Link or ForeverDB.net (a vendor its players saw on Forever)
 count as independent; QuestieDB, QuestieTrace and forever-db are NorgannonDB's own origin; Icy Veins is reference only.
-`--write` writes the independent, unlimited money-priced vendor lines no world-data file names yet.
+`--write` writes the independent, unlimited money-priced vendor lines no world-data file names yet. With `--icy-veins` (decided
+2026-11-12) Icy Veins counts as a second witness too, and drops of items the world has no source for are written at Icy
+Veins' chance (`--drop-name`).
 Everloot's aggregate drop rows are distinct from its build-specific consensus list. The Zephras export contains
 talents and Legacy data. These three tables are available for comparison before any candidate weighting or import.
 Sakhwoow files stay in the snapshot directory for row-by-row diffing. The loader does not execute their SQL.

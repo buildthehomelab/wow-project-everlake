@@ -129,7 +129,8 @@ generated SQL lives in its own repository, `wow-everlake-world-data`, under GPL-
 5. **A ForeverDB.net API key** (theirs, free, needs a Battle.net login) for vendor stock beyond what EG Link saw.
    NorgannonDB (2026-11-12) does not replace it: its stock is QuestieDB's and pfQuest's (Classic). Its lines go in only
    where ForeverDB.net shows them for a vendor its players saw on Forever, and not where EG Link's live window of that
-   vendor lacks them (`norgannondb_report.py --write`).
+   vendor lacks them (`norgannondb_report.py --write`). Since 2026-11-12 Icy Veins also counts as that second source for
+   NorgannonDB's lines (`--icy-veins`), including drops at its chances; it stays reference only for the slices.
 6. **Quest objective ids.** Most quests with no objectives (151 of 173 on 2026-11-08) lack Forever's objective ids:
    they wait for EG Link to record them, or for a decision to use an id block of our own. (Objective `Flags` and
    `Flags2`, which no public source records, were decided on 2026-11-08: 32 and 0, as 94% of sniffed Forever
