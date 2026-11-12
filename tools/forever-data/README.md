@@ -111,6 +111,10 @@ Quest text keeps retail text tokens (`$1oa` and the like): the Forever client sh
 - objects missing or never spawned, loot missing recorded drops, trainers missing spells, quests with no objectives,
   missing reward items, or no progress or completion text.
 
+Trainer comparisons count the spell on the active trainer list and any spell it explicitly teaches in the pinned
+Forever `SpellEffect` data. Older source pins without that table compare exact IDs. Run the source pin and loader
+again to add the table to an existing build.
+
 When `dbf_*` is loaded, every gap DatabaseForever has rows for says what it holds there (a template and spawns, items,
 spells, givers), with a count per kind under "What DatabaseForever has rows for". DatabaseForever never adds a gap: its
 additions are an emulator's guesses, not a sighting in the live game. In the vote it speaks only for NPCs the fork's
