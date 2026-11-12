@@ -82,6 +82,11 @@ Since fork `1f787ac9`: Forge › Imports also imports **EG Link** (CC BY 4.0), *
 the first time), each aimed at the analysis' gaps under the same rules as NorgannonDB (fork `docs/SOURCES.md`). Apply
 on the PTR, test, export to world-data with the source's credit in its NOTICE.
 
+Since fork `02d1357e`: NorgannonDB vendors and drops are kept only when EG Link, ForeverDB.net or Icy Veins
+saw the same creature or chest sell or drop the item on live Forever (alone it brought Classic test vendors: unreleased
+mounts, the Panda Collar, soul shards). Run *Import Icy Veins* first; its answers count. Forge › Checks no longer lists
+levels whose ranges meet (62 against Wowhead's 61-62).
+
 ## Not used here
 
 - ForeverScribe (records vendors, loot and quest givers while playing on the official realms): the container has
