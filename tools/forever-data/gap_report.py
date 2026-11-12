@@ -597,6 +597,12 @@ def main():
         if "complete" in text_kinds.get(qid, ()) and not completion.get(qid):
             found[zone]["quests_no_completion_text"].append(item)
 
+    if candidates.has_dbf(cur):
+        dbf_fills(cur, found)
+    has_iv = candidates.has_source(cur, "icyveins")
+    if has_iv:
+        icyveins_fills(cur, found)
+
     # ---- write
     labels = {r["source"]: r["label"] for r in candidates.rows(cur, f"SELECT source, label FROM {F}.src_pins")}
     by_name = {}
@@ -608,8 +614,12 @@ def main():
         for cat, items in cats.items():
             slot[cat].extend(items)
     totals = {cat: sum(len(z.get(cat, [])) for z in by_name.values()) for cat, _ in CATEGORIES}
+    dbf_totals = {cat: sum(1 for z in by_name.values() for i in z.get(cat, []) if i.get("dbf")) for cat in DBF_CATEGORIES}
+    iv_totals = {cat: sum(1 for z in by_name.values() for i in z.get(cat, []) if i.get("icyveins")) for cat in ICYVEINS_CATEGORIES}
     report = {"world": WORLD, "made": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "pins": labels,
               "custom_sql": custom, "skipped_test_quests": skipped_test, "skipped_test_npcs": skipped_test_npcs, "skipped_test_objects": skipped_test_objects, "totals": totals,
+              "dbf_totals": dbf_totals if candidates.has_dbf(cur) else None,
+              "icyveins_totals": iv_totals if has_iv else None,
               "zones": {z: {c: v for c, v in cats.items()} for z, cats in sorted(by_name.items())}}
     os.makedirs(args.out, exist_ok=True)
     with open(os.path.join(args.out, "everlake-gaps.json"), "w") as handle:
@@ -619,6 +629,178 @@ def main():
     print(f"wrote {os.path.join(args.out, 'everlake-gaps.md')} and .json")
     for cat, label in CATEGORIES:
         print(f"  {label}: {totals[cat]}")
+
+
+DBF_CATEGORIES = ("missing_npcs", "npcs_not_spawned", "vendors_no_stock", "vendor_items_missing", "npcs_no_loot", "loot_items_missing",
+                  "trainers_unlinked", "trainer_spells_missing", "objects_missing", "objects_not_spawned", "quests_no_giver",
+                  "quests_no_ender")
+
+
+def dbf_fills(cur, found):
+    """Marks each gap that DatabaseForever (load_dbf.py, dbf_* tables) has rows for, as item["dbf"]: what it holds there.
+    A mark is a lead to check, not evidence that live Forever has it: its added spawns are placed from map pins."""
+    D = candidates.DBF
+    items = [(cat, i) for cats in found.values() for cat in DBF_CATEGORIES for i in cats.get(cat, [])]
+    npcs = {i["npc"] for _, i in items if "npc" in i}
+    objects = {i["object"] for _, i in items if "object" in i}
+    quests = {i["quest"] for cat, i in items if "quest" in i}
+    ns, os_, qs = candidates.ids_sql(npcs), candidates.ids_sql(objects), candidates.ids_sql(quests)
+    q = lambda sql: candidates.rows(cur, sql)      # noqa: E731
+    template = {r["entry"]: r["lootid"] for r in q(f"SELECT entry, lootid FROM {D}creature_template WHERE entry IN ({ns})")}
+    spawns = {r["id"]: r["n"] for r in q(f"SELECT id, COUNT(*) AS n FROM {D}creature WHERE id IN ({ns}) GROUP BY id")}
+    sells, vrefs = collections.defaultdict(set), collections.defaultdict(set)
+    pending, seen = set(npcs), set()
+    while pending - seen:                     # a negative item lists another vendor's stock; follow the chain
+        batch = pending - seen
+        seen |= batch
+        for r in q(f"SELECT entry, item FROM {D}npc_vendor WHERE type = 1 AND entry IN ({candidates.ids_sql(batch)})"):
+            if r["item"] < 0:
+                vrefs[r["entry"]].add(-r["item"])
+                pending.add(-r["item"])
+            else:
+                sells[r["entry"]].add(r["item"])
+    for nid in npcs:
+        stack, done = list(vrefs.get(nid, ())), set()
+        while stack:
+            x = stack.pop()
+            if x not in done:
+                done.add(x)
+                sells[nid] |= sells.get(x, set()) if x != nid else set()
+                stack.extend(vrefs.get(x, ()))
+    drops, refs = collections.defaultdict(set), collections.defaultdict(set)    # loot id -> items / reference ids
+    for r in q(f"SELECT Entry, ItemType, Item FROM {D}creature_loot_template "
+               f"WHERE Entry IN ({candidates.ids_sql({lid for lid in template.values() if lid})})"):
+        if r["ItemType"] in (0, 1):      # 2 currency, 3 tracking quest: not item drops
+            (refs if r["ItemType"] == 1 else drops)[r["Entry"]].add(r["Item"])
+    pending = {x for v in refs.values() for x in v}
+    ref_items, ref_links, seen = collections.defaultdict(set), collections.defaultdict(set), set()
+    while pending - seen:
+        batch = pending - seen
+        seen |= batch
+        for r in q(f"SELECT Entry, ItemType, Item FROM {D}reference_loot_template WHERE Entry IN ({candidates.ids_sql(batch)})"):
+            if r["ItemType"] == 1:
+                ref_links[r["Entry"]].add(r["Item"])
+                pending.add(r["Item"])
+            elif r["ItemType"] == 0:
+                ref_items[r["Entry"]].add(r["Item"])
+    for lid, links in refs.items():
+        stack, done = list(links), set()
+        while stack:
+            x = stack.pop()
+            if x not in done:
+                done.add(x)
+                drops[lid] |= ref_items.get(x, set())
+                stack.extend(ref_links.get(x, ()))
+    teaches = collections.defaultdict(set)
+    for r in q(f"SELECT c.CreatureID, s.SpellId FROM {D}creature_trainer c JOIN {D}trainer_spell s ON s.TrainerId = c.TrainerID "
+               f"WHERE c.CreatureID IN ({ns})"):
+        teaches[r["CreatureID"]].add(r["SpellId"])
+    has_trainer = {r["CreatureID"] for r in q(f"SELECT DISTINCT CreatureID FROM {D}creature_trainer WHERE CreatureID IN ({ns})")}
+    obj_template = {r["entry"] for r in q(f"SELECT entry FROM {D}gameobject_template WHERE entry IN ({os_})")}
+    obj_spawns = {r["id"]: r["n"] for r in q(f"SELECT id, COUNT(*) AS n FROM {D}gameobject WHERE id IN ({os_}) GROUP BY id")}
+    givers = collections.defaultdict(set)
+    for table, kind, field in (("creature_queststarter", "npc", "quests_no_giver"), ("gameobject_queststarter", "object", "quests_no_giver"),
+                               ("creature_questender", "npc", "quests_no_ender"), ("gameobject_questender", "object", "quests_no_ender")):
+        for r in q(f"SELECT id, quest FROM {D}{table} WHERE quest IN ({qs})"):
+            givers[(field, r["quest"])].add(f"{kind} {r['id']}")
+
+    def covered(have, want, what="items"):
+        return f"{len(have & set(want))} of {len(want)} {what}" if have & set(want) else None
+
+    for cat, i in items:
+        nid, oid = i.get("npc"), i.get("object")
+        mark = None
+        if cat == "missing_npcs" and nid in template:
+            mark = f"template, {spawns.get(nid, 0)} spawns"
+        elif cat == "npcs_not_spawned" and spawns.get(nid):
+            mark = f"{spawns[nid]} spawns"
+        elif cat == "vendors_no_stock" and sells.get(nid):
+            mark = f"{len(sells[nid])} items"
+        elif cat == "vendor_items_missing":
+            mark = covered(sells.get(nid, set()), i["items"])
+        elif cat in ("npcs_no_loot", "loot_items_missing"):
+            mark = covered(drops.get(template.get(nid), set()), i["items"])
+        elif cat == "trainers_unlinked" and nid in has_trainer:
+            mark = f"trainer list, {len(teaches.get(nid, ()))} spells"
+        elif cat == "trainer_spells_missing":
+            mark = covered(teaches.get(nid, set()), i["items"], "spells")
+        elif cat == "objects_missing" and oid in obj_template:
+            mark = f"template, {obj_spawns.get(oid, 0)} spawns"
+        elif cat == "objects_not_spawned" and obj_spawns.get(oid):
+            mark = f"{obj_spawns[oid]} spawns"
+        elif cat in ("quests_no_giver", "quests_no_ender") and givers.get((cat, i["quest"])):
+            mark = ", ".join(sorted(givers[(cat, i["quest"])]))
+        if mark:
+            i["dbf"] = mark
+
+
+ICYVEINS_CATEGORIES = ("missing_npcs", "npcs_not_spawned", "vendors_no_stock", "vendor_items_missing", "npcs_no_loot",
+                       "loot_items_missing", "trainers_unlinked", "trainer_spells_missing", "quests_no_giver", "quests_no_ender")
+
+
+def icyveins_fills(cur, found):
+    """Marks each gap that Icy Veins' NPC data (src_icyveins, pin_sources.py --icyveins-only) has rows for, as
+    item["icyveins"]. Its rows are what players' addons recorded on live Forever: map points are where an NPC was seen,
+    talked to or looted (a wandering NPC leaves many), not spawn rows."""
+    items = [(cat, i) for cats in found.values() for cat in ICYVEINS_CATEGORIES for i in cats.get(cat, [])]
+    npcs = {i["npc"] for _, i in items if "npc" in i}
+    quests = {i["quest"] for _, i in items if "quest" in i}
+    listed, points, maps, players = set(), collections.Counter(), collections.defaultdict(set), collections.Counter()
+    sells, drops, teaches = collections.defaultdict(set), collections.defaultdict(set), collections.defaultdict(set)
+    trainer = set()
+    for r in candidates.rows(cur, f"SELECT tbl, id, ref, data FROM {F}.src_icyveins WHERE id IN ({candidates.ids_sql(npcs)}) "
+                                  "AND tbl IN ('npc', 'addon_points', 'addon_sells', 'addon_drops', 'addon_trains')"):
+        nid, tbl = r["id"], r["tbl"]
+        if tbl == "npc":
+            listed.add(nid)
+        elif tbl == "addon_points":
+            points[nid] += 1
+            maps[nid].add(r["ref"])
+            players[nid] = max(players[nid], j(r["data"]).get("players") or 0)
+        elif tbl == "addon_sells" and r["ref"]:
+            sells[nid].add(r["ref"])
+        elif tbl == "addon_drops" and r["ref"]:
+            drops[nid].add(r["ref"])
+        elif tbl == "addon_trains":
+            trainer.add(nid)
+            if r["ref"]:
+                teaches[nid].add(r["ref"])
+    givers = collections.defaultdict(set)
+    for r in candidates.rows(cur, f"SELECT id, ref, data FROM {F}.src_icyveins WHERE tbl = 'addon_quests' "
+                                  f"AND ref IN ({candidates.ids_sql(quests)})"):
+        d = j(r["data"])
+        for field, flag in (("quests_no_giver", "starts"), ("quests_no_ender", "ends")):
+            if d.get(flag):
+                givers[(field, r["ref"])].add(f"npc {r['id']}")
+
+    def covered(have, want, what="items"):
+        return f"{len(have & set(want))} of {len(want)} {what}" if have & set(want) else None
+
+    def seen(nid):
+        n = len(maps[nid])
+        return f"{points[nid]} points on {n} map{'s' * (n != 1)}, up to {players[nid]} players" if points[nid] else None
+
+    for cat, i in items:
+        nid = i.get("npc")
+        mark = None
+        if cat == "missing_npcs" and nid in listed:
+            mark = "listed" + (f", {seen(nid)}" if points[nid] else "")
+        elif cat == "npcs_not_spawned":
+            mark = seen(nid)
+        elif cat == "vendors_no_stock" and sells.get(nid):
+            mark = f"{len(sells[nid])} items"
+        elif cat == "vendor_items_missing":
+            mark = covered(sells.get(nid, set()), i["items"])
+        elif cat in ("npcs_no_loot", "loot_items_missing"):
+            mark = covered(drops.get(nid, set()), i["items"])
+        elif cat == "trainers_unlinked" and nid in trainer:
+            mark = f"trainer list, {len(teaches.get(nid, ()))} spells"
+        elif cat == "trainer_spells_missing":
+            mark = covered(teaches.get(nid, set()), i["items"], "spells")
+        elif cat in ("quests_no_giver", "quests_no_ender") and givers.get((cat, i["quest"])):
+            mark = ", ".join(sorted(givers[(cat, i["quest"])]))
+        if mark:
+            i["icyveins"] = mark
 
 
 def far_points(points, ours, yards):
@@ -645,7 +827,9 @@ def markdown(report):
            f"{cell(report['pins'].get('tc-release', '?'))}). Custom files pinned since then and not yet applied: "
            f"{len((report['custom_sql'] or {}).get('files', []))}; gaps whose rows they touch say so. "
            f"Live Forever = every other source: " + ", ".join(f"{k} {cell(str(v)[:12])}" for k, v in sorted(report["pins"].items())
-                                                          if k != "tc-release") + ".", "",
+                                                          if k not in ("tc-release", "databaseforever", "icyveins")) + "."
+           + (f" DatabaseForever ({cell(str(report['pins']['databaseforever'])[:12])}) is another emulator's database, not live "
+              "Forever: it only marks gaps it has rows for." if "databaseforever" in report["pins"] else ""), "",
            f"{report['skipped_test_quests']} test or unused quests and {report['skipped_test_npcs']} NPCs (names like <UNUSED>, [DNT], "
            "OLD in capitals) are left out. "
            "Seen live = EG Link at build 70790 or later, QuestieTrace, or ForeverDB's seen list.", "",
@@ -653,6 +837,19 @@ def markdown(report):
            "(EG Link records where players saw an NPC): check those before adding spawns.", "", "## Totals", ""]
     for cat, label in CATEGORIES:
         out.append(f"- {label}: {report['totals'][cat]}")
+    if report.get("dbf_totals"):
+        out += ["", "## What DatabaseForever has rows for", "",
+                "EmuForever's world database (dbf_* tables, load_dbf.py) holds rows for these gaps. Its added spawns are placed "
+                "from map pins (a grid, all facing 0) and the repository states no licence: leads to check, not rows to copy.", ""]
+        labels = dict(CATEGORIES)
+        out += [f"- {labels[c]}: {n} of {report['totals'][c]}" for c, n in report["dbf_totals"].items() if report["totals"].get(c)]
+    if report.get("icyveins_totals"):
+        out += ["", "## What Icy Veins has rows for", "",
+                f"Icy Veins' WoW Forever database (src_icyveins, {cell(str(report['pins'].get('icyveins', '?'))[:24])}) holds what "
+                "players' addons recorded on live Forever for these gaps. Map points are sightings (seen, talked to, looted), not "
+                "spawn rows, and it states no licence: leads to check, not rows to copy.", ""]
+        labels = dict(CATEGORIES)
+        out += [f"- {labels[c]}: {n} of {report['totals'][c]}" for c, n in report["icyveins_totals"].items() if report["totals"].get(c)]
     short = [("missing_quests_live", "Quests missing (live)"), ("missing_quests_data", "Quests missing (data only)"),
              ("renamed_quests", "Renamed"), ("quests_no_giver", "No giver"), ("quests_giver_differs", "Other givers"),
              ("quests_no_ender", "No ender"), ("quests_ender_differs", "Other enders"),
@@ -685,6 +882,10 @@ def markdown(report):
                 if i.get(key) not in (None, [], 0):
                     v = i[key]
                     extra.append(f"{key}: {len(v)} items" if key == "items" and isinstance(v, list) and len(v) > 6 else f"{key}: {v}")
+            if i.get("dbf"):
+                extra.append(f"DatabaseForever: {i['dbf']}")
+            if i.get("icyveins"):
+                extra.append(f"Icy Veins: {i['icyveins']}")
             if i.get("custom_sql"):
                 extra.append("custom SQL touches it")
             if i.get("close_call"):

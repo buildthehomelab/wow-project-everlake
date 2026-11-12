@@ -25,6 +25,8 @@ jobs:
         run: pip install --quiet ruff==0.14.4 && ruff check --output-format github .
       - name: python unit tests (tools/live-hotfixes)
         run: python -m unittest discover -s tools/live-hotfixes -v
+      - name: python unit tests (tools/era)
+        run: python -m unittest discover -s tools/era -v
       - name: lua (luacheck, see .luacheckrc)
         run: |
           sudo apt-get update -qq
@@ -34,6 +36,8 @@ jobs:
         run: |
           docker compose --env-file .env.example -f docker-compose.yml config -q
           docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.realm2.yml config -q
+          docker compose --env-file .env.example -f docker-compose.ptr.yml config -q
+          docker compose --env-file .env.example -f docker-compose.realm2-app.yml config -q
 
   mac-client:
     runs-on: macos-latest

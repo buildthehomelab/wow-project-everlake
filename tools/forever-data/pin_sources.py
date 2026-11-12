@@ -4,6 +4,7 @@
     pin_sources.py                 pin the newest of everything
     pin_sources.py --verify        check every pinned file against its recorded sha256
     pin_sources.py --wowhead-only [--wowhead-max N]   only the Wowhead tooltips
+    pin_sources.py --icyveins-only [--icyveins-max N] only Icy Veins' NPC data
     pin_sources.py --only NAME,NAME                  only these GitHub sources (eg-link, forever-db, tc-forever ...)
 
 The folder is $FOREVER_SOURCES, else data/forever-sources in this repo (gitignored). Each source lands in
@@ -97,12 +98,39 @@ SOURCES = {
         # (the fork's); locale catalogs (tens of MB each) left out
         "keep": lambda p: p == "COPYING" or (re.match(r"sql/(custom|updates)/(world|hotfixes)/(?:[^/]+/)*[^/]+\.sql$", p) and "locale" not in p),
     },
+    "norgannondb": {
+        "repo": "zmarotrix/NorgannonDB",
+        "branch": "v1.4.7",
+        "licence": "GPL-3.0; see NOTICE.md for bundled sources",
+        "credit": "Quest, NPC, item and recipe data from [NorgannonDB](https://github.com/zmarotrix/NorgannonDB), GPL-3.0. "
+                  "Its packed provenance and NOTICE accompany the pin.",
+        "files": ("LICENSE", "NOTICE.md", "SPEC.md", "data/info.lua", "data/provenance.lua", "data/quests.lua",
+                  "data/npcs.lua", "data/objects.lua", "data/items.lua", "data/recipes.lua"),
+    },
+    "sakhwoow-forever": {
+        "repo": "Sakhwoow/WoWForever",
+        "branch": "forever",
+        "opt_in": True,
+        "licence": "GPL-2.0 (repository); upstream comparison only",
+        "credit": "World and hotfix SQL from [Sakhwoow/WoWForever](https://github.com/Sakhwoow/WoWForever/tree/forever), "
+                  "kept for upstream comparison.",
+        "keep": lambda p: p == "COPYING" or bool(re.fullmatch(r"sql/custom/(world|hotfixes)/[^/]+\.sql", p)),
+    },
     "item-history": {
         "repo": "ericbtaylorjr/forever-db",
         "licence": "none stated (reference only until the author agrees)",
         "credit": "Item and spell history per build and hotfix from [forever-db](https://github.com/ericbtaylorjr/forever-db) "
                   "by ericbtaylorjr, used as a reference.",
         "keep": lambda p: p.startswith("data/") and (p.endswith(".jsonl") or p.endswith(".json")),
+    },
+    "databaseforever": {
+        "repo": "EmuForever/DatabaseForever",
+        "licence": "none stated (reference only until the author agrees)",
+        "credit": "World database of the [EmuForever](https://github.com/EmuForever/EmuForever) server emulator from "
+                  "[DatabaseForever](https://github.com/EmuForever/DatabaseForever), used as a reference.",
+        # its world tables, one mysqldump each (TrinityCore layout); locale, website (armory_), views and backups left out
+        "keep": lambda p: bool(re.match(r"World/[a-z0-9_]+\.sql$", p))
+                          and not re.search(r"(_locale|^armory_|^vw_|_bak|_backup_|^updates_include)", os.path.basename(p)[:-4]),
     },
 }
 # The fork world everything is compared against. FOREVER_TC_REPO / FOREVER_TC_REF switch it, e.g. to Everlake's own core
@@ -112,6 +140,8 @@ if os.environ.get("FOREVER_TC_REPO") or os.environ.get("FOREVER_TC_REF"):
                                  branch=os.environ.get("FOREVER_TC_REF") or SOURCES["tc-forever"]["branch"])
 TC_RELEASE = {"repo": "advocaite/TrinityCore", "tag_prefix": "forever-tdb-"}
 FOREVERDB_NET = "https://foreverdb.net/"
+EVERLOOT = "https://everloot.app"
+ZEPHRAS_TALENTS = "https://zephras.com/data/forever/enUS/talents"
 # Blizzard's live Forever hotfix cache, mirrored publicly and refreshed daily (wowsims/forever, MIT, builds from it)
 LIVE_HOTFIXES_URL = "https://storage.googleapis.com/raidbots-static/wow/forever/enUS/DBCache.bin"
 CREDITS_EXTRA = (
@@ -120,6 +150,10 @@ CREDITS_EXTRA = (
     "Live Forever hotfixes from Blizzard's hotfix cache, through the public mirror that "
     "[wowsims/forever](https://github.com/wowsims/forever) builds from.",
     "Vendor, trainer and quest data from [ForeverDB.net](https://foreverdb.net): Data from ForeverDB.net, GPL-3.0.",
+    "Data from [Everloot](https://everloot.app), CC BY-SA 4.0. Kept as source evidence, without applying it to the world.",
+    "Talent data: [Zephras](https://zephras.com), CC BY 4.0 for Zephras's contributions; stored without changes.",
+    "NPC map points, drops, vendor stock and trainer lists that players' addons recorded, from "
+    "[Icy Veins](https://db.icy-veins.com/wow-forever/)' WoW Forever database, as a reference.",
     "Game content such as names and text belongs to Blizzard Entertainment.",
 )
 
@@ -285,6 +319,74 @@ def pin_live_hotfixes(manifest):
     print(f"live-hotfixes: pinned {label}, {len(records)} records")
 
 
+def pin_snapshot(name, version, payloads, manifest, licence):
+    """Keep each validated HTTP response with its URL and hash under a content-derived label."""
+    digest = hashlib.sha256()
+    for path, (url, data) in sorted(payloads.items()):
+        digest.update(f"{path} {url} {hashlib.sha256(data).hexdigest()}\n".encode())
+    label = f"{version}-{digest.hexdigest()[:16]}"
+    if manifest["current"].get(name, {}).get("label") == label:
+        print(f"{name}: unchanged at {label}")
+        return
+    folder = os.path.join(ROOT, name, label)
+    files = {path: dict(write(folder, path, data), url=url) for path, (url, data) in payloads.items()}
+    record(manifest, name, {"label": label, "folder": os.path.relpath(folder, ROOT),
+                            "pinned": now(), "files": files, "licence": licence})
+    print(f"{name}: pinned {label}, {len(files)} files")
+
+
+def pin_everloot(manifest):
+    """Store the complete aggregate rollup and the separate build-specific consensus index."""
+    build = newest_forever_build()
+    settled_url = f"{EVERLOOT}/api/coverage/settled?build={build}"
+    settled = fetch(settled_url)
+    coverage = json.loads(settled)
+    if coverage.get("schema") != "everloot.settled/1" or coverage.get("build") != build or not coverage.get("dataAsOf"):
+        raise ValueError("Everloot: invalid settled coverage response")
+    payloads = {"settled.json": (settled_url, settled)}
+    offset = 0
+    snapshot = None
+    while True:
+        url = f"{EVERLOOT}/api/rollups/drops?limit=500&offset={offset}"
+        data = fetch(url)
+        page = json.loads(data)
+        stamp, total = page.get("dataAsOf"), page.get("total")
+        rows = page.get("rates"), page.get("measuredZeros")
+        if page.get("unreachable") is not False or not stamp or type(total) is not int or total < 0 \
+                or page.get("offset") != offset or not all(isinstance(group, list) for group in rows) \
+                or page.get("attribution", {}).get("licence") != "CC BY-SA 4.0":
+            raise ValueError("Everloot: invalid or unavailable drop rollup")
+        if snapshot is not None and snapshot != (stamp, total):
+            raise ValueError("Everloot: drop rollup changed during paging, retry the pin")
+        snapshot = stamp, total
+        payloads[f"drops-{offset:09d}.json"] = (url, data)
+        count = sum(len(group) for group in rows)
+        offset += count
+        if offset == total and not page.get("next"):
+            break
+        if not count or offset >= total or not page.get("next"):
+            raise ValueError("Everloot: incomplete drop rollup")
+    pin_snapshot("everloot", build, payloads, manifest, "CC BY-SA 4.0 (Everloot player data)")
+
+
+def pin_zephras_talents(manifest):
+    index_url = f"{ZEPHRAS_TALENTS}/index.json"
+    index_data = fetch(index_url)
+    index = json.loads(index_data)
+    build = index["latest"]
+    if index.get("format") != "zephras-talents-index/1" or not re.fullmatch(r"\d+\.\d+\.\d+\.\d+", build):
+        raise ValueError("Zephras: invalid talents index")
+    entry = next(row for row in index["files"] if row["build"] == build)
+    url = f"{ZEPHRAS_TALENTS}/{build}.json"
+    if entry["url"] != url or index.get("license", {}).get("name") != "CC BY 4.0":
+        raise ValueError("Zephras: unexpected export URL or licence")
+    data = fetch(url)
+    if len(data) != entry["bytes"] or json.loads(data).get("format") != "zephras-talents/1":
+        raise ValueError("Zephras: invalid talent export")
+    pin_snapshot("zephras-talents", build, {"index.json": (index_url, index_data), "talents.json": (url, data)},
+                 manifest, "CC BY 4.0 (Zephras contributions); Blizzard content excluded")
+
+
 def pin_foreverdb_net(manifest):
     """ForeverDB.net's addon data files, by the version in its manifest; each file is checked against its sha256."""
     listing = json.loads(fetch(FOREVERDB_NET + "downloads/addon-manifest.json"))
@@ -368,13 +470,71 @@ def forever_ids(manifest):
 
 def pin_wowhead_tooltips(manifest, limit=WOWHEAD_MAX):
     """Wowhead's public tooltip service (nether.wowhead.com/forever/tooltip/<kind>/<id>) for every Forever id we know.
+    www.wowhead.com itself refuses scripts and is not touched. Wowhead's data is not openly licensed: reference for our
+    own server only."""
+    pin_incremental("wowhead-tooltips", "Wowhead, reference only (not openly licensed)", WOWHEAD_KINDS, forever_ids(manifest),
+                    lambda kind, i: f"https://nether.wowhead.com/forever/tooltip/{kind}/{i}", WOWHEAD_RATE, limit,
+                    WOWHEAD_REFRESH_DAYS, WOWHEAD_MISSING_DAYS, manifest, missing=lambda data: not data or "error" in data)
 
-    Each run fetches ids never fetched, then ids older than WOWHEAD_REFRESH_DAYS (missing ones after
-    WOWHEAD_MISSING_DAYS), at most `limit`, one at a time at WOWHEAD_RATE per second. Rows go to a new part,
-    wowhead-tooltips/parts/<time>/<kind>.jsonl; the loader keeps the newest row per id. www.wowhead.com itself refuses
-    scripts and is not touched. Wowhead's data is not openly licensed: reference for our own server only."""
-    current = manifest["current"].setdefault("wowhead-tooltips", {"label": "", "folder": "wowhead-tooltips", "pinned": now(), "files": {},
-                                                                  "licence": "Wowhead, reference only (not openly licensed)"})
+
+ICYVEINS = "https://db.icy-veins.com"
+ICYVEINS_RATE = 2.0                                               # requests per second, one at a time
+ICYVEINS_MAX = int(os.environ.get("ICYVEINS_MAX", "20000"))       # per run; about 15,800 NPCs, a full pull is ~2 hours
+ICYVEINS_REFRESH_DAYS, ICYVEINS_MISSING_DAYS = 14, 7              # player-recorded data keeps growing: refresh sooner
+ICYVEINS_KEEP = ("entity", "children", "relations", "history")    # the rest of a response is link metadata, the same for all
+
+
+def icyveins_npc_ids():
+    """Every NPC id Icy Veins' Forever database lists. Its NPC page names one page per creature type, each paged 50 at a
+    time; a page with no id we haven't seen, or a 404 past the first page, ends that type. Paced like the NPC fetches."""
+    top = fetch(f"{ICYVEINS}/wow-forever/npcs/").decode()
+    types = sorted(set(re.findall(r'href="/wow-forever/npcs/([a-z][a-z0-9-]*)/"', top)))
+    if not types:
+        raise ValueError("icyveins: the NPC page lists no creature types")
+    ids = set()
+    for slug in types:
+        for page in range(1, 10000):
+            time.sleep(1 / ICYVEINS_RATE)
+            try:
+                html = fetch(f"{ICYVEINS}/wow-forever/npcs/{slug}/?page={page}").decode()
+            except urllib.error.HTTPError as error:
+                if error.code == 404 and page > 1:       # past the last page
+                    break
+                raise
+            found = {int(i) for i in re.findall(r'href="/wow-forever/npcs/(\d+)"', html)}
+            if not found - ids:
+                break
+            ids |= found
+    return ids
+
+
+def pin_icyveins(manifest, limit=ICYVEINS_MAX):
+    """Icy Veins' WoW Forever database (db.icy-veins.com/wow-forever): one JSON per NPC from the API its pages are built
+    from, /api/catalog/wowf/npc/<id>. Besides the client's creature row it carries what players' addons recorded on live
+    Forever: map points (addon_points: UiMap, x/y in tenths of a percent, reports, players, last build), levels, drops
+    with chances, vendor stock with prices, trainer spells, quests given and taken, gossip text.
+
+    The ids are every NPC its lists show plus every NPC our other pins name. Kept per NPC: entity, children, relations
+    and history (ICYVEINS_KEEP). robots.txt allows everything; the data states no licence: reference for our own server
+    only, never copied into Everlake (import_sql.REFERENCE_ONLY)."""
+    ids = icyveins_npc_ids() | forever_ids(manifest)["npc"]
+    print(f"icyveins: {len(ids)} NPC ids")
+    pin_incremental("icyveins", "Icy Veins, reference only (no licence stated)", ("npc",), {"npc": ids},
+                    lambda kind, i: f"{ICYVEINS}/api/catalog/wowf/{kind}/{i}", ICYVEINS_RATE, limit,
+                    ICYVEINS_REFRESH_DAYS, ICYVEINS_MISSING_DAYS, manifest,
+                    missing=lambda data: not isinstance(data, dict) or not data.get("entity"),
+                    keep=lambda data: {k: data[k] for k in ICYVEINS_KEEP if k in data})
+
+
+def pin_incremental(name, licence, kinds, wanted, url, rate, limit, refresh_days, missing_days, manifest,
+                    missing=lambda data: not data, keep=lambda data: data):
+    """One JSON per (kind, id) from a public service, a share at a time.
+
+    Each run fetches ids never fetched, then ids older than refresh_days (missing ones after missing_days), at most
+    `limit`, one at a time at `rate` per second. Rows go to a new part, <name>/parts/<time>/<kind>.jsonl; the loader
+    keeps the newest row per id. A 404 or a response `missing` refuses is recorded as missing; other errors are tried
+    again next run."""
+    current = manifest["current"].setdefault(name, {"label": "", "folder": name, "pinned": now(), "files": {}, "licence": licence})
     root = os.path.join(ROOT, current["folder"])
     last = {}
     for rel in sorted(current["files"]):
@@ -386,16 +546,15 @@ def pin_wowhead_tooltips(manifest, limit=WOWHEAD_MAX):
     def stale(key):
         when, status = last[key]
         age = (today - datetime.datetime.fromisoformat(when.replace("Z", "+00:00"))).days
-        return age >= (WOWHEAD_MISSING_DAYS if status != "ok" else WOWHEAD_REFRESH_DAYS)
-    wanted = forever_ids(manifest)
-    todo = [(k, i) for k in WOWHEAD_KINDS for i in sorted(wanted[k]) if (k, i) not in last]
-    todo += [key for k in WOWHEAD_KINDS for key in sorted((k, i) for i in wanted[k] if (k, i) in last and stale((k, i)))]
+        return age >= (missing_days if status != "ok" else refresh_days)
+    todo = [(k, i) for k in kinds for i in sorted(wanted[k]) if (k, i) not in last]
+    todo += [key for k in kinds for key in sorted((k, i) for i in wanted[k] if (k, i) in last and stale((k, i)))]
     todo = todo[:limit]
     if not todo:
-        print(f"wowhead-tooltips: nothing to fetch ({len(last)} held)")
+        print(f"{name}: nothing to fetch ({len(last)} held)")
         return
     part = "parts/" + now().replace(":", "")[:15]
-    buffers = {k: [] for k in WOWHEAD_KINDS}
+    buffers = {k: [] for k in kinds}
     def flush():
         for kind, rows in buffers.items():
             if rows:
@@ -409,9 +568,11 @@ def pin_wowhead_tooltips(manifest, limit=WOWHEAD_MAX):
     for n, (kind, i) in enumerate(todo, 1):
         status, data = "ok", None
         try:
-            data = json.loads(fetch(f"https://nether.wowhead.com/forever/tooltip/{kind}/{i}", retries=3))
-            if not data or "error" in data:
+            data = json.loads(fetch(url(kind, i), retries=3))
+            if missing(data):
                 status = "missing"
+            else:
+                data = keep(data)
         except urllib.error.HTTPError as error:
             status = "missing" if error.code == 404 else "error"
         except (OSError, ValueError):
@@ -421,10 +582,10 @@ def pin_wowhead_tooltips(manifest, limit=WOWHEAD_MAX):
             buffers[kind].append({"kind": kind, "id": i, "fetched": now(), "status": status, "data": data})
         if n % 500 == 0:
             flush()
-            print(f"  wowhead-tooltips: {n}/{len(todo)} ({counts})", flush=True)
-        time.sleep(max(0.0, n / WOWHEAD_RATE - (time.time() - started)))
+            print(f"  {name}: {n}/{len(todo)} ({counts})", flush=True)
+        time.sleep(max(0.0, n / rate - (time.time() - started)))
     flush()
-    print(f"wowhead-tooltips: fetched {len(todo)} ({counts}), {len(last) + counts['ok'] + counts['missing']} held")
+    print(f"{name}: fetched {len(todo)} ({counts}), {len(last) + counts['ok'] + counts['missing']} held")
 
 
 def record(manifest, name, pin):
@@ -476,16 +637,23 @@ def main():
         pin_wowhead_tooltips(manifest, limit)
         save(manifest)
         return
+    if "--icyveins-only" in sys.argv:                # pin_sources.py --icyveins-only [--icyveins-max N]
+        limit = int(sys.argv[sys.argv.index("--icyveins-max") + 1]) if "--icyveins-max" in sys.argv else ICYVEINS_MAX
+        pin_icyveins(manifest, limit)
+        write_credits()
+        save(manifest)
+        return
     only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None
     for name, source in SOURCES.items():
-        if only is None or name in only:
+        if (only is None and not source.get("opt_in")) or (only is not None and name in only):
             pin_repo(name, source, manifest)
             save(manifest)
-    if only is not None:              # pin_sources.py --only NAME,NAME: just those GitHub sources (or live-hotfixes, wago)
-        if "live-hotfixes" in only:
-            pin_live_hotfixes(manifest)
-        if "wago" in only:
-            pin_wago(manifest)
+    if only is not None:
+        for name, pinner in {"live-hotfixes": pin_live_hotfixes, "everloot": pin_everloot,
+                             "zephras-talents": pin_zephras_talents, "wago": pin_wago}.items():
+            if name in only:
+                pinner(manifest)
+                save(manifest)
         write_credits()
         save(manifest)
         return
@@ -500,6 +668,8 @@ def main():
     pin_questietrace_own(manifest)
     save(manifest)
     pin_wowhead_tooltips(manifest)
+    save(manifest)
+    pin_icyveins(manifest)
     save(manifest)
     write_credits()
     save(manifest)

@@ -87,6 +87,23 @@ def ident(tok):
     return tok if re.fullmatch(r"[A-Za-z_]\w*", tok) else None
 
 
+def insert_target(sql):
+    """The one table an INSERT or REPLACE statement writes (lower case), or None for any other statement. Only that
+    table changes: the tables its SELECT reads stay as they are (ON DUPLICATE KEY UPDATE also writes only the target)."""
+    toks = tokens(sql)
+    words = [t for t in toks if not is_space(t)]
+    upper = [w.upper() for w in words]
+    if not upper or upper[0] not in ("INSERT", "REPLACE"):
+        return None
+    k = 1
+    while k < len(upper) and upper[k] in ("LOW_PRIORITY", "DELAYED", "HIGH_PRIORITY", "IGNORE", "INTO"):
+        k += 1
+    if k >= len(words) or (k + 1 < len(words) and words[k + 1] == "."):
+        return None                      # schema-qualified: not ours to judge
+    name = ident(words[k])
+    return name.lower() if name else None
+
+
 def on_duplicate(words, k):
     """Is the UPDATE at word index k the one in ON DUPLICATE KEY UPDATE?"""
     return words[max(0, k - 3):k] == ["ON", "DUPLICATE", "KEY"]
@@ -111,6 +128,8 @@ def retarget(sql, mapping, skipped=frozenset(), top=True):
         allowed = VERBS if top else STRING_VERBS
         if words[0] == "DO" and all(w.isdigit() or w == "," for w in words[1:]):
             pass                         # DO 0: a no-op some update files use as a placeholder
+        elif top and words in (["START", "TRANSACTION"], ["BEGIN"], ["COMMIT"]):
+            pass                         # a file wrapped in its own transaction: the loader commits once per file anyway
         elif words[0] not in allowed:
             problems.add(f"<statement {words[0]}>")
         elif words[0] == "CREATE" and words[1:2] != ["TABLE"] and words[1:3] != ["TEMPORARY", "TABLE"]:
@@ -185,8 +204,8 @@ def retarget(sql, mapping, skipped=frozenset(), top=True):
                 uses_skipped = True
             elif low in mapping:
                 out[i] = f"`{mapping[low]}`"
-            elif low in ctes:
-                pass
+            elif low in ctes or (low == "dual" and not toks[i].startswith("`")):
+                pass                     # a CTE, or DUAL: MySQL's dummy table for SELECT ... FROM DUAL WHERE ...
             elif not (after_delete and low in aliases):
                 problems.add(name)
             # skip an alias after the table (`creature` c, `creature` AS c)
@@ -378,6 +397,18 @@ if __name__ == "__main__":       # small self-check
     assert retarget("INSERT INTO creature (id) VALUES (1) ON DUPLICATE KEY UPDATE AllowableClasses = 2, slot = 3", m)[2] == set()
     assert retarget("DELETE ca FROM creature_addon ca JOIN creature c ON c.guid = ca.guid", m)[2] == set()
     assert retarget("SET comment = 'creature'", m)[0] == "SET comment = 'creature'"             # data, not a table
+    for ok in ("START TRANSACTION", "BEGIN", "COMMIT"):                                       # a file's own transaction
+        assert retarget(ok, m)[2] == set(), ok
+    for bad in ("ROLLBACK", "START TRANSACTION READ ONLY", "COMMIT AND RELEASE"):
+        assert retarget(bad, m)[2], bad
+    assert retarget("COMMIT", m, top=False)[2]                                                 # never inside a PREPARE string
+    assert not retarget("INSERT INTO creature (id) SELECT 1 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM creature WHERE id = 1)", m)[2]
+    assert retarget("INSERT INTO creature (id) SELECT 1 FROM `dual`", m)[2]                      # a quoted name is a real table
+    assert insert_target("INSERT INTO `gossip_menu_option_locale` (a) SELECT a FROM `gossip_menu_option` ON DUPLICATE KEY UPDATE a = 1") == "gossip_menu_option_locale"
+    assert insert_target("REPLACE LOW_PRIORITY INTO creature_template_locale SELECT * FROM creature_template") == "creature_template_locale"
+    assert insert_target("INSERT IGNORE x.creature_template_locale SELECT 1") is None
+    assert insert_target("UPDATE creature_template_locale l JOIN creature_template c SET c.name = l.Name") is None
+    assert insert_target("DELETE l FROM creature_template_locale l JOIN creature_template c ON 1") is None
     for bad in ("DROP TABLE IF EXISTS `merge_id_map`", "UPDATE acore_world.creature SET map = 0", "DROP TABLE IF EXISTS creature_addon, merge_id_map",
                 "UPDATE creature c, src_pins p SET p.label = 1", "DELETE src_pins FROM creature c, src_pins", "UPDATE LOW_PRIORITY src_pins SET x = 1",
                 "RENAME TABLE creature TO ref_client_ids", "CREATE INDEX i ON src_pins (x)", "USE acore_world",

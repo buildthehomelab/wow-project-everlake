@@ -4,9 +4,13 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status: the fork exists (`buildthehomelab/wow-trinitycore-everlake`, branch `everlake` at our current pin 2ae1313e9f),
-nothing taken into it yet. Everlake builds today from `advocaite/TrinityCore` branch `forever` at a pinned commit, plus
-the patches in `docker/patches/`.
+Status (2026-11-10): Everlake builds from the fork at `343fe6fb`, which adds TrinityCore master batches A-K (fork #23, #24, #26,
+#28-#35), Karrz's v0.1.33 world data (#22) and Classic scripts (#25, with build fix #27), and Karrz's v0.1.34 world data (#36),
+Ring of Law arena (#37, map 3200 from the extractor's map copies) and bot module (#38) from the `karrz-releases` branch (fork `docs/karrz-releases.md`,
+`docs/upstream-prs/karrz-*.md`). All 99 advocaite pull requests open on 2026-11-08 are
+reviewed (fork PRs #5-#17, one log per pull request in the fork's `docs/upstream-prs/`); patches 0003 (upstream #291) and
+0009 (replaced by #138) are gone from `docker/patches/`, and 0008 (name reservation) is the fork's own code now,
+reserving full names (name + surname). TrinityCore `master` commits are next.
 
 ## Why
 

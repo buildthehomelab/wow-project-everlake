@@ -2,20 +2,21 @@
 # (docs/era-data.md). Same image and world database as realm 1, its own characters and hotfix databases
 # (characters2, hotfixes2: scripts/realm2-setup.sh), port 8095 and logs volume. Bots stay on realm 1.
 #   docker compose -f docker-compose.yml -f docker-compose.realm2.yml up -d worldserver2
+# Or as a second TrueNAS app beside the running one, which stays untouched: docker-compose.realm2-app.yml.
 # After a new image (e.g. a core bump), recreate worldserver2 too: it is not part of a plain "docker compose up -d"
 # and reads the build list only when it starts, so until then it turns away clients of a new build.
 # The realm settings are the core's environment overrides (TC_ + the config key in upper snake case), so realm 1's
 # overrides/*.conf (game rules) apply here too.
 services:
   worldserver2:
-    image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-latest}
+    # Its own tag: realm 1 moving to a new image (the live tag, scripts/promote.sh) leaves realm 2 where it is
+    image: everlake-trinitycore:${REALM2_IMAGE_TAG:-latest}
     pull_policy: never   # local image, built by the worldserver service
     command: ["worldserver"]
     networks: [everlake]
     restart: unless-stopped
-    depends_on:
-      mysql:
-        condition: service_healthy
+    # no depends_on: the entrypoint waits for MySQL itself, and docker-compose.realm2-app.yml runs this service in a
+    # project that has no mysql service
     environment:
       TZ: ${TZ:-UTC}
       DB_HOST: mysql
@@ -32,6 +33,7 @@ services:
       TC_PLAYERBOT_WORLD_ENABLE: "0"
       TC_AUCTION_HOUSE_BOT_SELLER_ENABLED: "0"
       TC_AUCTION_HOUSE_BOT_BUYER_ENABLED: "0"
+      TC_PLAYERBOT_LFG_ENABLE: "0"   # no dungeon finder bot fill either: the bots' database belongs to realm 1
     stdin_open: true
     tty: true
     stop_grace_period: 2m

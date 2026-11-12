@@ -1,4 +1,5 @@
-# Everlake server image: TrinityCore "forever" branch (advocaite/TrinityCore) for the WoW Forever client.
+# Everlake server image: our core fork (buildthehomelab/wow-trinitycore-everlake, branch everlake: advocaite's "forever"
+# plus the WoW Forever Bots module and the changes we took, see its docs/upstream-prs.md) for the WoW Forever client.
 # Based on jibay442/forever_docker (GPL-2.0). The core is pinned to one commit so the server, the frozen client
 # build and the extracted data always match; bump TC_COMMIT on purpose, never by accident.
 #
@@ -7,6 +8,17 @@
 # Stage 3: slim runtime image
 
 ARG UBUNTU_VERSION=24.04
+# The core commit and the bots switch, declared here so the build stage uses them and the runtime stage records them
+# (/opt/trinitycore/image-build.env, checked by the entrypoint against the image tag it was started as).
+# The live realms: our fork's everlake branch with the bots (343fe6fb: forever 2ae1313e + forever-bots + the 92 reviewed
+# advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-K #23 #24 #26 #28-#35, Karrz v0.1.33 data #22 and
+# scripts #25, build fix #27, Karrz v0.1.34 data #36, Ring of Law arena #37 and bot module #38), the
+# same commit the PTR builds (docker-compose.ptr.yml), so the live app and the PTR app build one identical image.
+# Client 1.60.1.70862 (realms on 70862; bnetserver and the worldservers also let 70790 in, docker/entrypoint.sh).
+ARG TC_COMMIT=343fe6fb95076e09575156c8b88d155914003b78
+# PLAYERBOTS=1: the WoW Forever Bots module (src/modules/PlayerbotV2; the core commit must have it, as the fork's
+# everlake branch does since PR #2). 0 builds the core without bots.
+ARG PLAYERBOTS=1
 
 ############################ build ############################
 FROM ubuntu:${UBUNTU_VERSION} AS build
@@ -17,9 +29,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libmysqlclient-dev libssl-dev libbz2-dev libreadline-dev libncurses-dev libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
 
-ARG TC_REPO=https://github.com/advocaite/TrinityCore.git
-# forever branch 2026-11-08: client 1.60.1.70862 (realms on 70862; bnetserver also lets 70790 in, docker/entrypoint.sh)
-ARG TC_COMMIT=2ae1313e9f89ba34103fee1400dc3d4222efd8c4
+ARG TC_REPO=https://github.com/buildthehomelab/wow-trinitycore-everlake.git
+ARG TC_COMMIT
 RUN git init -q /src/TrinityCore \
     && git -C /src/TrinityCore remote add origin "${TC_REPO}" \
     && git -C /src/TrinityCore fetch -q --depth 1 origin "${TC_COMMIT}" \
@@ -34,6 +45,7 @@ RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; echo "applying $p"; g
 
 # BUILD_JOBS: lower it on small machines (GCC needs ~2 GB RAM per job on the biggest files)
 ARG BUILD_JOBS=4
+ARG PLAYERBOTS
 # TOOLS=1: also build mapextractor / vmap4extractor / vmap4assembler / mmaps_generator
 ARG TOOLS=1
 WORKDIR /src/TrinityCore/build
@@ -41,6 +53,7 @@ RUN cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/opt/trinitycore \
         -DTOOLS=${TOOLS} \
+        -DBUILD_PLAYERBOT_V2=${PLAYERBOTS} \
         -DWITH_WARNINGS=0 \
     && make -j"${BUILD_JOBS}" \
     && make install
@@ -95,7 +108,7 @@ RUN mkdir -p /world-data \
             [ -e "$f" ] || continue; \
             [ -f "$f" ] || { echo "world data: $f is not a file"; exit 1; }; \
             # only our own names: they can never replace or clash with one of the fork's update files
-            case "$(basename "$f")" in [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9]_world_everlake_import_*.sql) ;; \
+            case "$(basename "$f")" in [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9]_world_everlake_import_*.sql|[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9][0-9]_world_everlake_*.sql) ;; \
                 *) echo "world data: unexpected file name $f"; exit 1 ;; esac; \
             cp "$f" /world-data/; \
         done \
@@ -117,20 +130,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=build /opt/trinitycore /opt/trinitycore
 # The updater looks for sql/ under the source directory baked in at build time
 COPY --from=build /src/TrinityCore/sql /src/TrinityCore/sql
-# Our login-database tables the core patches need, applied by the updater on start like the fork's own custom files
-# (name reservation: docker/patches/0008), the one ruleset card at login (Forever), and the TACT keys live Forever sends
-# that the core lacks (tools/live-hotfixes/tact_keys.py). The other sql/everlake files are data and stay manual.
-COPY sql/everlake/2026_11_07_09_auth_name_reservation.sql sql/everlake/2026_11_08_06_auth_one_ruleset.sql \
-     /src/TrinityCore/sql/custom/auth/
+# Our login-database rows, applied by the updater on start like the fork's own custom files: the one ruleset card at
+# login (Forever), and the TACT keys live Forever sends that the core lacks (tools/live-hotfixes/tact_keys.py). Name
+# reservation's tables are the fork's own now (sql/custom/auth/2026_11_07_09 and 2026_11_09_00). The other
+# sql/everlake files are data and stay manual.
+COPY sql/everlake/2026_11_08_06_auth_one_ruleset.sql /src/TrinityCore/sql/custom/auth/
 COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql sql/everlake/2026_11_08_08_hotfixes_live_tact_keys.sql \
      /src/TrinityCore/sql/custom/hotfixes/
+# Our world rules as update files: dynamic respawn groups (quest targets, herb and ore nodes)
+COPY sql/everlake/2026_11_09_00_world_dynamic_respawn.sql /src/TrinityCore/sql/custom/world/
 # The world import's update files (empty unless WORLD_DATA_COMMIT is set; see the worlddata stage)
 COPY --from=worlddata /world-data/ /src/TrinityCore/sql/custom/world/
 # worldserver's auto-setup imports TDB_full_*.sql from its working directory
 COPY --from=tdb /tdb/ /opt/trinitycore/bin/
 COPY docker/entrypoint.sh docker/extract.sh /usr/local/bin/
+# What this image was built from: the entrypoint compares it with the tag it runs as (IMAGE_TAG), so an image built by
+# the wrong app under a PTR tag (e.g. without the bots) says so at start instead of running quietly without them.
+ARG TC_COMMIT
+ARG PLAYERBOTS
+ARG WORLD_DATA_COMMIT
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/extract.sh \
-    && mkdir -p /opt/trinitycore/data /opt/trinitycore/logs /opt/trinitycore/certs /opt/trinitycore/overrides
+    && mkdir -p /opt/trinitycore/data /opt/trinitycore/logs /opt/trinitycore/certs /opt/trinitycore/overrides \
+    && printf 'TC_COMMIT=%s\nPLAYERBOTS=%s\nWORLD_DATA_COMMIT=%s\n' "${TC_COMMIT}" "${PLAYERBOTS}" "${WORLD_DATA_COMMIT}" \
+        > /opt/trinitycore/image-build.env
 
 ENV LD_LIBRARY_PATH=/opt/trinitycore/lib
 WORKDIR /opt/trinitycore/bin

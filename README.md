@@ -30,6 +30,7 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 | `docker/patches/` | Fixes on top of the core that aren't merged upstream yet |
 | `scripts/gen-certs.sh` | Your own root CA (limited to `*.actual.battle.net`) and the login server certificate |
 | `tools/forever-data/` | Public Forever data pinned daily into its own database, and a report of what Everlake's world lacks ([notes](tools/forever-data/README.md)) |
+| `docker-compose.tracker.yml` | ForeverTracker: what of the official Forever content players can get here, and SQL fixes applied on the PTR ([notes](docs/forever-tracker.md)) |
 | `tools/tact/` | Gate 2: `patch.py` makes a build that is Blizzard's plus our files, `cdn.py` serves it ([notes](docs/custom-files.md)) |
 | `client/macos/everlake-client.sh` | Sets up a Mac to play here (hosts entry, CA, key patch, game copy) and starts the game |
 | `docs/client-connection.md` | What a client needs to connect, and why |
@@ -38,9 +39,10 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 
 | What | Value |
 |---|---|
-| Core | [advocaite/TrinityCore](https://github.com/advocaite/TrinityCore/tree/forever) `forever` @ `2ae1313e` (2026-11-08) |
+| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `343fe6fb` (fork `everlake`: advocaite's `forever` 2ae1313e + forever-bots + the reviewed advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-K, Karrz v0.1.33 world data and scripts, Karrz v0.1.34 world data, the Ring of Law arena and the bot module at 0.1.34), bots on. The live app and the PTR app build the same commit, so either one makes the same image |
 | Client | WoW Forever **1.60.1.70862**; 1.60.1.70790 clients are also let in (`Realm.AlsoAcceptBuilds`) |
 | World DB | `forever-tdb-2026-10-14` release of the same repository |
+| ForeverTracker | [buildthehomelab/wow-forever-tracker](https://github.com/buildthehomelab/wow-forever-tracker) @ `a77090dc` (`docker-compose.tracker.yml`) |
 
 The server, the client and the extracted data must all be the same build. Battle.net updates the client on its own,
 so freeze it before testing, and check the CDN build before extracting:
@@ -53,6 +55,12 @@ curl -s http://us.patch.battle.net:1119/wowf/versions | grep '^us|'
 about 80 other tables, compared file by file on Blizzard's CDN on 2026-11-08). Data extracted from 70790 still loads.
 To bring the tables up to 70862 without redoing maps, vmaps and mmaps: `DBC_ONLY=1 docker compose run --rm extractor`.
 
+Some maps exist only on the server: map 3200, the Ring of Law arena, is Blackrock Depths (230) under its own id, with
+its Map row in the hotfixes database, so the client files have nothing for it. The extractor copies map 230's maps,
+vmaps and mmaps to 3200 after every extract and mmaps run (`MAP_COPIES`, default `3200:230`), and the PTR does it on
+each start (`ptr-mmaps`). On data that is already extracted: `MAP_COPIES_ONLY=1 docker compose run --rm extractor`
+(seconds).
+
 ## Run it
 
 Needs Docker, about 8 GB of RAM to build (4 GB to run) and about 20 GB of disk.
@@ -62,6 +70,7 @@ cp .env.example .env               # set the passwords
 ./scripts/gen-certs.sh             # your own CA + server certificate (never share certs/ca/*.key)
 docker compose build               # compiles TrinityCore, takes a while
 docker compose run --rm extractor  # game data from Blizzard's CDN into ./data
+EXTRACT_MMAPS=1 docker compose run --rm extractor  # or this instead: also the bots' navigation meshes (long)
 docker compose up -d
 docker compose logs -f worldserver # the first start imports the database
 ```
@@ -72,6 +81,61 @@ Create an account from the worldserver console:
 docker compose attach worldserver   # leave with Ctrl+P, Ctrl+Q
 bnetaccount create mail@example.com Password
 ```
+
+### Bots
+
+`PLAYERBOTS=1` (the default; with a core commit that has the module, `src/modules/PlayerbotV2`: the fork's `everlake` branch) builds
+the WoW Forever Bots into the image, switched on with the module's own defaults, except on the live realm: 500 world bots, a modest crowd around each player (30 in a leveling zone, 80 in a town, 15 in a start zone) and the rest waiting in towns and quest hubs all over the world (`BOTS_*` in `.env`, see `.env.example`), the auction house bot,
+raid bots and dungeon finder fill. Change any other setting in `overrides/playerbot.conf` (`Key = Value` lines, read after
+the defaults); the keys are in the module's `playerbot.conf.dist` and `zz-forever-bots.conf`. Realm 2 runs no world,
+auction house or dungeon finder bots.
+
+The bots need three things the server didn't before:
+
+1. **Their database** (`playerbot`): the `bots-init` service creates it before worldserver starts
+   (`docker/mysql-init/02-playerbot.sh`), and worldserver fills it on its first start with the bots.
+2. **Navigation meshes** (`data/mmaps`): the PTR app builds them when there are none (`ptr-mmaps`), or
+   `MMAPS_ONLY=1 docker compose run --rm extractor` (long: tens of minutes on many cores).
+3. **`MMAP_PATHFINDING=1`** in `.env`, so worldserver loads them. Without 2 and 3 the bots stand still, and
+   worldserver says so at start.
+
+The first start with bots creates the bots' accounts and characters in the background, which takes a while; bot log
+lines go to `logs/Playerbot.log`.
+
+**Dynamic respawns.** With hundreds of bots, quest mobs and herb/ore nodes would be camped empty. Every realm runs
+`Respawn.DynamicMode = 1`, and `sql/everlake/2026_11_09_00_world_dynamic_respawn.sql` (in the image, applied by
+worldserver) puts 56,330 quest creatures, 9,250 quest objects and 20,789 herb and ore nodes into the core's dynamic
+spawn groups (2 and 4). Up to 20 players in a zone (bots count), nothing changes; at 40, they respawn twice as fast; at
+100, five times as fast, never under 30 s for mobs and 60 s for herbs, ore and quest objects (`RESPAWN_*` in `.env`,
+set as the core's `Respawn.Dynamic*` keys by the compose files; a restart applies them).
+
+### PTR
+
+The PTR (realm 73, "Everlake PTR", port 8097) is where a new build runs before a live realm: its own image, its own
+`world_ptr`, `hotfixes_ptr`, `characters_ptr` and `playerbot_ptr` databases, few bots, GM accounts only. It is a
+TrueNAS app of its own from this folder (`docker-compose.ptr.yml`), and does everything itself when it starts: builds
+its image (bots on, the live realm's `WORLD_DATA_COMMIT`) if it's missing, sets up its databases and realm row
+(`scripts/ptr-setup.sh init`), builds the mmaps if there are none, then starts its worldserver. Nothing runs on the host
+but `git pull`.
+
+1. `git pull`, then start (or restart) the `everlake-ptr` app, and try it.
+2. Good: `sudo scripts/promote.sh`, then restart the `everlake` app. No rebuild and no `.env` edit: realm 1, the login
+   server and the extractor run `everlake-trinitycore:live`, and the script points that tag at the image the PTR's
+   worldserver ran (the one before stays as `live-previous`). Realm 2 keeps its own (`REALM2_IMAGE_TAG`, default `latest`).
+3. Back: `sudo scripts/promote.sh rollback` (swaps `live` and `live-previous`), then restart the `everlake` app.
+
+`sudo scripts/promote.sh status` shows what `live`, `live-previous` and the PTR run and what each was built from, and
+the worldserver prints it at every start (`[entrypoint] image live: core ..., world data ..., bots ...`). The first
+promote also keeps the image live is running as `live-previous` and comments out an old `EVERLAKE_IMAGE_TAG` line in
+`.env` (with a dated backup), which would otherwise win over the `live` tag. `MMAP_PATHFINDING=1` stays in `.env`.
+Don't run `docker compose build` for the `everlake` app on a server that has a `live` image: it would replace `live`
+with an untested build. The app builds by itself only when there is no `live` image yet (a new install).
+
+Start the PTR app first, so it builds the tag. Both apps build the same core with the bots, but only the PTR has run it.
+Every worldserver started as a PTR tag checks the image against the tag (`image-build.env`, written at build) and prints
+`[entrypoint] ERROR: image ... is not the PTR build its tag names` when they differ, e.g. an image an older checkout of
+the `everlake` app built without the bots. Then remove that tag (`docker image rm everlake-trinitycore:<tag>`), start the
+`everlake-ptr` app so it builds it again, and restart the `everlake` app.
 
 ## Play from a Mac
 

@@ -110,7 +110,7 @@ def main():
     cur = conn.cursor()
     rows = candidates.rows
     ids_sql = candidates.ids_sql
-    pins = {r["source"]: r["label"] for r in rows(cur, f"SELECT source, label FROM {F}.src_pins")}
+    pins = isql.public_pins({r["source"]: r["label"] for r in rows(cur, f"SELECT source, label FROM {F}.src_pins")})
     world_label = pins.get("tc-release", "?") if W == f"{F}.tc_" else W
 
     # ---- the world's types, for the stage tables and the row guards

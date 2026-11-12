@@ -111,7 +111,7 @@ def main():
     conn = connect()
     cur = conn.cursor()
     rows = candidates.rows
-    pins = {r["source"]: r["label"] for r in rows(cur, f"SELECT source, label FROM {F}.src_pins")}
+    pins = isql.public_pins({r["source"]: r["label"] for r in rows(cur, f"SELECT source, label FROM {F}.src_pins")})
     world_label = pins.get("tc-release", "?") if W == f"{F}.tc_" else W
     report = import_slice2.load_gaps(args)
     gaps = collections.defaultdict(list)

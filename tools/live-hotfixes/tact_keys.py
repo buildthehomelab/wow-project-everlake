@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Writes the hotfixes SQL that gives Everlake every TACT key live WoW Forever sends and the core lacks.
 
-    python3 -I tact_keys.py --cache DBCache.bin --core-repo ~/Code/Wow/wow-trinitycore-everlake --core-ref <TC_COMMIT> \
+    python3 -I tact_keys.py --cache DBCache.bin --core-repo <wow-trinitycore-everlake checkout> --core-ref <TC_COMMIT> \
         --push 9590000 --out sql/everlake/<date>_NN_hotfixes_live_tact_keys.sql
 
 A TACT key unlocks client data Blizzard ships encrypted (records and files of newer content). The client only reads that

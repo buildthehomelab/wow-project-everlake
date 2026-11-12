@@ -124,7 +124,7 @@ def apply_update_files(conn, cur, raw, paths, mapping, skipped_tables, held, sta
                 raise SystemExit(f"update file {name}: {', '.join(sorted(problems))} not allowed here (only the world's own "
                                  f"tables); nothing run, the old tables are untouched.\n{statement[:400]}")
             if uses_skipped:
-                if any(f"`{v}`" in sql for v in mapping.values()):
+                if custom_sql.insert_target(statement) not in skipped_tables and any(f"`{v}`" in sql for v in mapping.values()):
                     conn.rollback()     # it would also change a loaded table: leaving it out would lose that
                     raise SystemExit(f"update file {name} joins a table that isn't loaded (locale) with one that is; "
                                      f"the old tables are untouched.\n{statement[:400]}")

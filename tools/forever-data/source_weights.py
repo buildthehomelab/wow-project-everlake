@@ -12,6 +12,8 @@ Weights are 0-100. They reflect what each source actually is:
 - the live client's own tables (wago DB2, the item/spell history) are authoritative for what the client holds (names,
   item and spell data, areas, factions), but say nothing about server-side behaviour;
 - beta data (TrinityCore's sniffs, EG Link, forever-db at a beta build) is real Forever data that may have changed;
+- another emulator's database (DatabaseForever) is a weak opinion: its additions come from map pins and its sources
+  aren't stated;
 - Classic data (VMaNGOS, CMaNGOS, QuestieDB's Classic base) is only a fallback and never beats Forever data.
 """
 
@@ -38,6 +40,10 @@ W = {
     "eg-link":           {"quest_text": 70, "quest_objectives": 70, "vendor_stock": 65, "model": 75, "drops": 55, "name": 70},
     "allthethings":      {"vendor_stock": 50, "quest_giver": 50, "drops": 45, "name": 60},
     "questiedb-fixes":   {"quest_giver": 70, "quest_objectives": 65, "spawn": 60, "name": 65},
+    # EmuForever's own world database: the fork's world plus rows its authors added; added spawns are placed from map
+    # pins (a 0.1% grid, facing 0), so below Wowhead; only NPCs the fork lacks vote (candidates.dbf_npcs)
+    "databaseforever":   {"name": 55, "level": 45, "faction": 45, "model": 55, "spawn": 35, "drops": 35, "vendor_stock": 35,
+                          "quest_giver": 45},
     # Classic fallbacks: only used when nothing Forever speaks to the field
     "tc-vmangos":        {f: 25 for f in FIELDS},
     "questiedb-classic": {f: 20 for f in FIELDS},

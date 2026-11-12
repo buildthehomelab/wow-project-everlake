@@ -9,8 +9,16 @@
 #   CASC_PRODUCT  wowf (WoW Forever) by default
 #   CASC_REGION   us by default
 #   EXTRACT_MMAPS=1 also generates mmaps (long; only needed with MMAP_PATHFINDING=1)
+#   MMAPS_ONLY=1  only the navigation meshes (mmaps) the bots and MMAP_PATHFINDING=1 need, from the maps and vmaps
+#                 already in the data folder (long; no download)
+#                 Skipped when data/mmaps already has files, unless MMAPS_FORCE=1.
+#   MMAP_THREADS  threads for mmaps_generator (default: every core; fewer on a host that also runs a realm)
 #   DBC_ONLY=1    only dbc and gt (mapextractor -e 10), for a client update that changes table contents but no map
 #                 files (e.g. 70790 -> 70862); maps, vmaps and mmaps stay as they are
+#   MAP_COPIES    server-only maps made from a client map, "<new id>:<source id> ..." (default "3200:230": the Ring of
+#                 Law arena, an arena copy of Blackrock Depths; its Map row comes from the hotfixes database, so the
+#                 client files have no map 3200). Done after every extract and mmaps run; "" turns it off.
+#   MAP_COPIES_ONLY=1  only those copies, from the maps, vmaps and mmaps already in the data folder (seconds)
 #
 # The CDN always serves the newest build. Check that it is the build the server is pinned to before extracting.
 set -euo pipefail
@@ -19,6 +27,69 @@ OUT=/opt/trinitycore/data
 BIN=/opt/trinitycore/bin
 PRODUCT="${CASC_PRODUCT:-wowf}"
 REGION="${CASC_REGION:-us}"
+
+# Map, vmap and mmap files are named by map id and hold no id inside (maps/MMMM_XX_YY.map, maps/MMMM.tilelist,
+# vmaps/MMMM/MMMM*, mmaps/MMMM.mmap, mmaps/MMMM_XX_YY.mmtile), so a server-only map is the source map's files under the
+# new id. An old copy is removed first, so the copy always matches the source as extracted now.
+copy_maps() {
+    local pair src dst f n
+    for pair in ${MAP_COPIES-3200:230}; do
+        [[ "$pair" =~ ^([0-9]{1,4}):([0-9]{1,4})$ ]] \
+            || { echo "[extract] ERROR: MAP_COPIES entry '$pair' is not <new id>:<source id>"; return 1; }
+        dst=$(printf '%04d' "$((10#${BASH_REMATCH[1]}))"); src=$(printf '%04d' "$((10#${BASH_REMATCH[2]}))")
+        [ "$dst" != "$src" ] || { echo "[extract] ERROR: MAP_COPIES entry '$pair' copies a map onto itself"; return 1; }
+        n=0
+        if [ -d "$OUT/maps" ]; then
+            rm -f "$OUT/maps/$dst.tilelist" "$OUT/maps/${dst}"_*.map
+            for f in "$OUT/maps/$src.tilelist" "$OUT/maps/${src}"_*.map; do
+                [ -f "$f" ] || continue
+                cp "$f" "$OUT/maps/$dst${f##*/"$src"}"; n=$((n + 1))
+            done
+        fi
+        if [ -d "$OUT/vmaps/$src" ]; then
+            rm -rf "${OUT:?}/vmaps/$dst" && mkdir -p "$OUT/vmaps/$dst"
+            for f in "$OUT/vmaps/$src"/*; do
+                [ -f "$f" ] || continue
+                f=${f##*/}
+                cp "$OUT/vmaps/$src/$f" "$OUT/vmaps/$dst/${f/#$src/$dst}"; n=$((n + 1))
+            done
+        fi
+        if [ -d "$OUT/mmaps" ]; then
+            rm -f "$OUT/mmaps/$dst.mmap" "$OUT/mmaps/${dst}"_*.mmtile
+            for f in "$OUT/mmaps/$src.mmap" "$OUT/mmaps/${src}"_*.mmtile; do
+                [ -f "$f" ] || continue
+                cp "$f" "$OUT/mmaps/$dst${f##*/"$src"}"; n=$((n + 1))
+            done
+        fi
+        if [ "$n" = 0 ]; then
+            echo "[extract] WARNING: map $src has no maps, vmaps or mmaps here, so map $dst has none either"
+        else
+            echo "[extract] map $dst: $n files copied from map $src"
+        fi
+    done
+}
+
+# MAP_COPIES_ONLY=1: only the server-only map copies, from what the data folder already has
+if [ "${MAP_COPIES_ONLY:-0}" = 1 ]; then
+    echo "[extract] === server-only map copies (MAP_COPIES=${MAP_COPIES-3200:230})"
+    copy_maps
+    exit 0
+fi
+
+# MMAPS_ONLY=1: only the mmaps, from the maps and vmaps already extracted (same call as EXTRACT_MMAPS=1 below)
+if [ "${MMAPS_ONLY:-0}" = 1 ]; then
+    [ -d "$OUT/maps" ] && [ -d "$OUT/vmaps" ] || { echo "[extract] ERROR: mmaps need maps and vmaps first (run the extractor once without MMAPS_ONLY)"; exit 1; }
+    if [ -n "$(ls -A "$OUT/mmaps" 2>/dev/null)" ] && [ "${MMAPS_FORCE:-0}" != 1 ]; then
+        echo "[extract] mmaps already there: left as they are (MMAPS_FORCE=1 builds them again)"
+        copy_maps; exit 0
+    fi
+    echo "[extract] === mmaps_generator only (long)"
+    cd "$OUT"
+    "$BIN/mmaps_generator" --threads "${MMAP_THREADS:-$(nproc)}"
+    copy_maps
+    echo "[extract] done:"; du -sh "$OUT/mmaps"
+    exit 0
+fi
 
 if [ "${CASC_REMOTE:-1}" = 1 ]; then
     SRC=/cache
@@ -89,8 +160,10 @@ cd "$OUT" && rm -rf "$OUT/.work"
 
 if [ "${EXTRACT_MMAPS:-0}" = 1 ]; then
     echo "[extract] === mmaps_generator (long)"
-    "$BIN/mmaps_generator" --threads "$(nproc)"
+    "$BIN/mmaps_generator" --threads "${MMAP_THREADS:-$(nproc)}"
 fi
+
+copy_maps
 
 echo "[extract] done:"
 du -sh "$OUT"/* 2>/dev/null

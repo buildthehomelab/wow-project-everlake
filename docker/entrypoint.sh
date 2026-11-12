@@ -19,6 +19,10 @@ OVERRIDES="$ROOT/overrides"
 : "${REALM_LOCAL_SUBNET_MASK:=255.255.255.0}"
 : "${REALM_NAME:=Forever}"
 : "${REALM_ID:=70}"
+# The core's auth update 2026_11_07_00 moves the realms to 70862 (Battle.net's 2026-11-07 update, same game data).
+# Clients still on 70790 (a frozen test copy, a player who hasn't updated) keep seeing and joining them: bnetserver
+# and every worldserver accept these builds too (Realm.AlsoAcceptBuilds, comma-separated).
+ALSO_ACCEPT_BUILDS="70790"
 # Realm 1's world port. 8085 by default; another one when the host already runs a server on 8085 (e.g. beside Evermore)
 : "${WORLD_PORT:=8085}"
 : "${LOGIN_HOSTNAME:=trinity.actual.battle.net}"
@@ -127,8 +131,110 @@ configure_worldserver() {
     setkey "$f" Classic.GuildFinder 1
     setkey "$f" Classic.Shop.Enabled 1
     setkey "$f" AccountInstancesPerHour 5
+    # Dynamic respawns: quest targets and herb/ore nodes (spawn groups 2 and 4, sql/everlake/2026_11_09_00) come back
+    # faster when a zone holds more players, bots included (rates and floors: RESPAWN_* in .env, set by the compose files).
+    setkey "$f" Respawn.DynamicMode 1
     setkey "$f" PlayerSave.Stats.MinLevel 1
+    # At character select a client asks this worldserver for another ruleset's realm (the ruleset picker): it checks the
+    # client's build like bnetserver does, so it needs the same extra builds, or a 70790 client finds no realm there.
+    setkey "$f" Realm.AlsoAcceptBuilds "\"$ALSO_ACCEPT_BUILDS\""
     apply_overrides "$f" worldserver
+    configure_playerbots
+}
+
+# Bots (WoW Forever Bots, src/modules/PlayerbotV2): the build installs playerbot.conf.dist and its active defaults
+# (zz-forever-bots.conf: world bots, auction house bot, raid bots, bot logging; zz-forever-lfg.conf: dungeon finder
+# fill) into etc/worldserver.conf.d. worldserver reads a config folder's files in the order the filesystem lists them,
+# not by name, so .dist (world bots off) could be read after zz-forever-bots.conf (on) and win. Merge them into one
+# file instead, in a fixed order: the .dist, the zz-* files by name, then overrides/playerbot.conf; the last value of
+# a key wins (one file, since a key twice in one file is an error). worldserver reads that folder (BOT_CONF_DIR).
+BOT_CONF_DIR="$ETC/worldserver.conf.d.everlake"
+configure_playerbots() {
+    local dir="$ETC/worldserver.conf.d" files=()
+    rm -rf "$BOT_CONF_DIR"
+    [ -f "$dir/playerbot.conf.dist" ] || return 0
+    files+=("$dir/playerbot.conf.dist")
+    while IFS= read -r f; do files+=("$f"); done < <(find "$dir" -maxdepth 1 -name 'zz-*.conf' | sort)
+    [ -f "$OVERRIDES/playerbot.conf" ] && files+=("$OVERRIDES/playerbot.conf")
+    mkdir -p "$BOT_CONF_DIR"
+    awk '
+        { sub(/\r$/, "") }
+        /^[[:space:]]*[A-Za-z][A-Za-z0-9_.]*[[:space:]]*=/ {
+            i = index($0, "="); k = substr($0, 1, i - 1); v = substr($0, i + 1)
+            gsub(/^[ \t]+|[ \t]+$/, "", k); gsub(/^[ \t]+|[ \t]+$/, "", v)
+            if (!(k in val)) order[++n] = k
+            val[k] = v
+        }
+        END { print "[worldserver]"; for (j = 1; j <= n; j++) print order[j] " = " val[order[j]] }
+    ' "${files[@]}" > "$BOT_CONF_DIR/playerbot.conf"
+    echo "[entrypoint] bot settings: $(($(wc -l < "$BOT_CONF_DIR/playerbot.conf") - 1)) keys from ${files[*]##*/}"
+    grep -E '^Playerbot\.World\.(Enable|MaxBots) ' "$BOT_CONF_DIR/playerbot.conf" | sed 's/^/[entrypoint]   /' || true
+}
+
+# IMAGE_TAG (compose: the tag this container was started as). A PTR tag, ptr-<core commit>-<world data commit or none>,
+# promises what the image holds; /opt/trinitycore/image-build.env says what it was built from. They differ when the
+# wrong app built the tag first: the everlake app builds a missing image from its own build args, and the PTR app then
+# finds that image and runs it too. Say so loudly at every start. Images from before image-build.env: the bot check only.
+check_image_build() {
+    local tag="${IMAGE_TAG:-}" info="$ROOT/image-build.env" core="" wd="" bots="" want_core want_wd problems=()
+    # `live` (scripts/promote.sh moves it to the image the PTR ran) names no build: say what this one was built from
+    if [ "$tag" = live ]; then
+        if [ -f "$info" ]; then
+            echo "[entrypoint] image live: core $(sed -n 's/^TC_COMMIT=//p' "$info"), world data" \
+                "$(sed -n 's/^WORLD_DATA_COMMIT=//p' "$info" | sed 's/^$/none/'), bots $(sed -n 's/^PLAYERBOTS=//p' "$info")"
+        fi
+        [ -f "$ETC/worldserver.conf.d/playerbot.conf.dist" ] \
+            || echo "[entrypoint] ERROR: image live has no bots: promote a PTR image (scripts/promote.sh, README, PTR)"
+        return 0
+    fi
+    [[ "$tag" == ptr-* ]] || return 0
+    [ -f "$ETC/worldserver.conf.d/playerbot.conf.dist" ] || problems+=("it has no bots (built without PLAYERBOTS=1)")
+    if [ -f "$info" ]; then
+        core="$(sed -n 's/^TC_COMMIT=//p' "$info")"
+        wd="$(sed -n 's/^WORLD_DATA_COMMIT=//p' "$info")"
+        bots="$(sed -n 's/^PLAYERBOTS=//p' "$info")"
+        if [[ "$tag" =~ ^ptr-([0-9a-f]{40})(-([0-9a-f]{40}|none))?$ ]]; then
+            want_core="${BASH_REMATCH[1]}"
+            want_wd="${BASH_REMATCH[3]:-}"
+            [ "$want_wd" = none ] && want_wd=""
+            [ "$core" = "$want_core" ] || problems+=("its core is ${core:-unknown}, the tag says $want_core")
+            [ -z "${BASH_REMATCH[2]}" ] || [ "$wd" = "$want_wd" ] \
+                || problems+=("its world data is ${wd:-none}, the tag says ${want_wd:-none}")
+        fi
+        [ "$bots" = 1 ] || [ "${#problems[@]}" -gt 0 ] || problems+=("it was built with PLAYERBOTS=${bots:-unset}")
+    fi
+    [ "${#problems[@]}" -gt 0 ] || { echo "[entrypoint] image $tag: built from what its tag says"; return 0; }
+    echo "[entrypoint] ERROR: image $tag is not the PTR build its tag names:"
+    printf '[entrypoint]   %s\n' "${problems[@]}"
+    echo "[entrypoint] Another app built it first. Remove that tag (docker image rm everlake-trinitycore:$tag),"
+    echo "[entrypoint] start the everlake-ptr app so it builds the image, then restart this one (README, PTR)."
+}
+
+# The bots' shared database (PLAYERBOT_DB, default `playerbot`; the worldserver's Playerbot.SharedDatabase must name the
+# same one): docker/mysql-init creates `playerbot` on a new MySQL volume, docker/mysql-init/02-playerbot.sh on an
+# existing one, scripts/ptr-setup.sh the PTR's `playerbot_ptr`. Its schema and static data (names, templates, dungeon
+# routes) are loaded here once, as the TrinityCore user; the module applies its own migrations (sql/playerbot_v2) when
+# worldserver starts. Bots also need the navigation meshes (mmaps) and MMAP_PATHFINDING=1, or they stand still.
+prepare_playerbot_db() {
+    local sql=/src/TrinityCore/sql/playerbot_shared db="${PLAYERBOT_DB:-playerbot}"
+    [ -f "$sql/playerbot_shared_schema.sql" ] || return 0
+    # SHOW DATABASES lists only the databases this user has rights on
+    if [ "$(mysql_q "SHOW DATABASES LIKE '$db'")" != "$db" ]; then
+        echo "[entrypoint] ERROR: database '$db' is missing or not granted to ${DB_USER}."
+        echo "[entrypoint] Existing MySQL volume: run docker/mysql-init/02-playerbot.sh once (README, Bots); PTR: scripts/ptr-setup.sh."
+        exit 1
+    fi
+    if [ "$(mysql_q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$db'")" = "0" ]; then
+        echo "[entrypoint] loading the bots' schema and static data into $db (once)..."
+        # the schema file names its database (CREATE DATABASE / USE `playerbot`): load it under ours
+        sed -E "s/^(CREATE DATABASE .*|USE )\`playerbot\`/\1\`$db\`/" "$sql/playerbot_shared_schema.sql" \
+            | MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER"
+        MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" "$db" < "$sql/playerbot_shared_data.sql"
+        echo "[entrypoint] $db ready"
+    fi
+    if [ "${MMAP_PATHFINDING:-0}" != 1 ] || [ ! -d "$ROOT/data/mmaps" ]; then
+        echo "[entrypoint] WARNING: bots need mmaps in the data folder and MMAP_PATHFINDING=1, or they cannot walk (README, Bots)."
+    fi
 }
 
 configure_bnetserver() {
@@ -143,9 +249,7 @@ configure_bnetserver() {
     setkey "$f" LogsDir "\"$ROOT/logs\""
     setkey "$f" Realm.CfgContentSetID 137
     setkey "$f" Realm.SuperDistrictID 2
-    # The core's auth update 2026_11_07_00 moves the realms to 70862 (Battle.net's 2026-11-07 update, same game data).
-    # Clients still on 70790 (a frozen test copy, a player who hasn't updated) keep seeing and joining them.
-    setkey "$f" Realm.AlsoAcceptBuilds '"70790"'
+    setkey "$f" Realm.AlsoAcceptBuilds "\"$ALSO_ACCEPT_BUILDS\""
     apply_overrides "$f" bnetserver
 }
 
@@ -238,14 +342,31 @@ update_realmlist() {
     echo "[entrypoint] realm ${REALM_ID}: address=${PUBLIC_ADDRESS} localAddress=${REALM_LOCAL_ADDRESS} port=${WORLD_PORT}"
 }
 
+# SQL errors go to logs/DBErrors.log only (about a million harmless ones per start), so an abort over a database
+# error ("Your database structure is not up to date", MySQLConnection.cpp) shows nothing on the console. worldserver
+# empties the file when it starts: print how the previous run's ended first, so the log viewer has it.
+show_last_sql_errors() {
+    local f="$ROOT/logs/DBErrors.log"
+    [ -s "$f" ] || return 0
+    echo "[entrypoint] the previous run's last SQL errors (logs/DBErrors.log):"
+    tail -n 15 "$f" | cut -c1-400 | sed 's/^/[entrypoint]   /'
+}
+
 case "${1:-worldserver}" in
     worldserver)
         shift || true
+        show_last_sql_errors
+        check_image_build
         configure_worldserver
         write_client_build_override
         check_data
         wait_for_mysql
-        exec "$ROOT/bin/worldserver" -c "$ETC/worldserver.conf" "$@"
+        prepare_playerbot_db
+        # worldserver looks for its config folder in the working directory (bin/worldserver.conf.d), not beside
+        # worldserver.conf, so without this the bots' settings were never read (World.Enable=0 at start)
+        conf_d=()
+        [ -d "$BOT_CONF_DIR" ] && conf_d=(--config-dir "$BOT_CONF_DIR")
+        exec "$ROOT/bin/worldserver" -c "$ETC/worldserver.conf" "${conf_d[@]}" "$@"
         ;;
     bnetserver)
         shift || true
