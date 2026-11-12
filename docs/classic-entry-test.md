@@ -44,3 +44,46 @@ sudo bash scripts/classic-terrain-isolation.sh restore /tmp/everlake-classic-ter
 ```
 
 The restore directory is separate from the earlier flag backup. This experiment is not a release mode and must not be left disabled as the solution.
+
+## Result with default activation disabled
+
+On 2026-11-12, a separate test account entered Forever's Northshire successfully
+with the same client and overlay. Classic then crashed at `Load Map Begin : 0`
+with EXC_BAD_ACCESS 0x878; the first ten relative stack frames match the earlier
+crash. The host check confirms zero Classic terrain activation rows, with only
+stock map 0 defaults 736, 1066 and 1190 remaining. Map 9000 is still advertised,
+with parent 0, WDT 40011612 and Flags1=1536. Removing the default swap alone did
+not fix world entry.
+
+## Isolate the custom map's parent relationship
+
+The core registers maps with `ParentMapID != -1` in its terrain-swap registry
+separately from loading default activation rows (`ObjectMgr::LoadPhases`). This
+motivates a narrower comparison; it does not establish the client's crash cause.
+Temporarily set only Map 9000's parent to -1 while activation stays disabled:
+
+```sh
+sudo bash scripts/classic-parent-isolation.sh detach
+```
+
+This diagnostic checks the isolated realm, map and hotfix identity, refuses active
+Classic defaults, saves the original map row, stops only Classic, changes the
+parent and advances the advertised hotfix revision, then restarts Classic. It
+refuses revision overflow. No client files, character rows or other realms change.
+
+Fully quit the game, reconnect to Classic, and try Alden Classicbrook. Inspect the
+received Map 9000 hotfix for ParentMapID=-1 before interpreting the result. A
+successful entry would only verify base terrain, not Classic terrain. If it still
+crashes, preserve the report and compare the stack; do not call this a fix.
+
+Restore the relationship **before** restoring terrain activation:
+
+```sh
+sudo bash scripts/classic-parent-isolation.sh restore
+sudo bash scripts/classic-terrain-isolation.sh restore /tmp/everlake-classic-terrain.XXXXXXXX
+```
+
+Use the actual terrain backup path printed by the earlier disable command.
+The parent restore uses the guarded original value 0 and a fresh hotfix revision.
+The earlier flags experiment remains separate. Do not release until the intended
+Classic terrain is active and world entry, terrain, collision and relog pass.
