@@ -29,8 +29,8 @@ services:
   tracker:
     build:
       # the fork at a pinned commit (bump on purpose, like the core)
-      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-a77090dc75e04190e91f945a61976386788b58e7}
-    image: forever-tracker:${TRACKER_COMMIT:-a77090dc75e04190e91f945a61976386788b58e7}
+      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-30487b74e72e37c2f1bf3a5ebc7a4ef4dccfcbcb}
+    image: forever-tracker:${TRACKER_COMMIT:-30487b74e72e37c2f1bf3a5ebc7a4ef4dccfcbcb}
     networks: [everlake]
     restart: unless-stopped
     depends_on:
@@ -53,6 +53,8 @@ services:
       FT_LANGUAGES: en   # English only: no French names (the upstream tool is French first) and no language switch
       FT_PUBLIC: ${TRACKER_PUBLIC:-0}
       FT_LOCATE: ${TRACKER_LOCATE:-1}
+      # Season of Discovery rune abilities the Forever client still carries: never offered at trainers
+      FT_FORGE_TRAINER_SKIP_IDS: ${TRACKER_TRAINER_SKIP_IDS:-400000-499999}
     ports:
       - "${TRACKER_PORT:-8090}:80"
     volumes:
