@@ -37,7 +37,7 @@ services:
       - ./scripts:/ptr/scripts:ro
 
   ptr-mmaps:
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-3a898a851df254d7b3080c68e091adc18f0bd908}
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
     pull_policy: never   # built by worldserver-ptr
     restart: "no"
     entrypoint: ["/usr/local/bin/extract.sh"]
@@ -56,10 +56,10 @@ services:
         # core fork commit: everlake (forever + forever-bots + Playerbot.AccountPrefix, PR #4 merged)
         TC_COMMIT: ${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}
         # the live realm's world import (.env), so the PTR image is exactly the next live image
-        WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-3a898a851df254d7b3080c68e091adc18f0bd908}
+        WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
         PLAYERBOTS: "1"
         BUILD_JOBS: ${PTR_BUILD_JOBS:-32}
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-3a898a851df254d7b3080c68e091adc18f0bd908}
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
     command: ["worldserver"]
     networks: [everlake]
     restart: unless-stopped
@@ -75,7 +75,7 @@ services:
       DB_USER: ${DB_USER:-trinity}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       MMAP_PATHFINDING: "1"   # the bots walk on the navigation meshes
-      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-3a898a851df254d7b3080c68e091adc18f0bd908}
+      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PLAYERBOT_DB: playerbot_ptr   # the entrypoint loads the bots' schema into it on the first start
       TC_REALM_ID: "73"
