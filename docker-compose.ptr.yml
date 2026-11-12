@@ -7,8 +7,8 @@
 #
 # A TrueNAS custom app of its own beside the running "everlake" app, from the same folder; it never edits that app.
 # Everything that needs Docker happens inside this app, so nobody runs docker or sudo on the host:
-#   - worldserver-ptr's image is built from this folder when it is missing, with the bots on and the live realm's
-#     WORLD_DATA_COMMIT. Its tag names both commits (ptr-<core>-<world data or none>), so a new one is built on the
+#   - worldserver-ptr's image is built from this folder when it is missing, with the bots on and the world data pinned
+#     below (PTR_WORLD_DATA_COMMIT in .env overrides it; the live realm's WORLD_DATA_COMMIT does not). Its tag names both commits (ptr-<core>-<world data or none>), so a new one is built on the
 #     next start (that start takes as long as the build).
 #   - ptr-init sets up the databases and the realm row (scripts/ptr-setup.sh init, MySQL's root over the network)
 #   - ptr-mmaps builds the bots' navigation meshes into the data folder when there are none yet
@@ -37,7 +37,7 @@ services:
       - ./scripts:/ptr/scripts:ro
 
   ptr-mmaps:
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${PTR_WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
     pull_policy: never   # built by worldserver-ptr
     restart: "no"
     entrypoint: ["/usr/local/bin/extract.sh"]
@@ -55,11 +55,12 @@ services:
       args:
         # core fork commit: everlake (forever + forever-bots + Playerbot.AccountPrefix, PR #4 merged)
         TC_COMMIT: ${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}
-        # the live realm's world import (.env), so the PTR image is exactly the next live image
-        WORLD_DATA_COMMIT: ${WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
+        # the world import to try next (wow-everlake-world-data). Its own variable: .env's WORLD_DATA_COMMIT is the live
+        # realm's and must not hold the PTR back. promote.sh then takes this image, world data included, live.
+        WORLD_DATA_COMMIT: ${PTR_WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
         PLAYERBOTS: "1"
         BUILD_JOBS: ${PTR_BUILD_JOBS:-32}
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${PTR_WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
     command: ["worldserver"]
     networks: [everlake]
     restart: unless-stopped
@@ -75,7 +76,7 @@ services:
       DB_USER: ${DB_USER:-trinity}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       MMAP_PATHFINDING: "1"   # the bots walk on the navigation meshes
-      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
+      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-343fe6fb95076e09575156c8b88d155914003b78}-${PTR_WORLD_DATA_COMMIT:-68a2d82ea0057f6bb53134949ccb9e7329268236}
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PLAYERBOT_DB: playerbot_ptr   # the entrypoint loads the bots' schema into it on the first start
       TC_REALM_ID: "73"
