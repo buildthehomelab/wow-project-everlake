@@ -55,6 +55,18 @@ the work list shows each fix once, and the analysis asks Wowhead for the names o
 (`FT_WOWHEAD`, on by default; quests Wowhead does not know are hidden tracking quests). The first start of that image
 analyses again by itself; the quest lookup makes that run longer the first time, then it is cached.
 
+Since fork `30487b74`:
+
+- **Forge to live.** Fixes are applied and tested on the PTR (the tracker writes only `world_ptr`). Forge › History ›
+  *Data repo .sql* (or *All applied, as data repo files*) exports an applied operation as a world update file,
+  `sql/world/YYYY_MM_DD_900_world_everlake_forge_<op>_<kind>.sql`, for wow-everlake-world-data. Check the open
+  world-data PRs for the same rows first, then commit it there; it reaches the PTR and the live realm through their
+  world-data pins like every other file. The file is safe on the PTR too (it skips what is already there). Spawns use
+  guids `910000000 + op x 10000`, clear of the import block. Hotfix rows are not exported. Details: the fork's
+  `docs/DATA-REPO.md`.
+- **Trainer fixes** never offer talents, always require the previous rank, and skip `TRACKER_TRAINER_SKIP_IDS`
+  (default `400000-499999`, the Season of Discovery runes in the client). The first start re-analyses once.
+
 ## Not used here
 
 - ForeverScribe (records vendors, loot and quest givers while playing on the official realms): the container has
