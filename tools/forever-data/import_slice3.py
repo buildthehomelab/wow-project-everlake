@@ -332,7 +332,9 @@ def trainers(cur, W, gaps, recs, pick, sl, hold, review):
              "the trainer flag and a gossip option, and gossip menus are hand work (docs/forever-import.md)")
 
 
-def vendors(cur, W, gaps, pick, sl, hold):
+def vendors(cur, W, gaps, pick, sl, hold, flags=None):
+    """Vendor items from EG Link's chosen window. flags: the vendors' npcflag, for creatures not in the world yet (slice 5's
+    new NPCs); by default the world's."""
     rows, ids_sql = candidates.rows, candidates.ids_sql
     npcs = {g["npc"] for c in ("vendor_items_missing", "vendors_no_stock") for g in gaps[c]}
     stock = collections.defaultdict(list)
@@ -343,7 +345,8 @@ def vendors(cur, W, gaps, pick, sl, hold):
         for r in rs:
             if r["item"] < 0:
                 listed_by[-r["item"]].add(e)
-    flags = {r["entry"]: int(r["npcflag"]) for r in rows(cur, f"SELECT entry, npcflag FROM {W}creature_template WHERE entry IN ({ids_sql(npcs)})")}
+    if flags is None:
+        flags = {r["entry"]: int(r["npcflag"]) for r in rows(cur, f"SELECT entry, npcflag FROM {W}creature_template WHERE entry IN ({ids_sql(npcs)})")}
     items = set()
     for n in npcs:
         _, _, d = pick[n]
