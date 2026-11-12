@@ -1,5 +1,5 @@
 #!/bin/bash
-# Realm 2 ("Everlake Two", realm id 71) beside realm 1 ("Everlake", realm id 70) on the same login server.
+# Realm 2 ("Classic", realm id 71) beside realm 1 ("Forever", realm id 70) on the same login server.
 # Gate 5 tests 4 to 6 in docs/era-data.md: one Forever client switching between two realms that send different
 # client data. Run it from the checkout that holds .env and the running containers (it uses `docker compose exec`).
 #
@@ -74,7 +74,7 @@ case "${1:-}" in
         kit="${2:-}"
         [ -f "$kit" ] || { echo "usage: $0 classic <kit .sql or .sql.gz>"; exit 1; }
         root_sql -N -e "SHOW DATABASES LIKE 'hotfixes2'" | grep -q hotfixes2 || { echo "[classic] run '$0 dbs' first"; exit 1; }
-        echo "[classic] auth <- 2026_11_07_06_auth_realm2.sql (row 71 = Everlake Two, the Roleplay card)"
+        echo "[classic] auth <- 2026_11_07_06_auth_realm2.sql (row 71 = Classic, the Classic card)"
         root_sql auth < "$SQL/2026_11_07_06_auth_realm2.sql"
         root_sql auth -e "UPDATE realmlist SET allowedSecurityLevel = ${CLASSIC_SECURITY:-3} WHERE id = 71;"
         echo "[classic] hotfixes2 <- $(basename "$kit") (about 89,000 rows, a minute or so)"

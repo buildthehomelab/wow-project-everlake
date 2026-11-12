@@ -1,4 +1,4 @@
-# Realm 2 ("Everlake Two", realm id 71) on the same login server as realm 1: gate 5 tests 4-6
+# Realm 2 ("Classic", realm id 71) on the same login server as realm 1: gate 5 tests 4-6
 # (docs/era-data.md). Same image and world database as realm 1, its own characters and hotfix databases
 # (characters2, hotfixes2: scripts/realm2-setup.sh), port 8095 and logs volume. Bots stay on realm 1.
 #   docker compose -f docker-compose.yml -f docker-compose.realm2.yml up -d worldserver2
@@ -27,7 +27,7 @@ services:
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       TC_REALM_ID: "71"
       TC_WORLD_SERVER_PORT: "8095"
-      TC_REALM_CFG_CONTENT_SET_ID: "138"   # the Roleplay ruleset card in the client's realm picker (only the card)
+      TC_REALM_CFG_CONTENT_SET_ID: "138"   # the 2nd ruleset card, "Classic" (Blizzard's Roleplay card, renamed by hotfix)
       TC_CHARACTER_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};characters2"
       TC_HOTFIX_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};hotfixes2"
       TC_PLAYERBOT_WORLD_ENABLE: "0"
