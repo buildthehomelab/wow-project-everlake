@@ -107,8 +107,9 @@ RUN mkdir -p /world-data \
         && for f in /src/world-data/sql/world/*; do \
             [ -e "$f" ] || continue; \
             [ -f "$f" ] || { echo "world data: $f is not a file"; exit 1; }; \
-            # only our own names: they can never replace or clash with one of the fork's update files
-            case "$(basename "$f")" in [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9]_world_everlake_import_*.sql|[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9][0-9]_world_everlake_*.sql) ;; \
+            # update-file names only (YYYY_MM_DD_NN or _NNN, world_everlake_*); the runtime stage refuses any name the
+            # image already has, so a world-data file can never replace one of the fork's update files
+            case "$(basename "$f")" in [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9]_world_everlake_*.sql|[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9][0-9]_world_everlake_*.sql) ;; \
                 *) echo "world data: unexpected file name $f"; exit 1 ;; esac; \
             cp "$f" /world-data/; \
         done \
@@ -139,8 +140,17 @@ COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql sql/everlake/2026_11_0
      /src/TrinityCore/sql/custom/hotfixes/
 # Our world rules as update files: dynamic respawn groups (quest targets, herb and ore nodes)
 COPY sql/everlake/2026_11_09_00_world_dynamic_respawn.sql /src/TrinityCore/sql/custom/world/
-# The world import's update files (empty unless WORLD_DATA_COMMIT is set; see the worlddata stage)
-COPY --from=worlddata /world-data/ /src/TrinityCore/sql/custom/world/
+# The world import's update files (empty unless WORLD_DATA_COMMIT is set; see the worlddata stage). Each name must be
+# new to the image: the fork names some of its own files world_everlake_* too, and a plain COPY would overwrite them.
+COPY --from=worlddata /world-data/ /tmp/world-data/
+RUN for f in /tmp/world-data/*; do \
+        [ -e "$f" ] || continue; \
+        b="$(basename "$f")"; \
+        clash="$(find /src/TrinityCore/sql -name "$b" -print -quit)"; \
+        [ -z "$clash" ] || { echo "world data: $b would replace $clash"; exit 1; }; \
+        mv "$f" /src/TrinityCore/sql/custom/world/; \
+    done \
+    && rmdir /tmp/world-data
 # worldserver's auto-setup imports TDB_full_*.sql from its working directory
 COPY --from=tdb /tdb/ /opt/trinitycore/bin/
 COPY docker/entrypoint.sh docker/extract.sh /usr/local/bin/
