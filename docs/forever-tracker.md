@@ -67,6 +67,10 @@ Since fork `30487b74`:
 - **Trainer fixes** never offer talents, always require the previous rank, and skip `TRACKER_TRAINER_SKIP_IDS`
   (default `400000-499999`, the Season of Discovery runes in the client). The first start re-analyses once.
 
+Since fork `94c8da34`, the analysis also asks Wowhead about every new item and trainer spell the server lacks: items
+Wowhead marks as Season of Discovery leftovers, or does not know, move to *Internal / test*, and such spells are never
+offered at trainers. The first start re-analyses; checking ~7,000 items takes about an hour the first time (cached after).
+
 ## Not used here
 
 - ForeverScribe (records vendors, loot and quest givers while playing on the official realms): the container has
