@@ -11,6 +11,7 @@ release (the `tc_*` tables here); every other source is a view of the live game.
 | Load the fork's world | `load_tc.py` | `tc_<table>` (TrinityCore layout): the release plus the fork's `sql/updates` and `sql/custom` world files, run as Everlake's worldserver runs them; `tc_updates` lists every update file in it |
 | Load DatabaseForever's world | `load_dbf.py` | `dbf_<table>` (its own, older TrinityCore layout): EmuForever's world database, to compare with |
 | What Everlake's world lacks | `gap_report.py [--zone NAME] [--world SCHEMA.PREFIX]` | `reports/everlake-gaps.md` + `.json` |
+| What NorgannonDB adds, who else backs it | `norgannondb_report.py [--world ...] [--data DIR] [--tracker CSV] [--write DIR --name FILE]` | `reports/norgannondb-coverage.md` + `.json`; with `--write`, a vendor stock file in a world-data clone |
 | Write an import slice | `import_slice1.py` ... `import_slice4.py` | update files, review and held-back lists in `world-data/` (gitignored) |
 | Dry-run them | `import_dryrun.py` | two worlds in `acore_world_dryrun` (`elscratch_*`, `elstep_*`), `world-data/slices/<newest>/dry-run.md` |
 
@@ -60,7 +61,7 @@ Every `src_` table has the same columns: `tbl` (the source's table or file), `n`
 | `src_wago` | Forever client tables through [wago.tools](https://wago.tools) (areas, maps, taxis, factions, sounds, spells, items, skill lines, mounts and player conditions). Use `--only wago --wago-build` to reproduce a specific spell acquisition comparison. | Blizzard data |
 | `src_live_hotfixes` | Live Forever's hotfix cache (`DBCache.bin`, [public mirror](https://storage.googleapis.com/raidbots-static/wow/forever/enUS/DBCache.bin) that [wowsims/forever](https://github.com/wowsims/forever) builds from): every hotfixed record live sends (spells, talents, items, TACT keys). `tbl` = table hash, `id` = record, `ref` = push; record bytes raw (hex), decoding needs the build's layouts. Pinned per content (`<build>-<sha>`), `--only live-hotfixes` alone. Reader: [`tools/live-hotfixes`](../live-hotfixes/README.md) | Blizzard data |
 | `src_wowhead`, `src_wowhead_tooltips` | Wowhead's public Forever tooltips (quests, NPCs, objects, items, spells) | reference only |
-| `src_norgannondb` | [NorgannonDB v1.4.7](https://github.com/zmarotrix/NorgannonDB/releases/tag/v1.4.7): quests, NPCs, objects, items and recipes | GPL-3.0; pinned NOTICE identifies bundled sources |
+| `src_norgannondb` | [NorgannonDB](https://github.com/zmarotrix/NorgannonDB) at commit `a2a5bcf103` (generated 2026-11-11, schema 1.5): quests, NPCs, objects, items, recipes, class `training` (`k` = `CLASS:spell`), `instances` (bosses in order with their own loot, Forever's own instances from DungeonJournal) and `loot_tables`. Compiled from QuestieDB, pfQuest, DungeonJournal, cmangos classic-db and its Collector, so it is never a second witness for those (see `norgannondb_report.py`) | GPL-3.0; pinned NOTICE identifies bundled sources |
 | `src_everloot` | [Everloot](https://everloot.app/docs/api): aggregate drop rates with sample counts and a separate build-specific settled-coverage index | CC BY-SA 4.0, with attribution on each drop row |
 | `src_zephras_talents` | [Zephras talent export](https://zephras.com/data/): latest versioned class and Legacy talent JSON and its index | CC BY 4.0 for Zephras's work; Blizzard content excluded |
 | Pinned files only | [Sakhwoow/WoWForever](https://github.com/Sakhwoow/WoWForever/tree/forever): custom world and hotfix SQL for diffing against the core | GPL-2.0 repository; upstream comparison |
@@ -81,6 +82,11 @@ python3 load_sources.py --only norgannondb,everloot,zephras-talents
 NorgannonDB is included in the usual pin run. Everloot, Zephras and the Sakhwoow SQL snapshot are opt-in.
 NorgannonDB's entity rows carry the upstream `_provenance` label. A Questie or pfQuest label shares that
 source's evidence. A collector label applies to the record and does not establish the origin of every field.
+`norgannondb_report.py` measures it against QuestieDB and Wowhead, against the world (`--world`, e.g. the dry run's
+`acore_world_dryrun.elstep_`) and the Forever Tracker's work list (`--tracker`, its To add > Export CSV), and splits each
+drop or stock line the world lacks by who else shows it: EG Link or ForeverDB.net (a vendor its players saw on Forever)
+count as independent; QuestieDB, QuestieTrace and forever-db are NorgannonDB's own origin; Icy Veins is reference only.
+`--write` writes the independent, unlimited money-priced vendor lines no world-data file names yet.
 Everloot's aggregate drop rows are distinct from its build-specific consensus list. The Zephras export contains
 talents and Legacy data. These three tables are available for comparison before any candidate weighting or import.
 Sakhwoow files stay in the snapshot directory for row-by-row diffing. The loader does not execute their SQL.
