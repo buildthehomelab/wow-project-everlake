@@ -87,3 +87,52 @@ Use the actual terrain backup path printed by the earlier disable command.
 The parent restore uses the guarded original value 0 and a fresh hotfix revision.
 The earlier flags experiment remains separate. Do not release until the intended
 Classic terrain is active and world entry, terrain, collision and relog pass.
+
+## Detached-parent result and full-detail candidate
+
+On 2026-11-12, Alden Classicbrook entered Classic's Northshire twice, with a
+logout between attempts, after the client received push 9690002 and parent -1.
+Activation remained disabled. This verified base-world entry, not Classic terrain.
+
+The original crash instruction dereferences a null texture-resource pointer at
+`0x10123c598` (unslid arm64 address, client UUID
+`18AE944B-BDC7-339E-9060-37F9F59F775F`). Local inspection of loaded executable code
+traces this resource to the terrain tile-loading path. The low-detail constructor
+can omit that resource; the subsequent readiness check accesses it unconditionally.
+The packaged donor WDT MPHD flags are 584 (0x248), with no LoadLodAdt bit 0x100;
+the installed base WDT has that bit. The client's WDT loader derives its low-detail
+mode from that bit and the parent map. This is evidence for a low-detail mismatch,
+not yet proof that the candidate resolves every terrain issue.
+
+The core defines MapFlags `DisableLowDetailTerrain = 0x00200000`; inspection of
+this exact client confirms it reads that flag into terrain-loader state. The
+candidate adds this flag to map 9000's split-ADT flags, restores parent 0 and adds
+the Classic default swap in one transaction across the isolated schemas.
+It changes no assets or executable code. Full-resolution tiles remain packaged.
+
+```sh
+sudo bash scripts/classic-full-detail-terrain.sh apply
+```
+
+Apply requires the exact tested baseline: parent -1, Flags1=1536 and no activation
+for map 9000. It backs up the map row, stops only Classic, updates the map and
+activation in one transaction, advertises a fresh hotfix revision and restarts
+Classic. It refuses unexpected state and uint32 revision overflow.
+
+Fully quit and relaunch the game. Verify the received map has parent 0,
+Flags1=2098688 and WDT 40011612. Enter Classic, confirm pre-Shattering terrain at
+recognizable changed locations, walk across tile boundaries, check ground/building
+collision, and repeat after logout and a full restart. Check other starting zones
+covered by the Eastern Kingdoms overlay and revisit Forever to verify separation.
+Character selection, base terrain and hash integrity alone are not release gates.
+
+If it fails, return to the last working diagnostic baseline:
+
+```sh
+sudo bash scripts/classic-full-detail-terrain.sh rollback
+```
+
+Rollback requires the exact candidate registration and activation comment. It
+removes only this activation, restores parent -1 and Flags1=1536, and advertises a
+new revision. Do not combine the earlier restore commands with this candidate.
+Do not promote this to provisioning SQL or release until live validation passes.
