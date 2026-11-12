@@ -50,7 +50,7 @@ FOREVER_DB_TABLES = ("npc", "object", "quest", "quest_start", "quest_end", "ques
                      "spawn", "item", "item_source", "ui_map", "mechanic", "step")
 WAGO_TABLES = ("AreaTable", "AreaPOI", "GameObjects", "Light", "LightParams", "SoundAmbience", "TaxiNodes", "TaxiPath",
                "TaxiPathNode", "ZoneIntroMusicTable", "ZoneMusic", "Faction", "FactionTemplate", "SoundKit", "SoundKitEntry",
-               "UiMap", "UiMapAssignment", "Map")
+               "UiMap", "UiMapAssignment", "Map", "CreatureDisplayInfo", "GameObjectDisplayInfo")
 
 SOURCES = {
     "eg-link": {
@@ -650,7 +650,7 @@ def main():
             save(manifest)
     if only is not None:
         for name, pinner in {"live-hotfixes": pin_live_hotfixes, "everloot": pin_everloot,
-                             "zephras-talents": pin_zephras_talents}.items():
+                             "zephras-talents": pin_zephras_talents, "wago": pin_wago}.items():
             if name in only:
                 pinner(manifest)
                 save(manifest)

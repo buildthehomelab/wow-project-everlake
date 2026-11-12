@@ -74,6 +74,12 @@ REFERENCES = {
     "quest_objectives": [("QuestID", "quest_template", "ID")],
     "trainer_spell": [("TrainerId", "trainer", "Id")],
     "npc_vendor": [("entry", "creature_template", "entry")],
+    "creature": [("id", "creature_template", "entry")],
+    "gameobject": [("id", "gameobject_template", "entry")],
+    "creature_template_difficulty": [("Entry", "creature_template", "entry")],
+    "creature_template_model": [("CreatureID", "creature_template", "entry")],
+    "creature_classic_level": [("entry", "creature_template", "entry")],
+    "gameobject_questitem": [("GameObjectEntry", "gameobject_template", "entry")],
 }
 
 
@@ -399,6 +405,11 @@ def main():
     for _, m in manifests:
         for cat, v in m["outcomes"].items():
             outcomes[cat].update(v)
+
+    def outcome(cat, q):
+        """A gap's decision; a per-item gap (npc/item) may be decided for all of an NPC's items as npc/*."""
+        got = outcomes.get(cat, {})
+        return got.get(q) or (got.get(q.split("/")[0] + "/*", "") if cat in PER_ITEM else "")
     slice_categories = [c for _, m in manifests for c in m["outcomes"]]
     slice_categories = list(dict.fromkeys(slice_categories))
     closed, left, unexplained, new = {}, {}, [], []
@@ -406,21 +417,21 @@ def main():
         b, a = gaps["before"].get(cat, set()), gaps["after"].get(cat, set())
         # a quest may move from "no giver" to "other givers" when only some of the vote's givers could be added, and a
         # drop from "no loot table" to "loot short" when its NPC got a table with other drops
-        moved = {q for q in a - b if outcomes.get(cat, {}).get(q, "").split(":")[0] in ("review", "held back")}
+        moved = {q for q in a - b if outcome(cat, q).split(":")[0] in ("review", "held back")}
         if a - b - moved:
             new.append(f"{cat}: {sorted(a - b - moved)[:10]}")
         if cat in slice_categories:
             closed[cat] = len(b - a)
             left[cat] = collections.Counter()
             for q in sorted(a):
-                why = outcomes.get(cat, {}).get(q, "")
+                why = outcome(cat, q)
                 kind = why.split(":")[0]
                 if kind in ("review", "held back", "kept"):
                     left[cat][kind] += 1
                 else:
                     unexplained.append(f"{cat} {q} ({why or 'no decision'})")
             for q in sorted(b - a):
-                why = outcomes.get(cat, {}).get(q, "")
+                why = outcome(cat, q)
                 moved_to = re.match(r"moved to (\w+): ", why)
                 if moved_to:            # e.g. a drop of an NPC that got a loot table, still short: now "loot short"
                     if q not in gaps["after"].get(moved_to.group(1), set()):
@@ -532,6 +543,29 @@ def references(cur, fork_tables, fixes):
         broken += [f"trainer list {t}: {col} {i} unknown to Forever's client spell tables" for t, i in cur.fetchall()]
     cur.execute(f"SELECT DISTINCT w.TrainerId FROM {rec} AND NOT EXISTS (SELECT 1 FROM `{STEP}creature_trainer` c WHERE c.TrainerID = w.TrainerId)")
     broken += [f"trainer list {t} is no creature's" for (t,) in cur.fetchall()]
+    # new templates: models in Forever's client (wago.tools' display tables of the pinned build), and each has a spawn
+    cur.execute(f"SELECT w.CreatureID, w.CreatureDisplayID FROM `{STEP}{isql.IMPORT_ROWS}` r JOIN `{STEP}creature_template_model` w "
+                f"ON r.k1 = w.CreatureID AND r.k2 = w.Idx WHERE r.tbl = 'creature_template_model' AND NOT EXISTS (SELECT 1 FROM "
+                f"`{FORK}`.src_wago x WHERE x.tbl = 'CreatureDisplayInfo' AND x.id = w.CreatureDisplayID)")
+    broken += [f"creature {e}: model {i} not in Forever's client" for e, i in cur.fetchall()]
+    cur.execute(f"SELECT w.entry, w.displayId FROM `{STEP}{isql.IMPORT_ROWS}` r JOIN `{STEP}gameobject_template` w ON r.k1 = w.entry "
+                f"WHERE r.tbl = 'gameobject_template' AND w.displayId <> 0 AND NOT EXISTS (SELECT 1 FROM `{FORK}`.src_wago x "
+                "WHERE x.tbl = 'GameObjectDisplayInfo' AND x.id = w.displayId)")
+    broken += [f"object {e}: model {i} not in Forever's client" for e, i in cur.fetchall()]
+    for tbl, spawn in (("creature_template", "creature"), ("gameobject_template", "gameobject")):
+        cur.execute(f"SELECT r.k1 FROM `{STEP}{isql.IMPORT_ROWS}` r WHERE r.tbl = %s AND NOT EXISTS (SELECT 1 FROM "
+                    f"`{STEP}{spawn}` c WHERE c.id = r.k1)", (tbl,))
+        broken += [f"{tbl} {e}: added with no spawn" for (e,) in cur.fetchall()]
+    # chest loot: items in the client's item list, and the table is a chest's
+    loot = "gameobject_loot_template"
+    rec = (f"`{STEP}{isql.IMPORT_ROWS}` r JOIN `{STEP}{loot}` w ON r.k1 = w.Entry AND r.k2 = w.ItemType AND r.k3 = w.Item "
+           f"WHERE r.tbl = '{loot}'")
+    cur.execute(f"SELECT w.Entry, w.Item FROM {rec} AND (w.ItemType <> 0 OR NOT EXISTS (SELECT 1 FROM `{FORK}`.src_forever_db x "
+                "WHERE x.tbl = 'item' AND x.id = w.Item))")
+    broken += [f"chest loot {e}: item {i} unknown to Forever's client data" for e, i in cur.fetchall()]
+    cur.execute(f"SELECT DISTINCT w.Entry FROM {rec} AND NOT EXISTS (SELECT 1 FROM `{STEP}gameobject_template` g WHERE g.type = 3 "
+                "AND g.Data1 = w.Entry)")
+    broken += [f"chest loot table {e} is no chest's" for (e,) in cur.fetchall()]
     cur.execute(f"SELECT w.entry, w.item FROM `{STEP}{isql.IMPORT_ROWS}` r JOIN `{STEP}npc_vendor` w ON r.k1 = w.entry AND r.k2 = w.item "
                 f"AND r.k3 = w.ExtendedCost AND r.k4 = w.type WHERE r.tbl = 'npc_vendor' AND (w.type <> 1 OR w.item <= 0 OR NOT EXISTS "
                 f"(SELECT 1 FROM `{FORK}`.src_forever_db x WHERE x.tbl = 'item' AND x.id = w.item))")
@@ -661,7 +695,86 @@ def simulate_slice3(cur, conn, manifest, ours, mapping, checks):
         checks.add("slice 3: nothing to simulate (no rows)", True)
 
 
-SIMULATIONS = {"slice1": simulate_slice1, "slice2": simulate_slice2, "slice3": simulate_slice3}
+def simulate_slice4(cur, conn, manifest, ours, mapping, checks):
+    """Slice 4 (spawns): the fork removes a spawn we added, or (on a realm where it came first) spawns the same NPC close to
+    one of our points."""
+    imp = next(f["name"] for f in manifest["files"] if f["kind"] == "import")
+    cur.execute(f"SELECT k1 FROM `{STEP}{isql.IMPORT_ROWS}` WHERE file = %s AND tbl = 'creature' ORDER BY k1 LIMIT 2", (imp,))
+    got = [r[0] for r in cur.fetchall()]
+    if len(got) < 2:
+        checks.add("slice 4: nothing to simulate (fewer than two spawns)", True)
+        return
+    gone, near = got
+    cur.execute(f"DELETE FROM `{STEP}creature` WHERE guid = %s", (gone,))
+    cur.execute(f"SELECT id, map, position_x, position_y, position_z FROM `{STEP}creature` WHERE guid = %s", (near,))
+    i, m, x, y, z = cur.fetchone()
+    cur.execute(f"DELETE FROM `{STEP}creature` WHERE guid = %s", (near,))
+    cur.execute(f"DELETE FROM `{STEP}{isql.IMPORT_ROWS}` WHERE tbl = 'creature' AND k1 = %s", (near,))
+    cur.execute(f"SELECT MAX(guid) + 1 FROM `{STEP}creature` WHERE guid < 900000000")
+    fork_guid = cur.fetchone()[0]
+    cur.execute(f"INSERT INTO `{STEP}creature` (guid, id, map, position_x, position_y, position_z, VerifiedBuild) VALUES (%s, %s, %s, %s, %s, %s, 70900)",
+                (fork_guid, i, m, x + 10, y, z))
+    conn.commit()
+    run_file(cur, conn, ours[imp].decode("utf-8"), mapping)
+    cur.execute(f"SELECT COUNT(*) FROM `{STEP}creature` WHERE guid IN (%s, %s)", (gone, near))
+    checks.add(f"after the fork removes spawn {gone} (ours), and where it spawned NPC {i} 10 yards from our point first, "
+               "a re-run adds neither", cur.fetchone()[0] == 0)
+
+
+def simulate_slice5(cur, conn, manifest, ours, mapping, checks):
+    """Slice 5 (new NPCs and objects): the fork takes one of our NPCs over (its own sniffed template under our entry, our
+    record still there), and on a realm where the fork added one of our objects first (its own template, nothing of
+    ours recorded): a run of our file adds nothing of ours next to them. A vendor and a chest with loot when there is one."""
+    imp = next(f["name"] for f in manifest["files"] if f["kind"] == "import")
+    for tbl, spawn, deps in (("creature_template", "creature", [("creature_template_difficulty", "Entry"), ("creature_template_model", "CreatureID"),
+                                                                ("creature_classic_level", "entry"), ("npc_vendor", "entry")]),
+                             ("gameobject_template", "gameobject", [("gameobject_questitem", "GameObjectEntry")])):
+        richer = ("EXISTS (SELECT 1 FROM `{0}npc_vendor` v WHERE v.entry = r.k1)" if spawn == "creature" else
+                  "EXISTS (SELECT 1 FROM `{0}gameobject_template` g JOIN `{0}gameobject_loot_template` l ON l.Entry = g.Data1 "
+                  "WHERE g.entry = r.k1 AND g.type = 3)").format(STEP)
+        cur.execute(f"SELECT r.k1 FROM `{STEP}{isql.IMPORT_ROWS}` r WHERE r.file = %s AND r.tbl = %s ORDER BY {richer} DESC, r.k1 LIMIT 1",
+                    (imp, tbl))
+        got = cur.fetchone()
+        if not got:
+            checks.add(f"slice 5: no {tbl} rows to simulate", True)
+            continue
+        entry = got[0]
+        # the realm before our file ran: the fork's own template there, none of our rows or records for it
+        cur.execute(f"SELECT guid FROM `{STEP}{spawn}` WHERE id = %s", (entry,))
+        guids = [r[0] for r in cur.fetchall()]
+        cur.execute(f"DELETE FROM `{STEP}{spawn}` WHERE id = %s", (entry,))
+        for g in guids:
+            cur.execute(f"DELETE FROM `{STEP}{isql.IMPORT_ROWS}` WHERE tbl = %s AND k1 = %s", (spawn, g))
+        for dep, col in deps:
+            cur.execute(f"DELETE FROM `{STEP}{dep}` WHERE `{col}` = %s", (entry,))
+            cur.execute(f"DELETE FROM `{STEP}{isql.IMPORT_ROWS}` WHERE tbl = %s AND k1 = %s", (dep, entry))
+        loot = None
+        if tbl == "gameobject_template":
+            cur.execute(f"SELECT Data1 FROM `{STEP}{tbl}` WHERE entry = %s AND type = 3 AND Data1 <> 0", (entry,))
+            got = cur.fetchone()
+            if got:
+                loot = got[0]
+                cur.execute(f"DELETE FROM `{STEP}gameobject_loot_template` WHERE Entry = %s", (loot,))
+                cur.execute(f"DELETE FROM `{STEP}{isql.IMPORT_ROWS}` WHERE tbl = 'gameobject_loot_template' AND k1 = %s", (loot,))
+        if spawn == "gameobject":          # the fork came first: nothing of ours recorded; else a takeover keeps our record
+            cur.execute(f"DELETE FROM `{STEP}{isql.IMPORT_ROWS}` WHERE tbl = %s AND k1 = %s", (tbl, entry))
+        cur.execute(f"UPDATE `{STEP}{tbl}` SET name = 'Fork copy', VerifiedBuild = 70900 WHERE entry = %s", (entry,))
+        conn.commit()
+        run_file(cur, conn, ours[imp].decode("utf-8"), mapping)
+        left = []
+        for t, col, v in [(spawn, "id", entry)] + [(d, c, entry) for d, c in deps] + ([("gameobject_loot_template", "Entry", loot)] if loot else []):
+            cur.execute(f"SELECT COUNT(*) FROM `{STEP}{t}` WHERE `{col}` = %s", (v,))
+            if cur.fetchone()[0]:
+                left.append(t)
+        cur.execute(f"SELECT name FROM `{STEP}{tbl}` WHERE entry = %s", (entry,))
+        name = cur.fetchone()[0]
+        how = "added" if spawn == "gameobject" else "took over"
+        checks.add(f"where the fork {how} {tbl} {entry} first, a run of our file adds nothing next to it and leaves it",
+                   not left and name == "Fork copy", f"added: {left}; name {name!r}")
+
+
+SIMULATIONS = {"slice1": simulate_slice1, "slice2": simulate_slice2, "slice3": simulate_slice3, "slice4": simulate_slice4,
+               "slice5": simulate_slice5}
 
 
 def report_md(r, manifests):
