@@ -103,12 +103,16 @@ SOURCES = {
     },
     "norgannondb": {
         "repo": "zmarotrix/NorgannonDB",
-        "branch": "v1.4.7",
+        # a commit, not a tag: the data is rebuilt between releases (2026-11-11: QuestieDB 1.0.15 with the Collector's
+        # finds, schema 1.5). NorgannonDB is QuestieDB + pfQuest + DungeonJournal + cmangos classic-db + its Collector,
+        # so it never counts as a second witness for what QuestieDB already says (docs/forever-import.md)
+        "branch": "a2a5bcf1031019093a3ad8a355ddab63cb630c65",
         "licence": "GPL-3.0; see NOTICE.md for bundled sources",
-        "credit": "Quest, NPC, item and recipe data from [NorgannonDB](https://github.com/zmarotrix/NorgannonDB), GPL-3.0. "
-                  "Its packed provenance and NOTICE accompany the pin.",
+        "credit": "Quest, NPC, item, recipe, training and instance data from [NorgannonDB](https://github.com/zmarotrix/NorgannonDB) "
+                  "by Maro, GPL-3.0, with DungeonJournal by Exehn (used with the author's permission, credited) and "
+                  "cmangos classic-db (GPL-3.0). Its packed provenance and NOTICE accompany the pin.",
         "files": ("LICENSE", "NOTICE.md", "SPEC.md", "data/info.lua", "data/provenance.lua", "data/quests.lua",
-                  "data/npcs.lua", "data/objects.lua", "data/items.lua", "data/recipes.lua"),
+                  "data/npcs.lua", "data/objects.lua", "data/items.lua", "data/recipes.lua", "data/world.lua"),
     },
     "sakhwoow-forever": {
         "repo": "Sakhwoow/WoWForever",

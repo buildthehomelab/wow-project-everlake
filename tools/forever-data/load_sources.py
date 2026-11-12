@@ -157,11 +157,31 @@ def read_norgannondb(pin, folder):
         if count != info["stats"][kind]:
             raise ValueError(f"NorgannonDB: expected {info['stats'][kind]} {kind}, read {count}")
     recipe_text = re.sub(r"^do local function f\(\) ", "", read("data/recipes.lua"), flags=re.M)
-    recipes = lua_data.assignments(recipe_text)["recipes"]
+    tables = lua_data.assignments(recipe_text)
+    recipes = tables["recipes"]
     if len(recipes) != info["stats"]["recipes"]:
         raise ValueError("NorgannonDB: unexpected recipe count")
     for key, row in recipes.items():
         yield "recipes", key, as_id(key), as_id(row.get("item")), row
+    # schema 1.5: what each class learns (from trainers the Collector saw, quests, books, levels); k = CLASS:spell
+    for cls, spells in (tables.get("training") or {}).items():
+        for spell, row in spells.items():
+            yield "training", f"{cls}:{spell}", as_id(spell), None, dict(row, **{"class": cls})
+    if "data/world.lua" in (pin.get("files") or ["data/world.lua"]):
+        # one generated table per line; only the ones the gap tools read (the rest are map and UI data)
+        wanted = {"instances": "instances", "lootTables": "loot_tables"}
+        found = {}
+        for line in read("data/world.lua").split("\n"):
+            m = re.match(r"do local function f\(\) NorgannonDB\.(\w+) = (.*) end f\(\) end$", line)
+            if m and m.group(1) in wanted:
+                found[m.group(1)] = lua_data.parse_value(m.group(2))
+        if set(found) != set(wanted) or len(found["instances"]) != info["stats"]["instances"]:
+            raise ValueError("NorgannonDB: world.lua lacks instances or loot tables, or the instance count is off")
+        for key, row in found["instances"].items():
+            # instance key ("deadmines", "sm-cathedral"); id = its area, when known; one boss list per wing
+            yield "instances", key, as_id(row.get("area")), None, row
+        for key, row in found["lootTables"].items():
+            yield "loot_tables", key, as_id(key), None, row
 
 
 def read_everloot(pin, folder):
