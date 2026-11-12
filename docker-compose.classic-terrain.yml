@@ -1,0 +1,12 @@
+# Override for the existing Roleplay test app, paired with docker-compose.realm2-app.yml.
+services:
+  worldserver2:
+    environment:
+      CLIENT_BUILD: ""
+      MMAP_PATHFINDING: "1"
+      TC_UPDATES_ENABLE_DATABASES: "0"
+      TC_UPDATES_AUTO_SETUP: "0"
+      TC_WORLD_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};world_classic"
+      TC_HOTFIX_DATABASE_INFO: "mysql;3306;${DB_USER:-trinity};${DB_PASSWORD};hotfixes_classic"
+    volumes:
+      - ${CLASSIC_DATA_DIR:?set CLASSIC_DATA_DIR to the isolated combined server data}:/opt/trinitycore/data:ro

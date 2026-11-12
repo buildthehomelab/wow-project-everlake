@@ -10,12 +10,12 @@
 ARG UBUNTU_VERSION=24.04
 # The core commit and the bots switch, declared here so the build stage uses them and the runtime stage records them
 # (/opt/trinitycore/image-build.env, checked by the entrypoint against the image tag it was started as).
-# The live realms: our fork's everlake branch with the bots (029c5dd9: forever 2ae1313e + forever-bots + the 92 reviewed
-# advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-D #23 #24 #26 #28, Karrz v0.1.33 data #22 and scripts #25,
-# build fix #27), the
+# The live realms: our fork's everlake branch with the bots (343fe6fb: forever 2ae1313e + forever-bots + the 92 reviewed
+# advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-K #23 #24 #26 #28-#35, Karrz v0.1.33 data #22 and
+# scripts #25, build fix #27, Karrz v0.1.34 data #36, Ring of Law arena #37 and bot module #38), the
 # same commit the PTR builds (docker-compose.ptr.yml), so the live app and the PTR app build one identical image.
 # Client 1.60.1.70862 (realms on 70862; bnetserver and the worldservers also let 70790 in, docker/entrypoint.sh).
-ARG TC_COMMIT=029c5dd9caee8521eb27dbee2bd1fe515b31331e
+ARG TC_COMMIT=343fe6fb95076e09575156c8b88d155914003b78
 # PLAYERBOTS=1: the WoW Forever Bots module (src/modules/PlayerbotV2; the core commit must have it, as the fork's
 # everlake branch does since PR #2). 0 builds the core without bots.
 ARG PLAYERBOTS=1
@@ -108,7 +108,7 @@ RUN mkdir -p /world-data \
             [ -e "$f" ] || continue; \
             [ -f "$f" ] || { echo "world data: $f is not a file"; exit 1; }; \
             # only our own names: they can never replace or clash with one of the fork's update files
-            case "$(basename "$f")" in [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9]_world_everlake_import_*.sql) ;; \
+            case "$(basename "$f")" in [0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9]_world_everlake_import_*.sql|[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_[0-9][0-9][0-9]_world_everlake_*.sql) ;; \
                 *) echo "world data: unexpected file name $f"; exit 1 ;; esac; \
             cp "$f" /world-data/; \
         done \

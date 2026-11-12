@@ -11,7 +11,7 @@ release (the `tc_*` tables here); every other source is a view of the live game.
 | Load the fork's world | `load_tc.py` | `tc_<table>` (TrinityCore layout): the release plus the fork's `sql/updates` and `sql/custom` world files, run as Everlake's worldserver runs them; `tc_updates` lists every update file in it |
 | Load DatabaseForever's world | `load_dbf.py` | `dbf_<table>` (its own, older TrinityCore layout): EmuForever's world database, to compare with |
 | What Everlake's world lacks | `gap_report.py [--zone NAME] [--world SCHEMA.PREFIX]` | `reports/everlake-gaps.md` + `.json` |
-| Write an import slice | `import_slice1.py`, `import_slice2.py`, `import_slice3.py` | update files, review and held-back lists in `world-data/` (gitignored) |
+| Write an import slice | `import_slice1.py` ... `import_slice4.py` | update files, review and held-back lists in `world-data/` (gitignored) |
 | Dry-run them | `import_dryrun.py` | two worlds in `acore_world_dryrun` (`elscratch_*`, `elstep_*`), `world-data/slices/<newest>/dry-run.md` |
 
 Nothing here writes Everlake's own databases. The import (docs/forever-import.md) is written as ordinary update files,
@@ -62,6 +62,7 @@ Every `src_` table has the same columns: `tbl` (the source's table or file), `n`
 | `src_everloot` | [Everloot](https://everloot.app/docs/api): aggregate drop rates with sample counts and a separate build-specific settled-coverage index | CC BY-SA 4.0, with attribution on each drop row |
 | `src_zephras_talents` | [Zephras talent export](https://zephras.com/data/): latest versioned class and Legacy talent JSON and its index | CC BY 4.0 for Zephras's work; Blizzard content excluded |
 | Pinned files only | [Sakhwoow/WoWForever](https://github.com/Sakhwoow/WoWForever/tree/forever): custom world and hotfix SQL for diffing against the core | GPL-2.0 repository; upstream comparison |
+| `src_icyveins` | [Icy Veins' WoW Forever database](https://db.icy-veins.com/wow-forever/): one JSON per NPC from the API its pages use, with what players' addons recorded on live Forever. `tbl` `npc` = the creature row; the others are its relations, `id` = the NPC: `addon_points` (`ref` UiMap; x/y in tenths of a percent, players, reports, last build), `addon_levels`, `addon_drops` (`ref` item, chance), `addon_sells` (`ref` item, price), `addon_trains` (`ref` spell), `addon_quests` (`ref` quest, starts/ends), `addon_gossip`. Map points are sightings, not spawn rows. Fetched 2 a second, new NPCs first then refreshed after 14 days, missing ones re-checked after 7 (`pin_sources.py --icyveins-only`, `ICYVEINS_MAX`); a first full pull of about 15,800 NPCs takes about 2 hours | none stated: reference only, never named in import files (`import_sql.REFERENCE_ONLY`) |
 | `src_item_history` | Items and spells per build and hotfix ([ericbtaylorjr/forever-db](https://github.com/ericbtaylorjr/forever-db)) | none stated: reference only, never copied into Everlake |
 | `tc_*` | [TrinityCore `forever`](https://github.com/advocaite/TrinityCore/tree/forever) world release | GPL-2.0 |
 | `dbf_*` | [DatabaseForever](https://github.com/EmuForever/DatabaseForever): the world database of the [EmuForever](https://github.com/EmuForever/EmuForever) emulator, cut down to Forever content plus about 4,400 NPCs of its own (1,400 of them spawned, 15,700 spawns), loot, vendors and trainers. Its added spawns are placed from map pins (a 0.1% grid, all facing 0, 120 s respawn) | none stated: reference only, never copied into Everlake and never named in import files (`import_sql.REFERENCE_ONLY`) |
@@ -248,6 +249,77 @@ The import file adds a row only where it is missing, never again once added (a r
 trainer spell only while a creature uses the list, and a vendor item only while the vendor doesn't already sell the item
 at another price.
 
+## Import, slice 4: spawns
+
+`import_slice4.py --maps DIR` writes slice 4: spawns (`creature`, `gameobject`) for NPCs and objects that have a
+template but no spawn, and NPCs' spots far from every spawn they have (`npcs_not_spawned`, `objects_not_spawned`,
+`extra_spots`). `DIR` is Everlake's extracted maps folder (the worldserver's `data/maps`); `terrain.py` reads its
+`.map` tiles (version 10) the way the worldserver does (`GridMap`), terrain and water only.
+
+The user's decisions (2026-11-08):
+
+- A point comes from forever-db (QuestieDB's points, with a height where a CMaNGOS spawn stands within 3 yards) and goes
+  in only where a live Forever sighting of that NPC or object lies within 40 yards (EG Link's combat-log positions,
+  deaths, loot and windows on live builds). forever-db's points are largely Classic data: holiday and invasion NPCs,
+  test NPCs, WotLK ones. Only a few dozen of the 934 unspawned NPCs were ever seen live.
+- Nothing summoned (by the fork's SmartAI or a client spell) or, for an NPC the fork doesn't spawn, scripted.
+- A point with no height takes the terrain height, except in a dungeon or battleground, in water, or where a fork
+  spawn within 10 yards stands more than 2 yards off the ground (a building, bridge or cave). Checked against the
+  fork's own spawns: the terrain height is within a yard of 83% of them, median 0.08 yards.
+- A unique NPC (elite, rare, boss, or one that gives quests, sells or trains) with several points, or an extra spot next
+  to its spawn, goes to the review list: it may be one NPC on a patrol.
+- Guids from 900,000,000, creatures and objects each; a later slice continues after the manifest's `guids_used` and
+  above the live realm's highest guid (the worldserver gives a GM's `.npc add` the highest guid + 1, inside this block
+  once these spawns are in).
+
+Values no source has: orientation 0 and rotation (0, 0, 0, 1); an extra spot copies its phases, difficulty, equipment,
+respawn and wandering from the NPC's nearest fork spawn (standing still where that one walks a path); a new NPC takes
+the commonest respawn and wandering of the fork's NPCs of its classification on that map, an object those of its type.
+The import file adds a spawn only while the fork has no spawn of the same NPC or object within 40 yards but ours, and
+never again once added.
+
+## Import, slice 5: new NPCs and objects
+
+`import_slice5.py --maps DIR` writes slice 5: templates for NPCs and objects Forever uses that the world lacks
+(`missing_npcs`, `objects_missing`), with everything they need to stand in the world: `creature_template`,
+`creature_template_difficulty`, `creature_template_model`, `creature_classic_level` (the fork's own level table, which
+it fills for its own Forever NPCs), the new merchants' `npc_vendor` stock, `gameobject_template`,
+`gameobject_questitem` and a chest's `gameobject_loot_template`, and their spawns (`creature`, `gameobject`).
+
+The user's decisions (2026-11-08):
+
+- Only what also gets a spawn, by slice 4's rule (a forever-db point a live sighting confirms within 40 yards, with a
+  height). Of 1,213 NPCs and 178 objects with no template, only a few dozen were ever seen live; the rest is beta,
+  Classic or event data and is held back. Slice 6 brings in the NPCs its quests need.
+- An NPC's faction: no public source records one. It is the commonest faction of the fork's NPCs of the same creature
+  type spawned within 60 yards that react to a player of the side EG Link's players were as they saw it, both ways
+  (`Reactions`, following TrinityCore with starting reputations: how the player sees the NPC, as the client colours it,
+  and whether the NPC attacks the player), preferring a shared first name (Razormane, Spitelash) and then the exact
+  reaction (neutral, friendly). A hostile NPC may take another type's faction, never a critter's. Tested on 1,474 fork
+  NPCs EG Link players saw: whether the fork's own faction attacks matches what players saw for all of them; the guess
+  attacks (or not) as the fork NPC's own faction does every time it picks, picks the exact faction 61% (friendly) to
+  68% (hostile) of the time, and nothing for 8%, which is held back. The nearest fork NPC of that faction (of the same
+  type where there is one) lends speeds, attack times and immunity to players and NPCs.
+- A unique NPC (elite, rare or boss, titled, offering a service, or with every point within 60 yards of the others)
+  with several points goes to the review list, as in slice 4: it may be one NPC wandering or on a patrol.
+- Services as EG Link's players saw them, with the stock EG Link recorded (`import_slice3.vendors`); gossip only when
+  nothing else. Training needs a trainer list and a gossip option (hand work): the trainer flag is left off and the NPC
+  goes on the review list.
+
+Template values come from EG Link's creature and object details, the client's own query data (of a live build, else a
+beta build, said so): names, titles, types, classification, models (checked against Forever's client
+`CreatureDisplayInfo` and `GameObjectDisplayInfo`, pinned from wago.tools), health and power multipliers, type flags,
+movement, kill credits, cursors; an object's whole template. Levels are EG Link's live levels, else forever-db's.
+Damage and armour modifiers 1 and `unit_flags2` 2048, as the fork's own Forever NPCs. A chest's loot, when the fork
+has none: its quest items at 100% for players on the quest (as the fork's quest chests), other items at their share of
+EG Link's openings once there are 50 (fewer: review list). No equipment, scripts or loot for the NPCs: their loot comes
+with a slice 2 run once the templates are in. Spawns as slice 4's new NPCs; guids continue after slice 4's.
+
+Every row goes in only while the template is ours (`everlake_import_rows` names it under this file, and it still has
+`VerifiedBuild` 0 as written; the build its details came from is in the note) and never again once added: where the
+fork adds the NPC or object first, or takes it over with a sniffed template, nothing of ours goes in next to it. An NPC
+or object the fork already spawns without a template is held back. NPCs offering a service stand still.
+
 ## Dry run (every slice)
 
 `import_dryrun.py` runs every file in the data folder (`--data`, a clone of wow-everlake-world-data or `world-data/`)
@@ -259,8 +331,10 @@ all of ours: nothing is deployed yet). It checks that both end with the same wor
 corrections are unchanged (rows added = keys recorded, rows removed or changed = the corrections'; a table with no
 primary key, like `creature_loot_template`, is compared under its first index with duplicates counted), that no
 recorded key was a fork row, that new rows point at existing creatures, objects, quests, client items and reference
-lists and that every new loot table is some creature's, that running the files again (directly, and through the
+lists, that every new loot table is some creature's (a new chest's loot some chest's), that new templates' models are in
+Forever's client and each new template has a spawn, that running the files again (directly, and through the
 updater) changes nothing, also after each slice's simulated fork changes (run last, so they change the stepped world),
 and that the gap report on the result has each gap of the slices' categories closed or listed with its reason and
-nothing new (loot, trainer-spell and vendor-item gaps count per item of an NPC). The report goes to the newest slice's folder (`--report SLICE` for another).
+nothing new (loot, trainer-spell and vendor-item gaps count per item of an NPC; a decision on `npc/*` covers all of
+an NPC's items). The report goes to the newest slice's folder (`--report SLICE` for another).
 `--skip-scratch` runs only the stepped run (a few minutes instead of the release load).
