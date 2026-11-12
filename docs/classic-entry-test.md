@@ -24,3 +24,23 @@ sudo bash scripts/classic-entry-test.sh rollback /tmp/everlake-classic-entry.XXX
 ```
 
 Rollback restores the original Flags1 and advertises a newer hotfix revision so the client receives the restoration. If the candidate succeeds, update the provisioning SQL and add the validated upgrade to the release before merging; do not leave the production definition dependent on this experiment.
+
+## Result of the split-file flag test
+
+On 2026-11-12 the live Mac client received push 9690001 with Flags1=1536, then reproduced the same EXC_BAD_ACCESS at address 0x878 as map 0 started loading. The two flags alone did not resolve the crash. Do not promote that experiment as a fix.
+
+## Isolate terrain activation
+
+The next diagnostic temporarily removes only the map 0 → 9000 default terrain swap from world_classic. It preserves the hotfix, all character data, other terrain swaps, and all client assets. It inherits the same deployment guards as the previous script. The script stops only Roleplay during the database change and restarts it afterward.
+
+```sh
+sudo bash scripts/classic-terrain-isolation.sh disable
+```
+
+Keep the printed restore directory. Reconnect and try the same human warrior. If entry succeeds, record the base-terrain result without travelling or changing the character; it does not verify Classic terrain. If entry still crashes, capture its report. Restore the Classic terrain activation after the comparison:
+
+```sh
+sudo bash scripts/classic-terrain-isolation.sh restore /tmp/everlake-classic-terrain.XXXXXXXX
+```
+
+The restore directory is separate from the earlier flag backup. This experiment is not a release mode and must not be left disabled as the solution.
