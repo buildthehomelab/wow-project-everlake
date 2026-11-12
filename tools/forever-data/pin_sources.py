@@ -4,6 +4,7 @@
     pin_sources.py                 pin the newest of everything
     pin_sources.py --verify        check every pinned file against its recorded sha256
     pin_sources.py --wowhead-only [--wowhead-max N]   only the Wowhead tooltips
+    pin_sources.py --icyveins-only [--icyveins-max N] only Icy Veins' NPC data
     pin_sources.py --only NAME,NAME                  only these sources (eg-link, forever-db, wago, tc-forever ...)
     pin_sources.py --only wago --wago-build VERSION  pin DB2 tables for a specific Forever build
 
@@ -50,7 +51,8 @@ FOREVER_DB_TABLES = ("npc", "object", "quest", "quest_start", "quest_end", "ques
                      "spawn", "item", "item_source", "ui_map", "mechanic", "step")
 WAGO_TABLES = ("AreaTable", "AreaPOI", "GameObjects", "Light", "LightParams", "SoundAmbience", "TaxiNodes", "TaxiPath",
                "TaxiPathNode", "ZoneIntroMusicTable", "ZoneMusic", "Faction", "FactionTemplate", "SoundKit", "SoundKitEntry",
-               "UiMap", "UiMapAssignment", "Map", "SpellEffect", "SpellName", "SpellMisc", "SkillLine", "SkillLineAbility",
+               "UiMap", "UiMapAssignment", "Map", "CreatureDisplayInfo", "GameObjectDisplayInfo",
+               "SpellEffect", "SpellName", "SpellMisc", "SkillLine", "SkillLineAbility",
                "Item", "ItemSparse", "ItemEffect", "ItemXItemEffect", "ItemExtendedCost", "PlayerCondition", "Mount")
 
 SOURCES = {
@@ -153,6 +155,8 @@ CREDITS_EXTRA = (
     "Vendor, trainer and quest data from [ForeverDB.net](https://foreverdb.net): Data from ForeverDB.net, GPL-3.0.",
     "Data from [Everloot](https://everloot.app), CC BY-SA 4.0. Kept as source evidence, without applying it to the world.",
     "Talent data: [Zephras](https://zephras.com), CC BY 4.0 for Zephras's contributions; stored without changes.",
+    "NPC map points, drops, vendor stock and trainer lists that players' addons recorded, from "
+    "[Icy Veins](https://db.icy-veins.com/wow-forever/)' WoW Forever database, as a reference.",
     "Game content such as names and text belongs to Blizzard Entertainment.",
 )
 
@@ -469,13 +473,71 @@ def forever_ids(manifest):
 
 def pin_wowhead_tooltips(manifest, limit=WOWHEAD_MAX):
     """Wowhead's public tooltip service (nether.wowhead.com/forever/tooltip/<kind>/<id>) for every Forever id we know.
+    www.wowhead.com itself refuses scripts and is not touched. Wowhead's data is not openly licensed: reference for our
+    own server only."""
+    pin_incremental("wowhead-tooltips", "Wowhead, reference only (not openly licensed)", WOWHEAD_KINDS, forever_ids(manifest),
+                    lambda kind, i: f"https://nether.wowhead.com/forever/tooltip/{kind}/{i}", WOWHEAD_RATE, limit,
+                    WOWHEAD_REFRESH_DAYS, WOWHEAD_MISSING_DAYS, manifest, missing=lambda data: not data or "error" in data)
 
-    Each run fetches ids never fetched, then ids older than WOWHEAD_REFRESH_DAYS (missing ones after
-    WOWHEAD_MISSING_DAYS), at most `limit`, one at a time at WOWHEAD_RATE per second. Rows go to a new part,
-    wowhead-tooltips/parts/<time>/<kind>.jsonl; the loader keeps the newest row per id. www.wowhead.com itself refuses
-    scripts and is not touched. Wowhead's data is not openly licensed: reference for our own server only."""
-    current = manifest["current"].setdefault("wowhead-tooltips", {"label": "", "folder": "wowhead-tooltips", "pinned": now(), "files": {},
-                                                                  "licence": "Wowhead, reference only (not openly licensed)"})
+
+ICYVEINS = "https://db.icy-veins.com"
+ICYVEINS_RATE = 2.0                                               # requests per second, one at a time
+ICYVEINS_MAX = int(os.environ.get("ICYVEINS_MAX", "20000"))       # per run; about 15,800 NPCs, a full pull is ~2 hours
+ICYVEINS_REFRESH_DAYS, ICYVEINS_MISSING_DAYS = 14, 7              # player-recorded data keeps growing: refresh sooner
+ICYVEINS_KEEP = ("entity", "children", "relations", "history")    # the rest of a response is link metadata, the same for all
+
+
+def icyveins_npc_ids():
+    """Every NPC id Icy Veins' Forever database lists. Its NPC page names one page per creature type, each paged 50 at a
+    time; a page with no id we haven't seen, or a 404 past the first page, ends that type. Paced like the NPC fetches."""
+    top = fetch(f"{ICYVEINS}/wow-forever/npcs/").decode()
+    types = sorted(set(re.findall(r'href="/wow-forever/npcs/([a-z][a-z0-9-]*)/"', top)))
+    if not types:
+        raise ValueError("icyveins: the NPC page lists no creature types")
+    ids = set()
+    for slug in types:
+        for page in range(1, 10000):
+            time.sleep(1 / ICYVEINS_RATE)
+            try:
+                html = fetch(f"{ICYVEINS}/wow-forever/npcs/{slug}/?page={page}").decode()
+            except urllib.error.HTTPError as error:
+                if error.code == 404 and page > 1:       # past the last page
+                    break
+                raise
+            found = {int(i) for i in re.findall(r'href="/wow-forever/npcs/(\d+)"', html)}
+            if not found - ids:
+                break
+            ids |= found
+    return ids
+
+
+def pin_icyveins(manifest, limit=ICYVEINS_MAX):
+    """Icy Veins' WoW Forever database (db.icy-veins.com/wow-forever): one JSON per NPC from the API its pages are built
+    from, /api/catalog/wowf/npc/<id>. Besides the client's creature row it carries what players' addons recorded on live
+    Forever: map points (addon_points: UiMap, x/y in tenths of a percent, reports, players, last build), levels, drops
+    with chances, vendor stock with prices, trainer spells, quests given and taken, gossip text.
+
+    The ids are every NPC its lists show plus every NPC our other pins name. Kept per NPC: entity, children, relations
+    and history (ICYVEINS_KEEP). robots.txt allows everything; the data states no licence: reference for our own server
+    only, never copied into Everlake (import_sql.REFERENCE_ONLY)."""
+    ids = icyveins_npc_ids() | forever_ids(manifest)["npc"]
+    print(f"icyveins: {len(ids)} NPC ids")
+    pin_incremental("icyveins", "Icy Veins, reference only (no licence stated)", ("npc",), {"npc": ids},
+                    lambda kind, i: f"{ICYVEINS}/api/catalog/wowf/{kind}/{i}", ICYVEINS_RATE, limit,
+                    ICYVEINS_REFRESH_DAYS, ICYVEINS_MISSING_DAYS, manifest,
+                    missing=lambda data: not isinstance(data, dict) or not data.get("entity"),
+                    keep=lambda data: {k: data[k] for k in ICYVEINS_KEEP if k in data})
+
+
+def pin_incremental(name, licence, kinds, wanted, url, rate, limit, refresh_days, missing_days, manifest,
+                    missing=lambda data: not data, keep=lambda data: data):
+    """One JSON per (kind, id) from a public service, a share at a time.
+
+    Each run fetches ids never fetched, then ids older than refresh_days (missing ones after missing_days), at most
+    `limit`, one at a time at `rate` per second. Rows go to a new part, <name>/parts/<time>/<kind>.jsonl; the loader
+    keeps the newest row per id. A 404 or a response `missing` refuses is recorded as missing; other errors are tried
+    again next run."""
+    current = manifest["current"].setdefault(name, {"label": "", "folder": name, "pinned": now(), "files": {}, "licence": licence})
     root = os.path.join(ROOT, current["folder"])
     last = {}
     for rel in sorted(current["files"]):
@@ -487,16 +549,15 @@ def pin_wowhead_tooltips(manifest, limit=WOWHEAD_MAX):
     def stale(key):
         when, status = last[key]
         age = (today - datetime.datetime.fromisoformat(when.replace("Z", "+00:00"))).days
-        return age >= (WOWHEAD_MISSING_DAYS if status != "ok" else WOWHEAD_REFRESH_DAYS)
-    wanted = forever_ids(manifest)
-    todo = [(k, i) for k in WOWHEAD_KINDS for i in sorted(wanted[k]) if (k, i) not in last]
-    todo += [key for k in WOWHEAD_KINDS for key in sorted((k, i) for i in wanted[k] if (k, i) in last and stale((k, i)))]
+        return age >= (missing_days if status != "ok" else refresh_days)
+    todo = [(k, i) for k in kinds for i in sorted(wanted[k]) if (k, i) not in last]
+    todo += [key for k in kinds for key in sorted((k, i) for i in wanted[k] if (k, i) in last and stale((k, i)))]
     todo = todo[:limit]
     if not todo:
-        print(f"wowhead-tooltips: nothing to fetch ({len(last)} held)")
+        print(f"{name}: nothing to fetch ({len(last)} held)")
         return
     part = "parts/" + now().replace(":", "")[:15]
-    buffers = {k: [] for k in WOWHEAD_KINDS}
+    buffers = {k: [] for k in kinds}
     def flush():
         for kind, rows in buffers.items():
             if rows:
@@ -510,9 +571,11 @@ def pin_wowhead_tooltips(manifest, limit=WOWHEAD_MAX):
     for n, (kind, i) in enumerate(todo, 1):
         status, data = "ok", None
         try:
-            data = json.loads(fetch(f"https://nether.wowhead.com/forever/tooltip/{kind}/{i}", retries=3))
-            if not data or "error" in data:
+            data = json.loads(fetch(url(kind, i), retries=3))
+            if missing(data):
                 status = "missing"
+            else:
+                data = keep(data)
         except urllib.error.HTTPError as error:
             status = "missing" if error.code == 404 else "error"
         except (OSError, ValueError):
@@ -522,10 +585,10 @@ def pin_wowhead_tooltips(manifest, limit=WOWHEAD_MAX):
             buffers[kind].append({"kind": kind, "id": i, "fetched": now(), "status": status, "data": data})
         if n % 500 == 0:
             flush()
-            print(f"  wowhead-tooltips: {n}/{len(todo)} ({counts})", flush=True)
-        time.sleep(max(0.0, n / WOWHEAD_RATE - (time.time() - started)))
+            print(f"  {name}: {n}/{len(todo)} ({counts})", flush=True)
+        time.sleep(max(0.0, n / rate - (time.time() - started)))
     flush()
-    print(f"wowhead-tooltips: fetched {len(todo)} ({counts}), {len(last) + counts['ok'] + counts['missing']} held")
+    print(f"{name}: fetched {len(todo)} ({counts}), {len(last) + counts['ok'] + counts['missing']} held")
 
 
 def record(manifest, name, pin):
@@ -577,6 +640,12 @@ def main():
         pin_wowhead_tooltips(manifest, limit)
         save(manifest)
         return
+    if "--icyveins-only" in sys.argv:                # pin_sources.py --icyveins-only [--icyveins-max N]
+        limit = int(sys.argv[sys.argv.index("--icyveins-max") + 1]) if "--icyveins-max" in sys.argv else ICYVEINS_MAX
+        pin_icyveins(manifest, limit)
+        write_credits()
+        save(manifest)
+        return
     only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None
     wago_build = None
     if "--wago-build" in sys.argv:
@@ -613,6 +682,8 @@ def main():
     pin_questietrace_own(manifest)
     save(manifest)
     pin_wowhead_tooltips(manifest)
+    save(manifest)
+    pin_icyveins(manifest)
     save(manifest)
     write_credits()
     save(manifest)

@@ -4,7 +4,7 @@ Everlake's world is the TrinityCore `forever` fork's world release plus the fork
 on since that release: new quests, NPCs, loot and trainer spells that players see every day. This plan is how we bring
 that into Everlake's own world database, a little at a time, without breaking the fork's updates or the game.
 
-Slices 1 to 3 have generators (`import_slice1.py`, `import_slice2.py`, `import_slice3.py`), and one dry run covers every slice's files (`import_dryrun.py`); the rest is not yet. The data side is: `tools/forever-data` pins the public Forever sources every day,
+Slices 1 to 5 have generators (`import_slice1.py` ... `import_slice5.py`), and one dry run covers every slice's files (`import_dryrun.py`); the rest is not yet. The data side is: `tools/forever-data` pins the public Forever sources every day,
 loads them next to the fork's world (the release plus the fork's update files, in the same order and by the same re-run
 rules as Everlake's worldserver), and `gap_report.py` lists what is missing ([tools/forever-data/README.md](../tools/forever-data/README.md)).
 
@@ -111,9 +111,13 @@ generated SQL lives in its own repository, `wow-everlake-world-data`, under GPL-
 
 ## What needs a decision
 
-1. **Spawn guids.** The fork's world uses creature guids up to about 26 million and object guids up to about 34
-   million. Imported spawns need a block of their own above that, kept in a small table so a re-run reuses the same
-   guid for the same spawn point.
+1. **Spawn guids** (decided 2026-11-08). Imported spawns count from 900,000,000 (creatures and objects each), far above
+   the fork's (about 26 and 34 million). A file fixes each spawn's guid, so a re-run reuses it; a later slice continues
+   after the guids an earlier one used (its manifest's `guids_used`). Slice 4 also decided: a spawn needs a live Forever
+   sighting within 40 yards, since forever-db's points are largely Classic (holiday, invasion and test NPCs).
+   Slice 5 (2026-11-08): only NPCs and objects that also get such a spawn; an NPC's faction is the commonest of the fork's
+   NPCs of its type within 60 yards that react to players as EG Link's players saw it, the rest borrowed from the
+   nearest of them; services and stock as EG Link saw them, training left to hand work.
 2. **Loot chances** (decided 2026-11-08). A drop goes in where a Forever source (EG Link, QuestieTrace) shows the NPC
    drops it, and also where only forever-db's drop rows do: those are all Classic (pfQuest/CMaNGOS), so such a row is
    marked `classic` until a Forever recording replaces it. The chance is EG Link's once the NPC has 50 recorded kills
