@@ -87,6 +87,13 @@ saw the same creature or chest sell or drop the item on live Forever (alone it b
 mounts, the Panda Collar, soul shards). Run *Import Icy Veins* first; its answers count. Forge › Checks no longer lists
 levels whose ranges meet (62 against Wowhead's 61-62).
 
+Since fork `41563272`: Forge › Imports also imports **AtlasLoot Classic Forever** (GPL-2.0, CurseForge), the loot
+browser most Forever players run: which boss drops each item, Forever's new dungeons included. The container checks
+CurseForge every `TRACKER_ATLASLOOT_EVERY_HOURS` (6) and makes a new import card when a new version is out; nothing is
+applied by itself. Drops with no measured chance (AtlasLoot's own or a live recording's) get an even share of their
+boss's list, at most 33 % (`TRACKER_ATLASLOOT_GUESS=0`: left out). Its boss tables also count as a second source for
+NorgannonDB's drops. Rules in the fork's `docs/SOURCES.md`.
+
 ## Not used here
 
 - ForeverScribe (records vendors, loot and quest givers while playing on the official realms): the container has
