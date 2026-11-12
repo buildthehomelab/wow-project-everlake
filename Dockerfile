@@ -10,13 +10,13 @@
 ARG UBUNTU_VERSION=24.04
 # The core commit and the bots switch, declared here so the build stage uses them and the runtime stage records them
 # (/opt/trinitycore/image-build.env, checked by the entrypoint against the image tag it was started as).
-# The live realms: our fork's everlake branch with the bots (624386b5: forever 2ae1313e + forever-bots + the 92 reviewed
+# The live realms: our fork's everlake branch with the bots (7e2701ab: forever 2ae1313e + forever-bots + the 92 reviewed
 # advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-K #23 #24 #26 #28-#35, Karrz v0.1.33 data #22 and
-# scripts #25, build fix #27, Karrz v0.1.34 data #36, Ring of Law arena #37, bot module #38, bot dual names #39 and
-# the Wintergrasp condition fix #42), the
+# scripts #25, build fix #27, Karrz v0.1.34 data #36, Ring of Law arena #37, bot module #38, bot dual names #39,
+# the Wintergrasp condition fix #42 and greyed-out ruleset cards for offline realms #43), the
 # same commit the PTR builds (docker-compose.ptr.yml), so the live app and the PTR app build one identical image.
 # Client 1.60.1.70862 (realms on 70862; bnetserver and the worldservers also let 70790 in, docker/entrypoint.sh).
-ARG TC_COMMIT=624386b59dab108b1ef168b5014000e4c5f8a0e6
+ARG TC_COMMIT=7e2701ab749fd0340290e4714f8ebb9230743cba
 # PLAYERBOTS=1: the WoW Forever Bots module (src/modules/PlayerbotV2; the core commit must have it, as the fork's
 # everlake branch does since PR #2). 0 builds the core without bots.
 ARG PLAYERBOTS=1
