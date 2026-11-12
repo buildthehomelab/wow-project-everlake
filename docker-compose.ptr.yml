@@ -1,8 +1,8 @@
-# The PTR ("Everlake PTR", realm id 73): the test realm every change reaches before a live realm
+# The PTR ("PTR", realm id 73): the test realm every change reaches before a live realm
 # (designs/everlake-plan.md, "Realm names and a PTR"). Same login server and MySQL as the live realms, but its own
 # image and databases: world_ptr and hotfixes_ptr (copies of realm 1's), characters_ptr (its own characters) and
-# playerbot_ptr (its own bots). Port 8097, the Hardcore ruleset card (content set 140, the one card no live realm uses;
-# the card still reads "Hardcore"), GM accounts only (allowedSecurityLevel 3) until the opt-in switch from the plan
+# playerbot_ptr (its own bots). Port 8097, the 4th ruleset card, "PTR" (content set 140, Blizzard's Hardcore card renamed
+# by hotfix: sql/everlake/2026_11_12_00_hotfixes_ruleset_cards.sql), GM accounts only (allowedSecurityLevel 3) until the opt-in switch from the plan
 # exists.
 #
 # A TrueNAS custom app of its own beside the running "everlake" app, from the same folder; it never edits that app.
@@ -35,6 +35,7 @@ services:
       PTR_GM_EMAILS: ${PTR_GM_EMAILS:-}
     volumes:
       - ./scripts:/ptr/scripts:ro
+      - ./sql/everlake:/ptr/sql:ro   # the ruleset cards (ptr-setup.sh cards)
 
   ptr-mmaps:
     image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-624386b59dab108b1ef168b5014000e4c5f8a0e6}-${PTR_WORLD_DATA_COMMIT:-cb7c92787a9ab262b268d9bd6d5a63be1d95d466}

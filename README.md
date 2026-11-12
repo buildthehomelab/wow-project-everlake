@@ -111,7 +111,7 @@ set as the core's `Respawn.Dynamic*` keys by the compose files; a restart applie
 
 ### PTR
 
-The PTR (realm 73, "Everlake PTR", port 8097) is where a new build runs before a live realm: its own image, its own
+The PTR (realm 73, "PTR", port 8097) is where a new build runs before a live realm: its own image, its own
 `world_ptr`, `hotfixes_ptr`, `characters_ptr` and `playerbot_ptr` databases, few bots, GM accounts only. It is a
 TrueNAS app of its own from this folder (`docker-compose.ptr.yml`), and does everything itself when it starts: builds
 its image (bots on, the world data pinned in `docker-compose.ptr.yml`, or `PTR_WORLD_DATA_COMMIT` from `.env`) if it's missing, sets up its databases and realm row

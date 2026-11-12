@@ -138,6 +138,7 @@ COPY --from=build /src/TrinityCore/sql /src/TrinityCore/sql
 # sql/everlake files are data and stay manual.
 COPY sql/everlake/2026_11_08_06_auth_one_ruleset.sql /src/TrinityCore/sql/custom/auth/
 COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql sql/everlake/2026_11_08_08_hotfixes_live_tact_keys.sql \
+     sql/everlake/2026_11_12_00_hotfixes_ruleset_cards.sql \
      /src/TrinityCore/sql/custom/hotfixes/
 # Our world rules as update files: dynamic respawn groups (quest targets, herb and ore nodes)
 COPY sql/everlake/2026_11_09_00_world_dynamic_respawn.sql /src/TrinityCore/sql/custom/world/

@@ -128,7 +128,7 @@ services:
       PUBLIC_ADDRESS: ${PUBLIC_ADDRESS:-127.0.0.1}
       REALM_LOCAL_ADDRESS: ${REALM_LOCAL_ADDRESS:-127.0.0.1}
       REALM_LOCAL_SUBNET_MASK: ${REALM_LOCAL_SUBNET_MASK:-255.255.255.0}
-      REALM_NAME: ${REALM_NAME:-Everlake}
+      REALM_NAME: ${REALM_NAME:-Forever}
       LOGIN_HOSTNAME: ${LOGIN_HOSTNAME:-trinity.actual.battle.net}
       CERT_FILE: ${CERT_FILE:-forever.cert.pem}
       KEY_FILE: ${KEY_FILE:-forever.key.pem}

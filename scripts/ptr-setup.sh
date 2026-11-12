@@ -3,15 +3,22 @@
 # The PTR app runs "init" by itself before its worldserver starts (service ptr-init, MYSQL_HOST set: MySQL over the
 # app network). By hand on the host it uses the running MySQL container instead (docker exec).
 #
-#   scripts/ptr-setup.sh init      dbs, realm, then gms (what the PTR app runs on every start; safe to repeat)
+#   scripts/ptr-setup.sh init      dbs, realm, cards, then gms (what the PTR app runs on every start; safe to repeat)
 #   scripts/ptr-setup.sh dbs       world_ptr and hotfixes_ptr as copies of realm 1's world and hotfixes, and the empty
 #                                  characters_ptr and playerbot_ptr (worldserver fills them on the PTR's first start).
 #                                  A database that exists is left as it is.
 #   scripts/ptr-setup.sh refresh   world_ptr and hotfixes_ptr copied from realm 1 again (stop the PTR first): the PTR
 #                                  then starts from live's world, and its own updates apply on top when it starts.
-#   scripts/ptr-setup.sh realm     realm row 73 becomes "Everlake PTR": port 8097, the Hardcore card (140), GM accounts
-#                                  only, address and build copied from realm 1. Undo: UPDATE auth.realmlist SET
+#   scripts/ptr-setup.sh realm     realm row 73 becomes "PTR": port 8097, content set 140 (the 4th ruleset card), GM
+#                                  accounts only, address and build copied from realm 1. Undo: UPDATE auth.realmlist SET
 #                                  name = 'Forever Hardcore', flag = 3, port = 8085, allowedSecurityLevel = 0 WHERE id = 73;
+#   scripts/ptr-setup.sh cards     realm names match the ruleset cards (71 "Classic"; 72 "Retail", listed but offline: no
+#                                  worldserver yet, so its card is greyed out) and the cards' names, text and order
+#                                  (sql/everlake/2026_11_12_00_hotfixes_ruleset_cards.sql) go into every realm's hotfix
+#                                  database. Realm 70's name is REALM_NAME in .env (bnetserver writes it on each start).
+#                                  Each worldserver shows the new cards after its next restart.
+#                                  Undo for realm 72: UPDATE auth.realmlist SET name = 'Forever RP', flag = 3,
+#                                  contentSetId = 0, allowedSecurityLevel = 0 WHERE id = 72;
 #   scripts/ptr-setup.sh gms       the game accounts of the Battle.net emails in PTR_GM_EMAILS (comma-separated, .env)
 #                                  become GM level 3 on ALL realms (account_access RealmID -1). The PTR is GM only, and
 #                                  the login server counts only rank stored for all realms when it hands out a ruleset
@@ -70,6 +77,7 @@ case "${1:-}" in
     init)
         bash "$0" dbs
         bash "$0" realm
+        bash "$0" cards
         bash "$0" gms
         ;;
     gms)
@@ -117,15 +125,32 @@ case "${1:-}" in
         ;;
     realm)
         root_sql auth -e "UPDATE realmlist AS p JOIN realmlist AS r1 ON r1.id = 70
-            SET p.name = 'Everlake PTR', p.address = r1.address, p.localAddress = r1.localAddress,
+            SET p.name = 'PTR', p.address = r1.address, p.localAddress = r1.localAddress,
                 p.localSubnetMask = r1.localSubnetMask, p.port = 8097, p.icon = r1.icon, p.flag = 2,
                 p.timezone = r1.timezone, p.allowedSecurityLevel = 3, p.gamebuild = r1.gamebuild,
                 p.Region = r1.Region, p.Battlegroup = r1.Battlegroup, p.contentSetId = 140
             WHERE p.id = 73;"
         bash "$0" status
         ;;
+    cards)
+        cards_sql="$HERE/../sql/everlake/2026_11_12_00_hotfixes_ruleset_cards.sql"
+        [ -f "$cards_sql" ] || cards_sql="/ptr/sql/2026_11_12_00_hotfixes_ruleset_cards.sql"   # inside the PTR app
+        [ -f "$cards_sql" ] || { echo "[ptr] ERROR: 2026_11_12_00_hotfixes_ruleset_cards.sql not found"; exit 1; }
+        root_sql auth -e "UPDATE realmlist SET name = 'Classic' WHERE id = 71;
+            UPDATE realmlist AS r JOIN realmlist AS r1 ON r1.id = 70
+            SET r.name = 'Retail', r.address = r1.address, r.localAddress = r1.localAddress,
+                r.localSubnetMask = r1.localSubnetMask, r.port = 8098, r.icon = r1.icon, r.flag = 2,
+                r.timezone = r1.timezone, r.allowedSecurityLevel = 3, r.gamebuild = r1.gamebuild,
+                r.Region = r1.Region, r.Battlegroup = r1.Battlegroup, r.contentSetId = 136
+            WHERE r.id = 72;"
+        for db in hotfixes hotfixes2 hotfixes_ptr; do
+            if ! db_exists "$db"; then echo "[ptr] $db does not exist: no cards there"; continue; fi
+            root_sql "$db" < "$cards_sql"
+            echo "[ptr] $db: ruleset cards Forever, Classic, Retail, PTR (push 9580001)"
+        done
+        ;;
     status)
-        root_sql -e "SELECT id, name, port, flag, allowedSecurityLevel, contentSetId, gamebuild FROM auth.realmlist WHERE id IN (70, 71, 73);"
+        root_sql -e "SELECT id, name, port, flag, allowedSecurityLevel, contentSetId, gamebuild FROM auth.realmlist WHERE id IN (70, 71, 72, 73);"
         root_sql -e "SELECT table_schema AS db, COUNT(*) AS tables FROM information_schema.tables
                      WHERE table_schema IN ('world_ptr', 'hotfixes_ptr', 'characters_ptr', 'playerbot_ptr') GROUP BY table_schema;"
         echo "[ptr] accounts that may enter the PTR (GM level 3 on all realms or on realm 73):"
