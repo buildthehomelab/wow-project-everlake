@@ -71,6 +71,12 @@ Since fork `94c8da34`, the analysis also asks Wowhead about every new item and t
 Wowhead marks as Season of Discovery leftovers, or does not know, move to *Internal / test*, and such spells are never
 offered at trainers. The first start re-analyses; checking ~7,000 items takes about an hour the first time (cached after).
 
+Since fork `90485afd`: Wowhead decides **what** Forever has, imports say **where it comes from**. Forge › Imports ›
+*Import NorgannonDB* builds an import from the open NorgannonDB database (GPL-3.0) aimed at the last analysis' gaps:
+drops and vendors for items players cannot get, givers/enders for quests that have none, and trainer spells its
+players saw trainers teach. Apply on the PTR, test, export to world-data (credit NorgannonDB in its NOTICE). Trainer
+guessing is off (`TRACKER_TRAINER_GUESS=0`). The export also no longer adds loot rows twice when a file runs again.
+
 ## Not used here
 
 - ForeverScribe (records vendors, loot and quest givers while playing on the official realms): the container has

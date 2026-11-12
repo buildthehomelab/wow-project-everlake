@@ -29,8 +29,8 @@ services:
   tracker:
     build:
       # the fork at a pinned commit (bump on purpose, like the core)
-      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-94c8da349635c0898dd124a12d58d58e7860ed9f}
-    image: forever-tracker:${TRACKER_COMMIT:-94c8da349635c0898dd124a12d58d58e7860ed9f}
+      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-90485afd05cc15acb0c2a26b0c454a3bd2d5843f}
+    image: forever-tracker:${TRACKER_COMMIT:-90485afd05cc15acb0c2a26b0c454a3bd2d5843f}
     networks: [everlake]
     restart: unless-stopped
     depends_on:
@@ -55,6 +55,8 @@ services:
       FT_LOCATE: ${TRACKER_LOCATE:-1}
       # Season of Discovery rune abilities the Forever client still carries: never offered at trainers
       FT_FORGE_TRAINER_SKIP_IDS: ${TRACKER_TRAINER_SKIP_IDS:-400000-499999}
+      # trainer spells come from imports (NorgannonDB) only: no guessing from the client's skill lines
+      FT_FORGE_TRAINER_GUESS: ${TRACKER_TRAINER_GUESS:-0}
     ports:
       - "${TRACKER_PORT:-8090}:80"
     volumes:
