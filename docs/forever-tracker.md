@@ -18,6 +18,7 @@ Upstream is a Windows launcher with a setup wizard. We run our fork,
 | `world`, `hotfixes` (live) | read only |
 | `auth`: `realmlist`, `battlenet_accounts`, `account`, `account_access` | read only (client build, GM logins) |
 | `world_ptr`, `hotfixes_ptr` (PTR) | read and write: the analysis reads them, the Forge applies fixes to them |
+| `ft_world_build` | nothing: it belongs to the second user, `tracker_build` ([the world build](#the-world-build)), which has every right there and no right on any database above |
 
 So a fix is tried on the PTR first, and reaches live like every other change: as reviewed SQL (the Forge shows the
 SQL of each fix and keeps it in its history). MySQL enforces this: `scripts/tracker-setup.sh` sets exactly these
@@ -34,7 +35,8 @@ changelog compares the two.
 ## Install
 
 1. In `.env`: `TRACKER_DB_PASSWORD` and `TRACKER_ADMIN_PASSWORD` (see `.env.example`).
-2. The PTR app runs (the tracker reads its databases).
+2. The PTR app runs (the tracker reads its databases), and the server has the live image `everlake-trinitycore:live`
+   ([the world build](#the-world-build) copies its files; the app does not start without it).
 3. TrueNAS: Apps, Discover Apps, Custom App, Install via YAML, name `everlake-tracker`:
 
    ```yaml
@@ -93,6 +95,62 @@ CurseForge every `TRACKER_ATLASLOOT_EVERY_HOURS` (6) and makes a new import card
 applied by itself. Drops with no measured chance (AtlasLoot's own or a live recording's) get an even share of their
 boss's list, at most 33 % (`TRACKER_ATLASLOOT_GUESS=0`: left out). Its boss tables also count as a second source for
 NorgannonDB's drops. Rules in the fork's `docs/SOURCES.md`.
+
+Since fork `12d3faf1`: the first two steps of [the world build](#the-world-build): `tracker.py world layers` and
+`world pin` (the layers of sources a world is built from, and the newest version of each), and `world replay` and
+`world why` (which file wrote each row of the realm's world). Nothing changes on the website, and the analysis is not
+run again.
+
+## The world build
+
+The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
+replays the world a realm runs (the release dump, then every update file in the updater's order) in a scratch
+database, and notes which file created, changed or removed each row:
+
+```bash
+sudo docker exec -u www-data <tracker container> sh -c 'python3 tools/tracker.py world replay --dump /world/current/TDB_full_world_*.sql --core /world/current/core --data /world/current/data --folder everlake=/world/current/everlake'
+sudo docker exec -u www-data <tracker container> python3 tools/tracker.py world why creature_template 248415
+```
+
+`sudo docker ps` shows the container's name (the app's `tracker` service). The replay drops and rebuilds its scratch
+database each time and writes nowhere else; it loads the whole release and several hundred files, so give it a while.
+
+**Its own MySQL user.** Update files are other people's SQL, so the replay refuses to start unless its user can
+write to the scratch database only; the tracker's normal user (which writes the PTR's databases) is refused. Set
+`TRACKER_BUILD_DB_PASSWORD` in `.env` and restart the app: `scripts/tracker-setup.sh` then makes `tracker_build` with
+every right on `ft_world_build` (`TRACKER_BUILD_DB`) and none on any other database. Every start takes all its rights
+away first and gives these back. The scratch name must start with `ft_` (no realm, login or tracker database does),
+and a database holding tables no replay made is refused. Without the password, or with a refused name, the user is
+left locked with no rights (never made, if it was not there) and `tracker-init`'s log says so; the website starts
+either way.
+
+**Its files are the realm's.** On every start of the app, `tracker-world-copy` runs inside the live realm's own image
+(`everlake-trinitycore:live`, or `EVERLAKE_IMAGE_TAG` when `.env` sets it; `TRACKER_WORLD_IMAGE_TAG` for another, such
+as the PTR's `ptr-<core>-<world data>`) and
+copies what that image was built from into the `tracker-world` volume: the release dump its worldserver imports, and
+its `sql/updates/world` and `sql/custom/world`. Nothing is downloaded again, so the replay reads the same bytes the
+realm applies. `tracker-world-sort` then tells the image's custom files apart, because the replay labels each row with
+the kind of file that wrote it:
+
+| In `/world/current` | Files | Label |
+|---|---|---|
+| `TDB_full_world_*.sql` | the release dump | the release |
+| `core/sql/updates/world`, `core/sql/custom/world` | the core's own | `core updates`, `core custom` |
+| `data/` | wow-everlake-world-data's `sql/world` at the image's `WORLD_DATA_COMMIT` | `data repository` |
+| `everlake/` | the files the `Dockerfile` of this folder copies into `sql/custom/world` | `everlake` |
+
+The data repository is asked for its file names only (once per commit), and each of its files is compared with the
+image's copy; `/world/current/source.txt` and the app's log say what the set was made from and anything that did not
+match. Each start removes the set of the start before, so when anything goes wrong (the names cannot be fetched, the
+image is not an Everlake image, the disk is full) there is no `/world/current` and the log says why: the website runs
+either way. After `scripts/promote.sh` or a new PTR image, restart the tracker app to copy the new image's files. The
+volume holds a second copy of the release dump.
+
+The image must exist on the server, with or without a world build, or the app does not start.
+
+A MySQL server that writes a binary log lets only an administrator create triggers, which the replay needs.
+`docker-compose.yml` starts MySQL with `--skip-log-bin`, so nothing is needed here; on another server
+`tracker-init`'s log says what an administrator runs once (`SET GLOBAL log_bin_trust_function_creators = 1`).
 
 ## Not used here
 
