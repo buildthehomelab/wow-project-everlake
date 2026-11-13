@@ -4,7 +4,11 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-13): Everlake builds from the fork at `fdcf518c`: `8a606715` plus the Zephras Isle scene NPC fix (#48: removes
+Status (2026-11-13): Everlake builds from the fork at `b5c98f7a`: `fdcf518c` plus Karrz's 37 git commits after 0.1.35 (#47,
+merged with his git commit `063c74ab24` as second parent, review in the fork's `docs/upstream-prs/karrz-git-2026-11-12.md`), the parts of
+0.1.35 that #45 recorded as merged but did not take (#52, `docs/upstream-prs/karrz-0135-gaps.md`), pets that obey Move To and
+Stay (#49) and walk round water (#50), and whisper, invite, friend, ignore and guild lookups that keep the surname (#51, #53).
+`fdcf518c` is `8a606715` plus the Zephras Isle scene NPC fix (#48: removes
 fixed copies of NPCs the quest scene scripts summon, makes the spire's first Malevolent Storms fightable). `8a606715` is `7e2701ab` plus Karrz v0.1.35 (#45: his release with
 all of his core changes since `f63ffc12`, merged with his git commit `9fe2e33df0` as second parent, review in the fork's
 `docs/upstream-prs/karrz-0135.md`) and the Karrz upstream check (#44). `7e2701ab` is `624386b5` plus ruleset cards for offline realms
