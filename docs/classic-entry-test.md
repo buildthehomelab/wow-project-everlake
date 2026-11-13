@@ -136,3 +136,24 @@ Rollback requires the exact candidate registration and activation comment. It
 removes only this activation, restores parent -1 and Flags1=1536, and advertises a
 new revision. Do not combine the earlier restore commands with this candidate.
 Do not promote this to provisioning SQL or release until live validation passes.
+
+## Root-map terrain diagnostic
+
+The previous flag candidate changed child map 9000. Build 70790 reads
+DisableLowDetailTerrain on the individual map and also checks it in the
+shared terrain context during initialization. This diagnostic tests the
+additional effect of setting the flag on root map 0. The archived 70790
+Map.db2 has Map 0 Flags1=159399517. The diagnostic changes that field to
+161496669 in the Classic hotfix database.
+
+Run the read-only check before applying. Apply the full-detail child
+candidate first, then run `sudo bash scripts/classic-root-terrain-probe.sh apply`.
+The root script refuses to overwrite any existing Map 0 hotfix.
+Restart the client and verify Map 0 has the new flags and map 9000 is still
+attached before attempting world entry.
+
+To recover, run `sudo bash scripts/classic-root-terrain-probe.sh rollback`
+followed by the full-detail child rollback. The root rollback advertises
+the original root flags at a fresh revision to supersede the client cache.
+It leaves that original-value hotfix registered, so another apply will
+refuse it. World entry and terrain validation are required before release.
