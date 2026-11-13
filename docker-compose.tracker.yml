@@ -10,7 +10,7 @@
 #   - tracker-init gives the MySQL user "tracker" its rights (scripts/tracker-setup.sh): read only on the live
 #     world, hotfixes and auth; read and write on the PTR's world_ptr and hotfixes_ptr, where the Forge applies fixes.
 #     With TRACKER_BUILD_DB_PASSWORD it also makes the world build's user "tracker_build": every right on the scratch
-#     database ft_world_build, no right anywhere else
+#     database ft_world_build, no right anywhere else ("tracker" may read that database, never write it)
 #   - tracker-world-copy and tracker-world-sort put the files the realm's image was built from (release dump, core
 #     update files, world data) in the tracker-world volume, for "tracker.py world replay" (docs/forever-tracker.md)
 #   - tracker is the website; on its first start (and on a new client build) it stores the build's DB2 files from
