@@ -20,9 +20,11 @@ OVERRIDES="$ROOT/overrides"
 : "${REALM_NAME:=Forever}"
 : "${REALM_ID:=70}"
 # The core's auth update 2026_11_07_00 moves the realms to 70862 (Battle.net's 2026-11-07 update, same game data).
-# Clients still on 70790 (a frozen test copy, a player who hasn't updated) keep seeing and joining them: bnetserver
-# and every worldserver accept these builds too (Realm.AlsoAcceptBuilds, comma-separated).
-ALSO_ACCEPT_BUILDS="70790"
+# Clients still on 70790 (a frozen test copy, a player who hasn't updated) keep seeing and joining them, and so do
+# clients on 70888 (Battle.net's 2026-11-10 update; its build_info row is the core's auth update 2026_11_10_70, its
+# message numbers are 70790's): bnetserver and every worldserver accept these builds too (Realm.AlsoAcceptBuilds,
+# comma-separated).
+ALSO_ACCEPT_BUILDS="70790,70888"
 # Realm 1's world port. 8085 by default; another one when the host already runs a server on 8085 (e.g. beside Evermore)
 : "${WORLD_PORT:=8085}"
 : "${LOGIN_HOSTNAME:=trinity.actual.battle.net}"
@@ -103,7 +105,7 @@ configure_worldserver() {
     setkey "$f" LogsDir "\"$ROOT/logs\""
     setkey "$f" SourceDirectory '"/src/TrinityCore"'
     setkey "$f" MySQLExecutable '"/usr/bin/mysql"'
-    # no auth key is known for the Forever builds (70790, 70862): the core skips only the digest check
+    # no auth key is known for the Forever builds (70790, 70862, 70888): the core skips only the digest check
     setkey "$f" Network.SkipBuildAuthKeyCheck 1
     setkey "$f" Network.EnterEncryptedModeRegionGroup 8
     setkey "$f" Realm.CfgContentSetID 137

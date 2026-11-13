@@ -4,7 +4,9 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-12): Everlake builds from the fork at `7e2701ab`: `624386b5` plus ruleset cards for offline realms
+Status (2026-11-13): Everlake builds from the fork at `8a606715`: `7e2701ab` plus Karrz v0.1.35 (#45: his release with
+all of his core changes since `f63ffc12`, merged with his git commit `9fe2e33df0` as second parent, review in the fork's
+`docs/upstream-prs/karrz-0135.md`) and the Karrz upstream check (#44). `7e2701ab` is `624386b5` plus ruleset cards for offline realms
 shown greyed out, in realm id order (#43). `624386b5` is `343fe6fb` plus bot dual names (#39) and the
 Wintergrasp condition fix (#42, no battlefield on the map means not held). `343fe6fb` adds TrinityCore master batches A-K (fork #23, #24, #26,
 #28-#35), Karrz's v0.1.33 world data (#22) and Classic scripts (#25, with build fix #27), and Karrz's v0.1.34 world data (#36),

@@ -39,8 +39,8 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 
 | What | Value |
 |---|---|
-| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `7e2701ab` (fork `everlake`: advocaite's `forever` 2ae1313e + forever-bots + the reviewed advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-K, Karrz v0.1.33 world data and scripts, Karrz v0.1.34 world data, the Ring of Law arena and the bot module at 0.1.34, bot dual names, the Wintergrasp condition fix), bots on. The live app and the PTR app build the same commit, so either one makes the same image |
-| Client | WoW Forever **1.60.1.70862**; 1.60.1.70790 clients are also let in (`Realm.AlsoAcceptBuilds`) |
+| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `8a606715` (fork `everlake`: advocaite's `forever` 2ae1313e + forever-bots + the reviewed advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-K, Karrz v0.1.33 world data and scripts, Karrz v0.1.34 world data, the Ring of Law arena and the bot module at 0.1.34, bot dual names, the Wintergrasp condition fix, Karrz v0.1.35 with his whole core catch-up), bots on. The live app and the PTR app build the same commit, so either one makes the same image |
+| Client | WoW Forever **1.60.1.70862**; 1.60.1.70790 and 1.60.1.70888 clients are also let in (`Realm.AlsoAcceptBuilds`) |
 | World DB | `forever-tdb-2026-10-14` release of the same repository |
 | ForeverTracker | [buildthehomelab/wow-forever-tracker](https://github.com/buildthehomelab/wow-forever-tracker) @ `41563272` (`docker-compose.tracker.yml`) |
 
