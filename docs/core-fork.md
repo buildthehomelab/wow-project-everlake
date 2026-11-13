@@ -4,7 +4,8 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-13): Everlake builds from the fork at `8a606715`: `7e2701ab` plus Karrz v0.1.35 (#45: his release with
+Status (2026-11-13): Everlake builds from the fork at `fdcf518c`: `8a606715` plus the Zephras Isle scene NPC fix (#48: removes
+fixed copies of NPCs the quest scene scripts summon, makes the spire's first Malevolent Storms fightable). `8a606715` is `7e2701ab` plus Karrz v0.1.35 (#45: his release with
 all of his core changes since `f63ffc12`, merged with his git commit `9fe2e33df0` as second parent, review in the fork's
 `docs/upstream-prs/karrz-0135.md`) and the Karrz upstream check (#44). `7e2701ab` is `624386b5` plus ruleset cards for offline realms
 shown greyed out, in realm id order (#43). `624386b5` is `343fe6fb` plus bot dual names (#39) and the
