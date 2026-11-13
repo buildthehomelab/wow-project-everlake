@@ -18,7 +18,7 @@ Upstream is a Windows launcher with a setup wizard. We run our fork,
 | `world`, `hotfixes` (live) | read only |
 | `auth`: `realmlist`, `battlenet_accounts`, `account`, `account_access` | read only (client build, GM logins) |
 | `world_ptr`, `hotfixes_ptr` (PTR) | read and write: the analysis reads them, the Forge applies fixes to them |
-| `ft_world_build` | nothing: it belongs to the second user, `tracker_build` ([the world build](#the-world-build)), which has every right there and no right on any database above |
+| `ft_world_build` | read only, while the world build is on: what a replay found. It is written by the second user, `tracker_build` ([the world build](#the-world-build)), which has every right there and no right on any database above |
 
 So a fix is tried on the PTR first, and reaches live like every other change: as reviewed SQL (the Forge shows the
 SQL of each fix and keeps it in its history). MySQL enforces this: `scripts/tracker-setup.sh` sets exactly these
@@ -120,9 +120,10 @@ write to the scratch database only; the tracker's normal user (which writes the 
 `TRACKER_BUILD_DB_PASSWORD` in `.env` and restart the app: `scripts/tracker-setup.sh` then makes `tracker_build` with
 every right on `ft_world_build` (`TRACKER_BUILD_DB`) and none on any other database. Every start takes all its rights
 away first and gives these back. The scratch name must start with `ft_` (no realm, login or tracker database does),
-and a database holding tables no replay made is refused. Without the password, or with a refused name, the user is
-left locked with no rights (never made, if it was not there) and `tracker-init`'s log says so; the website starts
-either way.
+and a database holding tables no replay made is refused. The website's user `tracker` may read the scratch database
+(what a replay found) and write nothing there. Without the password, or with a refused name, `tracker_build` is left
+locked with no rights (never made, if it was not there), `tracker` gets no read right from the world build, and
+`tracker-init`'s log says so; the website starts either way.
 
 **Its files are the realm's.** On every start of the app, `tracker-world-copy` runs inside the live realm's own image
 (`everlake-trinitycore:live`, or `EVERLAKE_IMAGE_TAG` when `.env` sets it; `TRACKER_WORLD_IMAGE_TAG` for another, such

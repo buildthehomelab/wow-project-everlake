@@ -9,6 +9,7 @@
 #         account, account_access
 #   TRACKER_WORLD_DB, TRACKER_HOTFIXES_DB read and write when they are not the live ones (default world_ptr and
 #                                         hotfixes_ptr): the Forge applies its fixes there, on the PTR
+#   TRACKER_BUILD_DB (ft_world_build)     read only, while the world build is on (below): what a replay found
 #
 # The world build (docs/forever-tracker.md, "The world build") has a user of its own, "tracker_build", made only when
 # TRACKER_BUILD_DB_PASSWORD is set. Every start first takes all its rights away and locks it, then gives back:
@@ -16,7 +17,8 @@
 #   every other database                  nothing, not even reading: the replay runs hundreds of update files, and this
 #                                         user is what keeps them inside the scratch database
 # Without the password, or with a scratch name this script refuses (said as an ERROR; the website still starts), the
-# user stays locked with no rights. A role given to it by hand is not taken away: the replay refuses such a user.
+# user stays locked with no rights, and "tracker" gets no read right from the world build. A role given to
+# tracker_build by hand is not taken away: the replay refuses such a user.
 #
 # MYSQL_HOST, MYSQL_ROOT_PASSWORD, TRACKER_DB_PASSWORD: required. TRACKER_WORLD_DB, TRACKER_HOTFIXES_DB,
 # TRACKER_BUILD_DB, TRACKER_BUILD_DB_PASSWORD: optional.
@@ -73,11 +75,13 @@ if [ -n "$BUILD_PASSWORD" ]; then
         fi
     fi
     if [ -z "$build_problem" ]; then
-        # in a grant, _ in a database name stands for any character: escaped, so the grant covers this one name only
+        # in a grant, _ in a database name stands for any character: escaped, so the grant covers this one name only.
+        # The website's user may read what a replay found there, and write nothing: only tracker_build writes it.
         build="CREATE USER IF NOT EXISTS 'tracker_build'@'%' IDENTIFIED WITH mysql_native_password BY '$BUILD_PASSWORD';
 ALTER USER 'tracker_build'@'%' IDENTIFIED WITH mysql_native_password BY '$BUILD_PASSWORD' ACCOUNT UNLOCK;
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'tracker_build'@'%';
-GRANT ALL PRIVILEGES ON \`${BUILD_DB//_/\\_}\`.* TO 'tracker_build'@'%';"
+GRANT ALL PRIVILEGES ON \`${BUILD_DB//_/\\_}\`.* TO 'tracker_build'@'%';
+GRANT SELECT ON \`${BUILD_DB//_/\\_}\`.* TO 'tracker'@'%';"
     fi
 fi
 # SELECT on the live world and hotfixes lets TRACKER_WORLD_DB=world (a read-only report of live) work as it is
@@ -97,7 +101,9 @@ $writes
 $build
 FLUSH PRIVILEGES;
 SQL
-echo "[tracker] user tracker: reads world, hotfixes and auth; analysis on $WORLD_DB + $HOTFIXES_DB"
+reads="world, hotfixes and auth"
+[ -z "$build" ] || reads="world, hotfixes, auth and the world build's $BUILD_DB"
+echo "[tracker] user tracker: reads $reads; analysis on $WORLD_DB + $HOTFIXES_DB"
 root_sql -N -e "SHOW GRANTS FOR 'tracker'@'%'" | sed 's/^/[tracker]   /'
 if [ -n "$build" ]; then
     echo "[tracker] user tracker_build: the world build's scratch database $BUILD_DB, nothing else"
