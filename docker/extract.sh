@@ -114,11 +114,12 @@ if [ "${DBC_ONLY:-0}" = 1 ]; then
     NEW="$OUT/.dbc-new"
     echo "[extract] === mapextractor, dbc and gt only (DBC_ONLY=1), into $NEW"
     rm -rf "$NEW" && mkdir -p "$NEW"
-    "$BIN/mapextractor" -i "$SRC" -o "$NEW" -p "$PRODUCT" "${MAP_ARGS[@]}" -e 10
-    # mapextractor exits 0 even when it cannot open the CASC storage
-    if [ -z "$(find "$NEW/dbc" -name '*.db2' -print -quit 2>/dev/null)" ] \
+    rc=0; "$BIN/mapextractor" -i "$SRC" -o "$NEW" -p "$PRODUCT" "${MAP_ARGS[@]}" -e 10 || rc=$?
+    # mapextractor exits 1 when it fails, e.g. when it can read nothing from the storage (no locales: wrong product or
+    # path); the core at the old pin fdcf518 exited 0 then, so the files are checked as well
+    if [ "$rc" != 0 ] || [ -z "$(find "$NEW/dbc" -name '*.db2' -print -quit 2>/dev/null)" ] \
         || [ -z "$(find "$NEW/gt" -type f -print -quit 2>/dev/null)" ]; then
-        echo "[extract] ERROR: mapextractor wrote no dbc or gt files, see the messages above. ./data is unchanged."
+        echo "[extract] ERROR: mapextractor failed (exit $rc) or wrote no dbc or gt files, see the messages above. ./data is unchanged."
         rm -rf "$NEW"; exit 1
     fi
     # old folders aside, new ones in; if a move fails, put the old ones back so dbc and gt stay one build
@@ -140,9 +141,16 @@ if [ "${SKIP_MAPS:-0}" = 1 ] && [ -d "$OUT/dbc" ] && [ -d "$OUT/maps" ]; then
     echo "[extract] === 1/3 skipped (SKIP_MAPS=1, dbc and maps already there)"
 else
     echo "[extract] === 1/3 mapextractor (dbc, gt, cameras, maps)"
-    "$BIN/mapextractor" -i "$SRC" -o "$OUT" -p "$PRODUCT" "${MAP_ARGS[@]}"
+    rc=0; "$BIN/mapextractor" -i "$SRC" -o "$OUT" -p "$PRODUCT" "${MAP_ARGS[@]}" || rc=$?
+    # mapextractor exits 1 when it fails, e.g. when it can read nothing from the storage (no locales: wrong product or
+    # path), and 2 when tiles of Eastern Kingdoms or Kalimdor could not be read (a client that is not complete); the core
+    # at the old pin fdcf518 exited 0 in both of these cases
+    if [ "$rc" != 0 ]; then
+        echo "[extract] ERROR: mapextractor failed (exit $rc), see the messages above. dbc and maps in ./data may be incomplete; vmaps and mmaps were not rebuilt."
+        exit "$rc"
+    fi
 fi
-# mapextractor exits 0 even when it cannot open the CASC storage
+# a run that wrote no dbc or maps; at the old core pin fdcf518, mapextractor exited 0 when it could not open the storage
 if [ ! -d "$OUT/dbc" ] || [ ! -d "$OUT/maps" ]; then
     echo "[extract] ERROR: mapextractor produced no dbc/maps, see the messages above."
     exit 1
