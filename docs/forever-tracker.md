@@ -189,6 +189,24 @@ client build and for new hotfixes at once, and runs the analysis only when one o
 nothing new it says so and ends in a few seconds. The container's own first check no longer waits 20 minutes after the
 start: it comes a minute after the start's analysis is over, then every six hours as before.
 
+Since fork `67cdd362`:
+
+- **Quests read again from the live game.** *Import EG Link* also compares the quests the realm already has with EG
+  Link's newest recording of each (the quest as the live server sent it to a client) and proposes what differs, as lines
+  of its card: rewards, XP, texts, objective amounts, money, levels. A recording is taken only from a later client build
+  than the row. Flags and the other fields that decide how a quest works are counted on the card, never changed. Read
+  the card before applying it; each change has its rollback.
+- **Keys from Blizzard's hotfixes.** Time-gated content opens from the keys Blizzard hands out by hotfix, without
+  waiting for the public key list. The first client check after this image learns the numbers of the keys the stored
+  build waits for, once (about a minute and a half longer).
+- The Forge says when Blizzard's servers were last asked and what they answered.
+- *Checks*: a ticked level or rank difference takes Wowhead's value through the Forge. Nothing is ticked for you.
+- The two druid flight points in Nighthaven no longer read as missing, zones are checked for creatures inside their
+  map's rectangle, and a source's earlier import cards fold under its newest one.
+
+The first start of this image analyses again by itself. Redeploy the tracker app after the pull: a restart keeps the
+old image.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
