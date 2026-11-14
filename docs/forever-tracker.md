@@ -134,6 +134,21 @@ internal; unnamed ones stay. Map 3002, an encrypted raid, waits with the first r
 EG Link, ForeverDB.net, Wowhead quest enders) look only at the client's own quests, so they ask far less. The first start
 of this image analyses again once; an import a restart stopped goes on from its button.
 
+Since fork `9aadbf38`, the report: a boss the instance script creates is found (Gahz'rilla, Darkmaster Gandling, Hurley
+Blackbreath, Urok Doomhowl and ten more read "missing"), through a list read from the core's own scripts
+(`tools/world/summoned.json` in the fork; run `tools/make_summoned.py` there again when the core pin moves to new
+scripts). What a script brings in counts as present for its loot, stock and quests, and Spawns no longer offers to spawn
+it for good. Each quest has a *Quest text* check (the giver's text, the turn-in text): a doable quest without its words
+reads Incomplete near 90%. Real names are no longer filed as tests (Monster Omelet, Test of Faith). Forever's own copies
+of later-raid items, and the Thunderfury and Atiesh chains, wait under *Later*. A quest Wowhead did not know is asked
+again after a week.
+
+The website: with `TRACKER_PUBLIC=0` a visitor now gets nothing but the login page (the search and tooltip API answered
+anyone, and the login page showed the coverage). A restart no longer logs you out. The footer shows the fork commit the
+image was built from. The Forge keeps its rollback before it changes anything. A source's new import card replaces its
+earlier ones that were never applied, and an Icy Veins import a restart cut short goes on by itself. The first start of
+this image analyses again once.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
