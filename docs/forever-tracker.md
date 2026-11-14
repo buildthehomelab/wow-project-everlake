@@ -112,6 +112,13 @@ brings more of the world build's export (NPC templates, quest turn-in texts, ven
 vendors) and a `karrz` source in `world pin` that notices Karrz's new WoW Forever releases: command-line only, nothing
 changes on the website for them.
 
+Since fork `d7fc591f`: the instances WoW: Forever does not use (Season of Discovery's, such as The Tainted Scar,
+Karazhan Crypts and Scarlet Enclave, plus the original game's unused Emerald Dream and Caverns of Time) and their bosses
+are listed under *Internal / test*, not in the work list. Manor Mistmantle, which is not one of the nine launch
+dungeons, waits in a *Later dungeons* phase. That leaves the 28 dungeon maps Forever opened (35 dungeons with the
+Scarlet Monastery, Dire Maul, Blackrock Spire and Stratholme wings counted apart). Each phase now opens on its own date.
+The first start of this image analyses again once.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
