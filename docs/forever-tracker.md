@@ -170,6 +170,14 @@ Since fork `3eb898b3`, three things about how fresh the tracker's sources are:
 
 The game client and the CDN are first in the order of trust, before Wowhead, Questie's data and Icy Veins.
 
+Since fork `52ce9379`: Blizzard's hotfixes. Between two builds Blizzard changes the game's tables by hotfix, and for
+WoW: Forever about 5,000 items are in no client table at all and reach the client that way (Carving Knife, Rhahk'Zor's
+Hammer, the raids' loot): the tracker never listed them. With every client check it now downloads the hotfix cache of
+the live game (a public mirror, refreshed daily) and reads the newest build with the hotfixes over it. The later word
+wins: a hotfix over its build's table, the later hotfix over the earlier, a newer build over an older build's hotfix.
+The official item list grows by about a quarter, so the coverage number moves. The same image reads spell durations
+with the right layout (its schema entry was out of date).
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
