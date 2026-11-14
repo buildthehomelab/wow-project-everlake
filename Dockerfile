@@ -10,15 +10,16 @@
 ARG UBUNTU_VERSION=24.04
 # The core commit and the bots switch, declared here so the build stage uses them and the runtime stage records them
 # (/opt/trinitycore/image-build.env, checked by the entrypoint against the image tag it was started as).
-# The live realms: our fork's everlake branch with the bots (b5c98f7a: forever 2ae1313e + forever-bots + the 92 reviewed
+# The live realms: our fork's everlake branch with the bots (143ea939: forever 2ae1313e + forever-bots + the 92 reviewed
 # advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-K #23 #24 #26 #28-#35, Karrz v0.1.33 data #22 and
 # scripts #25, build fix #27, Karrz v0.1.34 data #36, Ring of Law arena #37, bot module #38, bot dual names #39,
 # the Wintergrasp condition fix #42 and greyed-out ruleset cards for offline realms #43, Karrz v0.1.35 with his whole core
 # catch-up #45, the Karrz upstream check #44, the Zephras Isle scene NPC fix #48, Karrz's 37 git commits after 0.1.35 #47
-# with the 0.1.35 gaps #52, pet Move To / Stay #49 and pet water pathing #50, name lookups that keep the surname #51 #53), the
+# with the 0.1.35 gaps #52, pet Move To / Stay #49 and pet water pathing #50, name lookups that keep the surname #51 #53,
+# and Karrz v0.1.36 #54), the
 # same commit the PTR builds (docker-compose.ptr.yml), so the live app and the PTR app build one identical image.
-# Client 1.60.1.70862 (realms on 70862; bnetserver and the worldservers also let 70790 and 70888 in, docker/entrypoint.sh).
-ARG TC_COMMIT=b5c98f7ad417269dbf7dec8e00782b9d43771a1c
+# Client 1.60.1.70862 (realms on 70862; bnetserver and the worldservers also let 70790, 70888 and 70938 in, docker/entrypoint.sh).
+ARG TC_COMMIT=143ea9392432ff8dcac97f282955b861dc0ac177
 # PLAYERBOTS=1: the WoW Forever Bots module (src/modules/PlayerbotV2; the core commit must have it, as the fork's
 # everlake branch does since PR #2). 0 builds the core without bots.
 ARG PLAYERBOTS=1
@@ -143,10 +144,12 @@ COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql sql/everlake/2026_11_0
      sql/everlake/2026_11_12_00_hotfixes_ruleset_cards.sql \
      /src/TrinityCore/sql/custom/hotfixes/
 # Our world rules as update files: dynamic respawn groups (quest targets, herb and ore nodes), and the same rule run
-# again after Karrz 0.1.35 added and removed spawns, and once more after the live captures of core pin b5c98f7a added 82
+# again after Karrz 0.1.35 added and removed spawns, and once more after the live captures of core pin b5c98f7a added 82 spawns.
+# Karrz 0.1.36 needs another pass, dated after its 2026_11_13_91 world file.
 # (a new file runs on every realm; an older one runs again only when the updater applies it again).
 COPY sql/everlake/2026_11_09_00_world_dynamic_respawn.sql sql/everlake/2026_11_13_00_world_dynamic_respawn_again.sql \
      sql/everlake/2026_11_13_01_world_dynamic_respawn_after_b5c98f7.sql \
+     sql/everlake/2026_11_14_00_world_dynamic_respawn_after_karrz_0136.sql \
      /src/TrinityCore/sql/custom/world/
 # The world import's update files (empty unless WORLD_DATA_COMMIT is set; see the worlddata stage). Each name must be
 # new to the image: the fork names some of its own files world_everlake_* too, and a plain COPY would overwrite them.

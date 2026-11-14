@@ -24,7 +24,7 @@ OVERRIDES="$ROOT/overrides"
 # clients on 70888 (Battle.net's 2026-11-10 update; its build_info row is the core's auth update 2026_11_10_70, its
 # message numbers are 70790's): bnetserver and every worldserver accept these builds too (Realm.AlsoAcceptBuilds,
 # comma-separated).
-ALSO_ACCEPT_BUILDS="70790,70888"
+ALSO_ACCEPT_BUILDS="70790,70888,70938"
 # Realm 1's world port. 8085 by default; another one when the host already runs a server on 8085 (e.g. beside Evermore)
 : "${WORLD_PORT:=8085}"
 : "${LOGIN_HOSTNAME:=trinity.actual.battle.net}"
