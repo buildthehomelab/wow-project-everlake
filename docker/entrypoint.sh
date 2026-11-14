@@ -175,17 +175,19 @@ configure_playerbots() {
     grep -E '^Playerbot\.World\.(Enable|MaxBots) ' "$BOT_CONF_DIR/playerbot.conf" | sed 's/^/[entrypoint]   /' || true
 }
 
-# IMAGE_TAG (compose: the tag this container was started as). A PTR tag, ptr-<core commit>-<world data commit or none>,
+# IMAGE_TAG (compose: the tag this container was started as). A PTR tag, ptr-<core commit>-<world data commit or none>
+# and, since 2026-11-14, -<revision of this repository's own files in the image> (tools/ci/image-rev.sh),
 # promises what the image holds; /opt/trinitycore/image-build.env says what it was built from. They differ when the
 # wrong app built the tag first: the everlake app builds a missing image from its own build args, and the PTR app then
 # finds that image and runs it too. Say so loudly at every start. Images from before image-build.env: the bot check only.
 check_image_build() {
-    local tag="${IMAGE_TAG:-}" info="$ROOT/image-build.env" core="" wd="" bots="" want_core want_wd problems=()
+    local tag="${IMAGE_TAG:-}" info="$ROOT/image-build.env" core="" wd="" bots="" rev="" want_core want_wd want_rev problems=()
     # `live` (scripts/promote.sh moves it to the image the PTR ran) names no build: say what this one was built from
     if [ "$tag" = live ]; then
         if [ -f "$info" ]; then
             echo "[entrypoint] image live: core $(sed -n 's/^TC_COMMIT=//p' "$info"), world data" \
-                "$(sed -n 's/^WORLD_DATA_COMMIT=//p' "$info" | sed 's/^$/none/'), bots $(sed -n 's/^PLAYERBOTS=//p' "$info")"
+                "$(sed -n 's/^WORLD_DATA_COMMIT=//p' "$info" | sed 's/^$/none/'), bots $(sed -n 's/^PLAYERBOTS=//p' "$info")," \
+                "Everlake files $(sed -n 's/^IMAGE_REV=\(..*\)$/\1/p' "$info" | grep . || echo unknown)"
         fi
         [ -f "$ETC/worldserver.conf.d/playerbot.conf.dist" ] \
             || echo "[entrypoint] ERROR: image live has no bots: promote a PTR image (scripts/promote.sh, README, PTR)"
@@ -197,13 +199,17 @@ check_image_build() {
         core="$(sed -n 's/^TC_COMMIT=//p' "$info")"
         wd="$(sed -n 's/^WORLD_DATA_COMMIT=//p' "$info")"
         bots="$(sed -n 's/^PLAYERBOTS=//p' "$info")"
-        if [[ "$tag" =~ ^ptr-([0-9a-f]{40})(-([0-9a-f]{40}|none))?$ ]]; then
+        rev="$(sed -n 's/^IMAGE_REV=//p' "$info")"
+        if [[ "$tag" =~ ^ptr-([0-9a-f]{40})(-([0-9a-f]{40}|none))?(-([0-9a-f]{8}))?$ ]]; then
             want_core="${BASH_REMATCH[1]}"
             want_wd="${BASH_REMATCH[3]:-}"
+            want_rev="${BASH_REMATCH[5]:-}"
             [ "$want_wd" = none ] && want_wd=""
             [ "$core" = "$want_core" ] || problems+=("its core is ${core:-unknown}, the tag says $want_core")
             [ -z "${BASH_REMATCH[2]}" ] || [ "$wd" = "$want_wd" ] \
                 || problems+=("its world data is ${wd:-none}, the tag says ${want_wd:-none}")
+            [ -z "$want_rev" ] || [ "$rev" = "$want_rev" ] \
+                || problems+=("its Everlake files are revision ${rev:-unknown}, the tag says $want_rev")
         fi
         [ "$bots" = 1 ] || [ "${#problems[@]}" -gt 0 ] || problems+=("it was built with PLAYERBOTS=${bots:-unset}")
     fi

@@ -169,13 +169,15 @@ COPY --from=tdb /tdb/ /opt/trinitycore/bin/
 COPY docker/entrypoint.sh docker/extract.sh /usr/local/bin/
 # What this image was built from: the entrypoint compares it with the tag it runs as (IMAGE_TAG), so an image built by
 # the wrong app under a PTR tag (e.g. without the bots) says so at start instead of running quietly without them.
+# IMAGE_REV: the revision of this repository's own files in the image (tools/ci/image-rev.sh), the PTR tag's third part.
 ARG TC_COMMIT
 ARG PLAYERBOTS
 ARG WORLD_DATA_COMMIT
+ARG IMAGE_REV=
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/extract.sh \
     && mkdir -p /opt/trinitycore/data /opt/trinitycore/logs /opt/trinitycore/certs /opt/trinitycore/overrides \
-    && printf 'TC_COMMIT=%s\nPLAYERBOTS=%s\nWORLD_DATA_COMMIT=%s\n' "${TC_COMMIT}" "${PLAYERBOTS}" "${WORLD_DATA_COMMIT}" \
-        > /opt/trinitycore/image-build.env
+    && printf 'TC_COMMIT=%s\nPLAYERBOTS=%s\nWORLD_DATA_COMMIT=%s\nIMAGE_REV=%s\n' "${TC_COMMIT}" "${PLAYERBOTS}" \
+        "${WORLD_DATA_COMMIT}" "${IMAGE_REV}" > /opt/trinitycore/image-build.env
 
 ENV LD_LIBRARY_PATH=/opt/trinitycore/lib
 WORKDIR /opt/trinitycore/bin
