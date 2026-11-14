@@ -2,6 +2,8 @@
 
 The candidate core is `143ea9392432ff8dcac97f282955b861dc0ac177`, the reviewed head of [core PR #54](https://github.com/buildthehomelab/wow-trinitycore-everlake/pull/54). Merge that PR with this commit retained, and require its full build matrix to pass before merging this dependent pin. If its code changes, update and recheck the pin.
 
+Update after the merge: #54 merged as `88746967bc2a62782d338e920ecd3eea25123773`, with `143ea939` retained and one more commit, `9a7fc384` (a signed compare in `classic_instance_razorfen_downs.cpp` that gcc's `-Werror=sign-compare` rejects; Karrz builds with MSVC and clang does not warn). The image builds with gcc, so the pin is the merge commit.
+
 ## Recent changes and coverage
 
 The current integration main already pins core `b5c98f7ad417269dbf7dec8e00782b9d43771a1c` and PTR world data `cb7c92787a9ab262b268d9bd6d5a63be1d95d466`, both matching their respective merged branch heads at review. This includes the 0.1.35 catch-up, pet movement and surname fixes, and the merged world-data work through PR #166 (vendor stock and drops). The world-data pin stays unchanged.

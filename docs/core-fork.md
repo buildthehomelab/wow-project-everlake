@@ -4,8 +4,8 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-13): the next build pins `143ea939` (Karrz 0.1.36, core PR #54).
-This pin depends on #54 merging with this commit retained and its build matrix passing.
+Status (2026-11-13): the build pins `88746967`, core PR #54 merged (Karrz 0.1.36): the reviewed `143ea939` plus
+`9a7fc384`, the gcc build fix in the Razorfen Downs gong script.
 See [the pin review and deployment steps](pin-karrz-0136.md).
 
 The preceding pin `b5c98f7a` is: `fdcf518c` plus Karrz's 37 git commits after 0.1.35 (#47,
