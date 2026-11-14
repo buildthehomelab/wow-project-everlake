@@ -277,6 +277,11 @@ Since fork `93bcb522`: the quest givers, enders and vendors of the players' repo
 get the place the report gives them (when exactly one template has their name). *Read the pack again* on the Imports
 page, then *Locate* on the Spawns page.
 
+Since fork `c92e67cb`: a quest giver, ender or vendor of the players' reports that nobody spawned still gets its row,
+when exactly one template has the name. Before, the reported place was kept and never used: the locator only places
+what the realm's data says it needs, and nothing said so. *Read the pack again*, read the card, apply it, then *Run
+again* and *Locate*: those NPCs show as ready to place where players met them.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
