@@ -124,6 +124,16 @@ files in (Karrz 0.1.36 runs them over its own connection), and its stage tables 
 A file that would stop the realm's start now stops the export instead. Nothing changes on the website; the analysis is not
 run again.
 
+Since fork `d3072c91`: gaps that were none are gone. Season of Discovery's raid versions of Blackfathom Deeps, Gnomeregan
+and the Sunken Temple, and a fight the client lists twice in an instance, no longer count as bosses of their own (they sit
+under *Internal / test*). A boss also counts when a script brings it in instead of a spawn row (its page says so), when the
+client misspells it, and by one of its creatures when the encounter is an event (The Seven). Warsong Gulch is no longer
+flagged for its five creatures. Boats, zeppelins, script targets and a battleground's nodes are no flight points, and the
+Eastern Plaguelands towers need no spawned flight master. Placeholder mounts, pets, toys and recipes (`[PH] ...`) are
+internal; unnamed ones stay. Map 3002, an encrypted raid, waits with the first raids. The imports (Icy Veins, NorgannonDB,
+EG Link, ForeverDB.net, Wowhead quest enders) look only at the client's own quests, so they ask far less. The first start
+of this image analyses again once; an import a restart stopped goes on from its button.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
