@@ -4,11 +4,14 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-13): the build pins `88746967`, core PR #54 merged (Karrz 0.1.36): the reviewed `143ea939` plus
-`9a7fc384`, the gcc build fix in the Razorfen Downs gong script.
-See [the pin review and deployment steps](pin-karrz-0136.md).
+Status (2026-11-14): the build pins `b1ba6dfa`: the preceding pin plus the hunter pet work, core PRs #56 (stat
+inheritance, 10 focus per second, 20% pet XP, loyalty by XP and time) and #55 (what tamed beasts know, pet families,
+the pet trainer rank chain).
 
-The preceding pin `b5c98f7a` is: `fdcf518c` plus Karrz's 37 git commits after 0.1.35 (#47,
+The preceding pin `88746967` is core PR #54 (Karrz 0.1.36): the reviewed `143ea939` plus `9a7fc384`, the gcc build fix
+in the Razorfen Downs gong script. See [the pin review and deployment steps](pin-karrz-0136.md).
+
+Before that, the pin `b5c98f7a` is: `fdcf518c` plus Karrz's 37 git commits after 0.1.35 (#47,
 merged with his git commit `063c74ab24` as second parent, review in the fork's `docs/upstream-prs/karrz-git-2026-11-12.md`), the parts of
 0.1.35 that #45 recorded as merged but did not take (#52, `docs/upstream-prs/karrz-0135-gaps.md`), pets that obey Move To and
 Stay (#49) and walk round water (#50), and whisper, invite, friend, ignore and guild lookups that keep the surname (#51, #53).
