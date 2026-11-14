@@ -178,6 +178,12 @@ wins: a hotfix over its build's table, the later hotfix over the earlier, a newe
 The official item list grows by about a quarter, so the coverage number moves. The same image reads spell durations
 with the right layout (its schema entry was out of date).
 
+Since fork `c59251bd`: the changelog no longer lists the items that exist by hotfix alone as "added" in the newest build
+(they are in no build's tables, so nothing says when they appeared; the page says how many there are), and the
+overview counts the resources of the newer client build that the server's data really does not know, instead of
+calling all of them unknown. Press *Run again* once after the restart: the changelog of the newest build is written
+again.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
