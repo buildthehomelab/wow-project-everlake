@@ -1,0 +1,9 @@
+3627b099867bfde3e37a17cf44f69cdc
+3363ac656da5f261cdc675ab28b2744c
+1.60.1.70938
+tpr/wow
+level3.blizzard.com us.cdn.blizzard.com
+
+The Blizzard build our patched client build (the Classic overlay) is made on: the build the launcher installs
+(wow-everlake-launcher internal/pin/wowf.json). Lines 1-5: build key, CDN key, version, CDN path, hosts, the
+layout of a tact cache's build.txt. Read by scripts/cdn-build.sh and client/macos/everlake-client.sh overlay.

@@ -19,6 +19,9 @@
 #   ./everlake-client.sh reports <address | server>  (where check, test1 and switch send reports and screenshots)
 #   ./everlake-client.sh cdn <address[:port] | server>  (where gate2 gets the patched build; default: the server, 8087)
 #   ./everlake-client.sh china-mode on|off [game folder]  (the client's own China setting, overrideArchive)
+#   ./everlake-client.sh overlay [folder]           (the Classic overlay made again on the game build the launcher
+#                                                    installs now; sends a report. folder: the launcher's install
+#                                                    folder or the overlay folder itself, when it isn't found)
 #
 # setup (asks for your password once, for the hosts file):
 #   1. hosts entry: trinity.actual.battle.net -> 127.0.0.1, and remembers the server address. play runs
@@ -424,6 +427,71 @@ game_pids() {
     done
 }
 game_running() { [ -n "$(game_pids)" ]; }
+
+# The launcher's install folder as it saved it (launcher.json sits in the same Application Support folder as ours).
+launcher_dir() {
+    python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("install_dir", ""))' \
+        "$SUPPORT/launcher.json" 2>/dev/null || true
+}
+
+# The folder holding the patched client build (build.json and tpr/): the folder given, or _era_/overlay in it, else
+# in the launcher's install folder, else in ~/Everlake, else on a mounted drive. Prints it, or returns 1.
+find_overlay() {
+    local d l
+    l="$(launcher_dir)"
+    for d in "${1:-}" "${1:+$1/_era_/overlay}" "${l:+$l/_era_/overlay}" "$HOME/Everlake/_era_/overlay"; do
+        if [ -n "$d" ] && [ -f "$d/build.json" ]; then echo "$d"; return 0; fi
+    done
+    d="$(find /Volumes -maxdepth 5 -type f -path '*/_era_/overlay/build.json' 2>/dev/null | head -n 1 || true)"
+    if [ -n "$d" ]; then dirname "$d"; return 0; fi
+    return 1
+}
+
+# One line about a patched build: the Blizzard build it is made on, its own key, how many files of ours it holds.
+overlay_summary() {
+    python3 -c 'import json, sys
+b = json.load(open(sys.argv[1] + "/build.json"))
+print("made on %s (Blizzard build key %s), our build key %s, %d files of ours" % (
+    b.get("version", "?"), b.get("blizzard_build_key", "?"), b.get("build_key", "?"), len(b.get("files", {}))))' "$1"
+}
+
+# Makes the Classic overlay again on the Blizzard build the launcher installs now (tools/tact/pin.txt). The overlay
+# is a finished patched build in a folder; our files are all in it, so tools/tact/patch.py takes them out and patches
+# them into the new Blizzard build, in the same folder. The game install is not touched: the launcher's Update then
+# installs the new build from this folder.
+overlay_do() {
+    local tools="$HERE/../../tools/tact" cache="$SUPPORT/overlay-cache" o want_build want_version have_build
+    echo "== $(date '+%Y-%m-%d %H:%M:%S') overlay on $(hostname -s), $(sw_vers -productVersion 2>/dev/null || echo '?'), $(python3 --version 2>&1)"
+    [ -f "$tools/pin.txt" ] && [ -f "$tools/patch.py" ] || { echo "no $tools/pin.txt or patch.py: git pull first"; return 1; }
+    want_build="$(sed -n 1p "$tools/pin.txt")"; want_version="$(sed -n 3p "$tools/pin.txt")"
+    echo "the launcher installs $want_version (Blizzard build key $want_build)"
+    echo "launcher install folder (launcher.json): $(launcher_dir || true)"
+    if ! o="$(find_overlay "${1:-}")"; then
+        echo "no overlay found: no build.json in ${1:+$1, $1/_era_/overlay, }the launcher's install folder, ~/Everlake or a mounted drive"
+        echo "folders named _era_ on this Mac:"
+        find "$HOME" /Volumes -maxdepth 5 -type d -name _era_ 2>/dev/null | head -n 20 || true
+        echo "pass the folder: $0 overlay <launcher install folder | overlay folder>"
+        return 1
+    fi
+    echo "overlay folder: $o"
+    echo "before: $(overlay_summary "$o")"
+    echo "size $(du -sh "$o" 2>/dev/null | cut -f1), free on its drive $(df -h "$o" | awk 'NR==2 {print $4}')"
+    have_build="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1] + "/build.json")).get("blizzard_build_key", ""))' "$o")"
+    if [ "$have_build" = "$want_build" ]; then
+        echo "it is already made on $want_version: nothing to do"
+        return 0
+    fi
+    # the old build.json stays beside the new one (its files stay in the folder too: everything is named by hash)
+    cp -n "$o/build.json" "$o/build-before-$want_version.json" 2>/dev/null || true
+    mkdir -p "$cache/tact"
+    if [ "$(sed -n 1p "$cache/tact/build.txt" 2>/dev/null || true)" != "$want_build" ]; then
+        sed -n 1,5p "$tools/pin.txt" > "$cache/tact/build.txt"
+    fi
+    echo "making it again on $want_version (the first time this downloads Blizzard's indexes, several hundred MB, and takes a while)"
+    python3 -I "$tools/patch.py" --cache "$cache" --out "$o" --files-from-build "$o" || { echo "patch.py failed (exit $?)"; return 1; }
+    echo "after: $(overlay_summary "$o")"
+    echo "done. Next: open the Everlake launcher (v0.1.2-alpha.1 or newer; it updates itself), then Update."
+}
 
 # Stops a test because the game is open, and sends what is running to the report drop, so nobody has to copy it.
 refuse_running() {
@@ -885,6 +953,17 @@ case "$cmd" in
         say "gate2 CDN: $C"
         nc -z -G 3 "$(addr_host "$C")" "$(addr_port "$C")" 2>/dev/null && say "it answers" \
             || say "it does NOT answer (on the server: docker compose run --rm cdn-build, then restart the app)"
+        ;;
+    overlay)
+        # The Classic overlay made again on the game build the launcher installs now; the report goes to the report drop
+        REPORT="$SUPPORT/overlay.txt"; mkdir -p "$SUPPORT"
+        { overlay_do "$@" 2>&1 || echo "[everlake] overlay stopped (exit $?)"; } | tee "$REPORT"
+        addr="$(report_addr)"
+        if [ -n "$addr" ] && curl -s -m 10 -T "$REPORT" "http://$addr:8099/overlay-$(hostname -s)" >/dev/null; then
+            say "report sent to $addr"
+        else
+            say "report NOT sent (saved in $REPORT)"
+        fi
         ;;
     china-mode)
         # The client's own China setting (overrideArchive): on, it reads Blizzard's China copies of the files, for
