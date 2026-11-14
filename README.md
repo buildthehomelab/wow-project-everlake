@@ -124,6 +124,13 @@ its image (bots on, the world data pinned in `docker-compose.ptr.yml`, or `PTR_W
 (`scripts/ptr-setup.sh init`), builds the mmaps if there are none, then starts its worldserver. Nothing runs on the host
 but `git pull`.
 
+The image's tag is `ptr-<core commit>-<world data commit>-<revision>`. The revision is made from this repository's own
+files in the image: the Dockerfile and what it copies (`docker/patches`, the entrypoint and extract scripts, the
+`sql/everlake` files it names). A change to any of the three parts is a tag that doesn't exist yet, so the PTR builds
+it on its next start; with the same core commit Docker reuses the compiled layers and the build is short. After
+changing one of those files, run `tools/ci/image-rev.sh --write` (CI fails until `docker-compose.ptr.yml` carries the
+new revision).
+
 1. `git pull`, then start (or restart) the `everlake-ptr` app, and try it.
 2. Good: `sudo scripts/promote.sh`, then restart the `everlake` app. No rebuild and no `.env` edit: realm 1, the login
    server and the extractor run `everlake-trinitycore:live`, and the script points that tag at the image the PTR's
@@ -131,7 +138,7 @@ but `git pull`.
 3. Back: `sudo scripts/promote.sh rollback` (swaps `live` and `live-previous`), then restart the `everlake` app.
 
 `sudo scripts/promote.sh status` shows what `live`, `live-previous` and the PTR run and what each was built from, and
-the worldserver prints it at every start (`[entrypoint] image live: core ..., world data ..., bots ...`). The first
+the worldserver prints it at every start (`[entrypoint] image live: core ..., world data ..., bots ..., Everlake files ...`). The first
 promote also keeps the image live is running as `live-previous` and comments out an old `EVERLAKE_IMAGE_TAG` line in
 `.env` (with a dated backup), which would otherwise win over the `live` tag. `MMAP_PATHFINDING=1` stays in `.env`.
 Don't run `docker compose build` for the `everlake` app on a server that has a `live` image: it would replace `live`

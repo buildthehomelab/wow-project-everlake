@@ -1,6 +1,6 @@
 #!/bin/bash
 # Which image the live realm runs, without editing .env. The everlake app runs everlake-trinitycore:live (realm 1, the
-# login server, the extractor); the PTR app builds and runs ptr-<core commit>-<world data commit>. Promoting points the
+# login server, the extractor); the PTR app builds and runs ptr-<core commit>-<world data commit>-<files revision>. Promoting points the
 # `live` tag at the image the PTR ran and keeps the one before as `live-previous`; restart the everlake app afterwards
 # (TrueNAS Apps UI). Nothing is rebuilt or deleted; tags only move. Realm 2 keeps REALM2_IMAGE_TAG.
 #
@@ -37,12 +37,14 @@ built_from() {
     local info
     info="$($DOCKER run --rm --entrypoint cat "$1" /opt/trinitycore/image-build.env 2>/dev/null || true)"
     [ -n "$info" ] || { echo "(no image-build.env: built before it existed)"; return; }
-    local core wd bots
+    local core wd bots rev
     core="$(sed -n 's/^TC_COMMIT=//p' <<<"$info")"; wd="$(sed -n 's/^WORLD_DATA_COMMIT=//p' <<<"$info")"
-    bots="$(sed -n 's/^PLAYERBOTS=//p' <<<"$info")"
+    bots="$(sed -n 's/^PLAYERBOTS=//p' <<<"$info")"; rev="$(sed -n 's/^IMAGE_REV=//p' <<<"$info")"
     local wds=none
     [ -z "$wd" ] || wds="${wd:0:10}"
-    echo "core ${core:0:10}, world data $wds, bots ${bots:-?}"
+    # Everlake files: the revision of this repository's own files in the image (tools/ci/image-rev.sh); images built
+    # before 2026-11-14 have none
+    echo "core ${core:0:10}, world data $wds, bots ${bots:-?}, Everlake files ${rev:-unknown}"
 }
 
 describe() {  # <label> <image ref or id>
