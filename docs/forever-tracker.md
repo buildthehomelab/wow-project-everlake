@@ -273,6 +273,10 @@ Since fork `3879fbbc`:
   still hold the recording player's own name is left out and counted on the card. Where EG Link recorded the same
   window, its wording is taken first.
 
+Since fork `93bcb522`: the quest givers, enders and vendors of the players' reports that nobody spawned on the realm
+get the place the report gives them (when exactly one template has their name). *Read the pack again* on the Imports
+page, then *Locate* on the Spawns page.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
