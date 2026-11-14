@@ -69,12 +69,12 @@ services:
   tracker:
     build:
       # the fork at a pinned commit (bump on purpose, like the core)
-      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-5f3ab0d5c25aabb1b252613c9b71b5dfe8d13b23}
+      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-3eb898b398a21c80e350af61e86a04a1dfcf90b3}
       # kept in the image and shown in the website's footer after the version: which commit is running can be read
       # off the page
       args:
-        FT_COMMIT: ${TRACKER_COMMIT:-5f3ab0d5c25aabb1b252613c9b71b5dfe8d13b23}
-    image: forever-tracker:${TRACKER_COMMIT:-5f3ab0d5c25aabb1b252613c9b71b5dfe8d13b23}
+        FT_COMMIT: ${TRACKER_COMMIT:-3eb898b398a21c80e350af61e86a04a1dfcf90b3}
+    image: forever-tracker:${TRACKER_COMMIT:-3eb898b398a21c80e350af61e86a04a1dfcf90b3}
     networks: [everlake]
     restart: unless-stopped
     depends_on:
@@ -113,6 +113,10 @@ services:
       # release phases: empty = each phase opens on Forever's date (first raids 2026-12-09); a phase key, a number,
       # all or none to run ahead of or behind it (read at each page load, no new analysis)
       FT_PHASE: ${TRACKER_PHASE:-}
+      # the official client from Blizzard's own servers: every N hours the live build is looked up and, when it is
+      # newer than the newest one stored (or a key of its hidden content was published), read from the CDN and
+      # analysed (0 = never). Needs the internet: us.patch.battle.net:1119 and Blizzard's CDN hosts
+      FT_CLIENT_EVERY_HOURS: ${TRACKER_CLIENT_EVERY_HOURS:-6}
     ports:
       - "${TRACKER_PORT:-8090}:80"
     volumes:
