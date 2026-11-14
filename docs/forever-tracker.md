@@ -101,6 +101,17 @@ Since fork `12d3faf1`: the first two steps of [the world build](#the-world-build
 `world why` (which file wrote each row of the realm's world). Nothing changes on the website, and the analysis is not
 run again.
 
+Since fork `e3b016b0`: **release phases** (the fork's `docs/PHASES.md`). Content the client carries but Forever has
+not released yet shows as *Later* instead of missing, and stays out of the coverage and the work list: the first raids
+(Onyxia's Lair, Hyjal Summit, Barrow Deeps) until 2026-12-09, then Molten Core, Blackwing Lair, Zul'Gurub, both
+Ahn'Qirajs and Naxxramas until Blizzard announces their date. Everlake follows Forever's dates, so `TRACKER_PHASE`
+stays empty; set it (a phase key, a number, `all` or `none`) only to run ahead of or behind Forever. A new date or raid
+goes into the fork's `tools/phases/forever.json`; the first start of an image with a changed list analyses again by
+itself. The first start of this image analyses again once too (the Wowhead checks make that run longer). The same pin
+brings more of the world build's export (NPC templates, quest turn-in texts, vendor items sold like the world's other
+vendors) and a `karrz` source in `world pin` that notices Karrz's new WoW Forever releases: command-line only, nothing
+changes on the website for them.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
