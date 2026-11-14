@@ -155,6 +155,21 @@ that moved*). Only rows an import brought are touched, by the same source or a m
 Questie's data, then Icy Veins, then the others); the core's own rows are counted and left alone. Each change names the
 value it replaces and can be rolled back, and a data repo file now names its source by itself. No new analysis at start.
 
+Since fork `3eb898b3`, three things about how fresh the tracker's sources are:
+
+- **The client itself.** The official list used to be read from the server's extracted copy, only when the realm moved
+  build. Every `TRACKER_CLIENT_EVERY_HOURS` (6) the tracker now asks Blizzard's version server which Forever build is
+  live and reads its tables straight from the CDN when it is newer than the newest one stored. Content the client
+  ships encrypted stays hidden, as in the server's own copy; the build is read again as soon as one of its keys is
+  published. The first check after this image starts stores the live build and analyses again: what the server does
+  not have yet shows as gaps, the changelog shows what Blizzard changed, and the pages say "Server N · client M".
+- **Wowhead.** An answer is believed for about 30 days (a week for "does not know it"), then asked again; before, a
+  real answer was kept for good.
+- **Ask every source again** (The Forge > Imports) makes every answer kept so far count as due. The next analysis and
+  the next imports then take as long as the very first ones did.
+
+The game client and the CDN are first in the order of trust, before Wowhead, Questie's data and Icy Veins.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
