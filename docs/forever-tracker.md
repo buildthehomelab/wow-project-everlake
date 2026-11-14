@@ -207,6 +207,21 @@ Since fork `67cdd362`:
 The first start of this image analyses again by itself. Redeploy the tracker app after the pull: a restart keeps the
 old image.
 
+Since fork `668ae4da`:
+
+- **The quest refresh proposes only what says something else.** Its first run on the whole world proposed 7,400 changes,
+  most of them the same thing written another way. It now compares reputation as points (a tier and an override of the
+  same amount are one reward), text as it reads (line breaks, spaces, the case of `$n`), never empties a value the
+  recording does not state, and does not compare money or the quest's own level (the server sends both for the player
+  who asked). A card made before this image must not be applied: *Import EG Link* again replaces it.
+- **Whose side a creature is on.** *Checks* gains three tabs: *Faction* (the realm's faction attacks a side that saw
+  the creature friendly on live, or befriends a side that only saw it hostile), *Shown to one side* (the realm hides it
+  from a side that saw it on live) and *Vendor reputation* (a one-sided vendor whose faction has no reputation, so no
+  discount applies). A list to look at: no source states the right faction. It cannot find a creature the realm shows
+  to everyone that only one side should see.
+
+The first start of this image analyses again by itself.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
