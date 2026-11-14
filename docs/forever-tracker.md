@@ -238,6 +238,19 @@ name standing there and never guesses (a shared name, an unknown name and a crea
 the card). Only what its players saw is taken: who gives and takes a quest marked as seen, vendors, and drops counted
 in at least ten kills. The tracker never asks the site.
 
+Since fork `dfac0852`, from the same pack (make it again with the new `tools/foreverchanges_pack.py`: it now carries
+the NPCs and pins of the site's maps):
+
+- **Places for what nobody spawned.** NPCs the site's own addon saw (by entry), and rares, commerce NPCs and library
+  books (by name), that the realm has a template of and no spawn for, get their reported place. Press *Locate* on the
+  *Spawns* page after reading a pack.
+- **Whose quest it is.** The analysis compares the side players on live got a quest on with the races the realm offers
+  it to. A difference is a check on the quest's page (*Offered to the right side*); nothing changes it by itself.
+  Press *Run again* after sending a pack.
+
+The site's turn-in texts are not used: it shows them with the recording player's name where the realm holds a
+placeholder.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
