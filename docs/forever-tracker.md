@@ -149,6 +149,12 @@ image was built from. The Forge keeps its rollback before it changes anything. A
 earlier ones that were never applied, and an Icy Veins import a restart cut short goes on by itself. The first start of
 this image analyses again once.
 
+Since fork `5f3ab0d5`: an import no longer only adds what is missing. It also compares the drops the server already has
+with what its source says now, and where a chance moved it proposes the new one on its card (*Creature drop chances
+that moved*). Only rows an import brought are touched, by the same source or a more trusted one (Wowhead, then
+Questie's data, then Icy Veins, then the others); the core's own rows are counted and left alone. Each change names the
+value it replaces and can be rolled back, and a data repo file now names its source by itself. No new analysis at start.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
