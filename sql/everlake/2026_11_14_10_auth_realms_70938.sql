@@ -1,0 +1,15 @@
+-- The realms move to WoW Forever client 1.60.1.70938 (Battle.net's update of 2026-11-13), the build the launcher
+-- installs from v0.1.2-alpha.1 on. Until now they were on 70862 (the core's 2026_11_07_00 file) and let 70938 clients
+-- in as an extra build. Now 70938 is the realms' own build, and the builds before it are the extra ones: 70790 (what
+-- the launcher installed before), 70862 and 70888 (docker/entrypoint.sh, ALSO_ACCEPT_BUILDS).
+--
+-- Only rows on a Forever build are moved, so a realm row of another product keeps its build. build_info already has
+-- 70938 (the core's sql/custom/auth/2026_11_13_70 file, applied before this one). The client's message numbers are
+-- chosen per connection from the client's own build, not the realm's, so nothing else changes with this.
+--
+-- The login database is shared by the live realms and the PTR: the first worldserver that starts with this file moves
+-- every realm. The servers read the realm list again every 10 seconds (RealmsStateUpdateDelay), so no restart is
+-- needed for it.
+-- Applied by the worldserver's updater on start (the Dockerfile copies it to sql/custom/auth). Safe to run again.
+-- Undo: UPDATE `realmlist` SET `gamebuild` = 70862 WHERE `gamebuild` = 70938;
+UPDATE `realmlist` SET `gamebuild` = 70938 WHERE `gamebuild` IN (70790, 70840, 70862, 70888);

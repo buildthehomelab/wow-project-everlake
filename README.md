@@ -40,7 +40,7 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 | What | Value |
 |---|---|
 | Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `b1ba6dfa` (fork `everlake`: advocaite's `forever` 2ae1313e + forever-bots + the reviewed advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-K, Karrz v0.1.33 world data and scripts, Karrz v0.1.34 world data, the Ring of Law arena and the bot module at 0.1.34, bot dual names, the Wintergrasp condition fix, Karrz v0.1.35 with his whole core catch-up, the Zephras Isle scene NPC fix, Karrz's 37 git commits after 0.1.35 with the 0.1.35 gaps, pet Move To / Stay and water pathing, name lookups that keep the surname, Karrz v0.1.36, hunter pets on WoW Forever's rules), bots on. The live app and the PTR app build the same commit, so either one makes the same image |
-| Client | WoW Forever **1.60.1.70862**; 1.60.1.70790 and 1.60.1.70888 clients are also let in (`Realm.AlsoAcceptBuilds`) |
+| Client | WoW Forever **1.60.1.70938**, the build the launcher installs; 1.60.1.70790, 70862 and 70888 clients are also let in (`Realm.AlsoAcceptBuilds`) |
 | World DB | `forever-tdb-2026-10-14` release of the same repository |
 | ForeverTracker | [buildthehomelab/wow-forever-tracker](https://github.com/buildthehomelab/wow-forever-tracker) @ `167a4882` (`docker-compose.tracker.yml`) |
 
@@ -51,9 +51,15 @@ so freeze it before testing, and check the CDN build before extracting:
 curl -s http://us.patch.battle.net:1119/wowf/versions | grep '^us|'
 ```
 
-70790 and 70862 have the same table layouts and the same map files; only table contents differ (spells, items and
-about 80 other tables, compared file by file on Blizzard's CDN on 2026-11-08). Data extracted from 70790 still loads.
-To bring the tables up to 70862 without redoing maps, vmaps and mmaps: `DBC_ONLY=1 docker compose run --rm extractor`.
+70790, 70862 and 70938 have the same table layouts and the same map files; only table contents differ. Between
+70862 and 70938, 112 of 1,245,658 files changed: 79 tables, 28 interface files and 5 programs, and no map, model or
+texture file (compared file by file on Blizzard's CDN on 2026-11-14). All 370 tables the server loads have, in 70938,
+the layout the pinned core expects. 35 of them hold sections locked by three keys Blizzard has not published
+(`0DA4670DB36FB2A9`, `DA0E7785727A0A65`, `3146BA4C4ECDBFAB`); those sections are the same size in 70862 and 70938,
+so new tables lose nothing the server could read before. Data extracted from 70790 or 70862 still loads.
+To bring the tables up to 70938 without redoing maps, vmaps and mmaps: `DBC_ONLY=1 docker compose run --rm extractor`.
+The live realm and the PTR read the same data folder, so copy `dbc` and `gt` aside first; a worldserver reads the
+tables only when it starts, so the running realm is not touched until its next restart.
 
 Some maps exist only on the server: map 3200, the Ring of Law arena, is Blackrock Depths (230) under its own id, with
 its Map row in the hotfixes database, so the client files have nothing for it. The extractor copies map 230's maps,
