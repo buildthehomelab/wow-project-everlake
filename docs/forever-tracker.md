@@ -263,6 +263,16 @@ Since fork `b59ca703`, from reading the first card and the first side check on t
 Press *Run again* after this image, and *Read the pack again* on the Imports page: the earlier card and the earlier
 side findings are replaced.
 
+Since fork `3879fbbc`:
+
+- **The pack is the full file.** `tools/foreverchanges_pack.py` writes a zip of under 10 MB: the lists the tracker
+  reads, and beside them every data file of the site in English as the crawl has it, kept for later versions. Send
+  this one on the Imports page; the earlier small pack is still read.
+- **What the NPC says at the turn-in** comes from the reports too, for the quests players saw that have no such text
+  on the realm. The site's marks for the player's name, class and race become `$N`, `$C` and `$R`. A text that may
+  still hold the recording player's own name is left out and counted on the card. Where EG Link recorded the same
+  window, its wording is taken first.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
