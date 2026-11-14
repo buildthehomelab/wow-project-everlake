@@ -14,24 +14,21 @@ set -eu
 
 CACHE=/cache
 mkdir -p "$CACHE/tact"
-# Pin the cache to the build the launcher installs (1.60.1.70938, wow-everlake-launcher internal/pin/wowf.json), never
-# whatever Blizzard serves today: the launcher only takes a patched build made on exactly its own pinned build.
-# A cache pinned to an earlier build is moved to this one. What it already downloaded stays (CDN files are named by
-# their hash), and only the new build's indexes are fetched. Builds already in /cdn stay there too; build.json names
-# the newest.
-PIN_BUILD=3627b099867bfde3e37a17cf44f69cdc
-PIN_VERSION=1.60.1.70938
-PIN="$PIN_BUILD
-3363ac656da5f261cdc675ab28b2744c
-$PIN_VERSION
-tpr/wow
-level3.blizzard.com us.cdn.blizzard.com"
+# Pin the cache to the build the launcher installs (tools/tact/pin.txt, the same file the Mac client's overlay
+# command reads), never whatever Blizzard serves today: the launcher only takes a patched build made on exactly its
+# own pinned build. A cache pinned to an earlier build is moved to this one. What it already downloaded stays (CDN
+# files are named by their hash), and only the new build's indexes are fetched. Builds already in /cdn stay there
+# too; build.json names the newest.
+PIN_FILE=/app/tools/tact/pin.txt
+PIN_BUILD=$(sed -n 1p "$PIN_FILE")
+PIN_VERSION=$(sed -n 3p "$PIN_FILE")
+[ -n "$PIN_BUILD" ] && [ -n "$PIN_VERSION" ] || { echo "[cdn-build] $PIN_FILE names no build" >&2; exit 1; }
 have_build=$(sed -n 1p "$CACHE/tact/build.txt" 2>/dev/null || true)
 if [ "$have_build" != "$PIN_BUILD" ]; then
     if [ -n "$have_build" ]; then
         echo "[cdn-build] the cache was pinned to $(sed -n 3p "$CACHE/tact/build.txt"): moving it to $PIN_VERSION"
     fi
-    printf '%s\n' "$PIN" > "$CACHE/tact/build.txt"
+    sed -n 1,5p "$PIN_FILE" > "$CACHE/tact/build.txt"
 fi
 
 # all sets into one folder (a FileDataID in two sets: the later set wins)
