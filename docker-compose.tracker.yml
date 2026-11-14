@@ -69,8 +69,8 @@ services:
   tracker:
     build:
       # the fork at a pinned commit (bump on purpose, like the core)
-      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-d7fc591f3ad3968d749f4d2a77fb1831bb841f7f}
-    image: forever-tracker:${TRACKER_COMMIT:-d7fc591f3ad3968d749f4d2a77fb1831bb841f7f}
+      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-59e22b815d0d4e052476d1cba44b04940644eec6}
+    image: forever-tracker:${TRACKER_COMMIT:-59e22b815d0d4e052476d1cba44b04940644eec6}
     networks: [everlake]
     restart: unless-stopped
     depends_on:

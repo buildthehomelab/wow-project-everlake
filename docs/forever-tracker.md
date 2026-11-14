@@ -119,6 +119,11 @@ dungeons, waits in a *Later dungeons* phase. That leaves the 28 dungeon maps For
 Scarlet Monastery, Dire Maul, Blackrock Spire and Stratholme wings counted apart). Each phase now opens on its own date.
 The first start of this image analyses again once.
 
+Since fork `59e22b81`: the world build's export runs its trial in MySQL's strict mode, the mode the core's updater applies
+files in (Karrz 0.1.36 runs them over its own connection), and its stage tables give every column they declare a default.
+A file that would stop the realm's start now stops the export instead. Nothing changes on the website; the analysis is not
+run again.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
