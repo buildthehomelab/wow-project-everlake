@@ -184,6 +184,11 @@ overview counts the resources of the newer client build that the server's data r
 calling all of them unknown. Press *Run again* once after the restart: the changelog of the newest build is written
 again.
 
+Since fork `4395bcdc`: *Check the client now* in the Forge, next to *Run again*. It asks Blizzard's servers for a newer
+client build and for new hotfixes at once, and runs the analysis only when one of them brought something new; with
+nothing new it says so and ends in a few seconds. The container's own first check no longer waits 20 minutes after the
+start: it comes a minute after the start's analysis is over, then every six hours as before.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
