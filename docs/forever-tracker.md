@@ -231,6 +231,13 @@ Since fork `167a4882`, from reading both lists on the whole world:
 
 This image does not analyse again at its start: press *Run again* once to refresh the *Checks* list.
 
+Since fork `5c1e52f5`: players' reports from a file. *Imports* gains a *ForeverChanges* section: a pack made from a
+copy of that site (`python tools/foreverchanges_pack.py copy.db out.fcpack`, under 1 MB) is sent there and becomes an
+import card. The site names NPCs and places them on a map; the tracker matches a name to the realm's creature of that
+name standing there and never guesses (a shared name, an unknown name and a creature nobody spawned are counted on
+the card). Only what its players saw is taken: who gives and takes a quest marked as seen, vendors, and drops counted
+in at least ten kills. The tracker never asks the site.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
