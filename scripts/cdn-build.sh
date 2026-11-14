@@ -7,7 +7,9 @@
 # The added files are every files.tsv set under CDN_FILES_DIR (default ./cdn-files): a folder holding files named by
 # FileDataID and a files.tsv listing them, as tools/tact/collect.py writes it. With no sets there is nothing to build.
 # Every build is content-addressed, so an older build keeps working beside a new one; build.json (what the mini's
-# gate2 reads) names the newest. The running cdn service picks it up without a restart.
+# gate2 and the launcher read) names the newest. The running cdn service picks it up without a restart.
+# With no file sets but a build already in CDN_DIR (made elsewhere and copied in), that build is made again on the
+# pinned Blizzard build from its own files: this is how it follows the launcher to a new game build.
 set -eu
 
 CACHE=/cache
@@ -45,7 +47,23 @@ for list in $(find /files -name files.tsv 2>/dev/null | sort); do
     done < "$list"
 done
 if [ ! -s "$ALL/files.tsv" ]; then
-    echo "[cdn-build] no files to add (no files.tsv under CDN_FILES_DIR): nothing built"; exit 0
+    # No file sets here: a build made somewhere else was copied into CDN_DIR as it is (its build.json and its files).
+    # Our files are all in that folder, so it is made again on the pinned build from itself.
+    if [ ! -f /cdn/build.json ]; then
+        echo "[cdn-build] no files to add (no files.tsv under CDN_FILES_DIR) and no earlier build in CDN_DIR: nothing built"
+        exit 0
+    fi
+    made_on=$(python -c 'import json; b=json.load(open("/cdn/build.json")); print(b.get("blizzard_build_key", ""), b.get("version", "?"))')
+    if [ "${made_on%% *}" = "$PIN_BUILD" ]; then
+        echo "[cdn-build] no file sets under CDN_FILES_DIR, and the build in CDN_DIR is already made on $PIN_VERSION: nothing to do"
+        exit 0
+    fi
+    echo "[cdn-build] no file sets under CDN_FILES_DIR: making the build in CDN_DIR (made on ${made_on#* }) again on $PIN_VERSION, from its own files"
+    echo "[cdn-build] (the first run on a new build downloads Blizzard's indexes, ~320 MB, a few minutes)"
+    python -I /app/tools/tact/patch.py --cache "$CACHE" --out /cdn --files-from-build /cdn
+    chown -R "${HOST_UID:-0}:${HOST_GID:-0}" /cdn
+    echo "[cdn-build] done: $(python -c 'import json; b=json.load(open("/cdn/build.json")); print("build", b["build_key"], "on", b["version"], "with", len(b["files"]), "files")')"
+    exit 0
 fi
 echo "[cdn-build] patched build into /cdn (the first run downloads Blizzard's indexes, ~320 MB, a few minutes)"
 python -I /app/tools/tact/patch.py --cache "$CACHE" --out /cdn --files-from "$ALL/files.tsv"

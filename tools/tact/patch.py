@@ -2,6 +2,7 @@
 """A game build that is Blizzard's plus our own files (gate 2, docs/custom-files.md).
 
     python3 tools/tact/patch.py --cache <tact cache> --out <dir> [--files-from files.tsv] [FDID=FILE ...]
+    python3 tools/tact/patch.py --cache <tact cache> --out <dir> --files-from-build <earlier --out dir>
     python3 tools/tact/patch.py --cache <tact cache> --selftest
 
 <tact cache> is the folder `tact.py --cache` downloads into, already pinned to the build to patch (product wowf).
@@ -631,20 +632,47 @@ def verify(out, build, files):
                                                           " ".join(tagged)))
 
 
+def files_of_build(folder):
+    """{FileDataID: bytes}: our own files of a patched build this tool wrote earlier, read back from its folder.
+
+    build.json lists them with their content key, encoded key and size, and each is stored on its own under
+    <cdn path>/data, so nothing has to be fetched and nothing depends on the Blizzard build it was made on. That is
+    how a patched build moves to a new Blizzard build when the files it was made from are no longer at hand.
+    Every file is checked against its content key."""
+    summary = json.load(open(os.path.join(folder, "build.json")))
+    files = {}
+    for fdid, entry in summary["files"].items():
+        ekey = entry["ekey"]
+        path = os.path.join(folder, summary["cdn_path"], "data", ekey[:2], ekey[2:4], ekey)
+        content = tact.blte(open(path, "rb").read())
+        if md5(content).hex() != entry["ckey"] or len(content) != entry["size"]:
+            raise RuntimeError("file %s in %s doesn't match its content key" % (fdid, folder))
+        files[int(fdid)] = content
+    if not files:
+        raise RuntimeError("%s lists no files of ours" % folder)
+    return files
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--cache", required=True, help="tact cache folder, pinned to the build to patch")
     ap.add_argument("--out", help="folder for the patched build (laid out like the CDN)")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--files-from", help="a files.tsv from collect.py (FileDataID first; the files sit next to it)")
+    ap.add_argument("--files-from-build", metavar="DIR",
+                    help="an earlier patched build (a folder with build.json, this tool's --out): take our files out "
+                         "of it again, to make the same build on another Blizzard build")
     ap.add_argument("files", nargs="*", metavar="FDID=FILE")
     args = ap.parse_args()
     build = Build(args.cache)
     if args.selftest:
         sys.exit(0 if build.selftest() else 1)
-    if not args.out or not (args.files or args.files_from):
-        ap.error("--out and at least one FDID=FILE (or --files-from) are needed")
+    if not args.out or not (args.files or args.files_from or args.files_from_build):
+        ap.error("--out and at least one FDID=FILE (or --files-from, or --files-from-build) are needed")
     files = {}
+    if args.files_from_build:
+        files.update(files_of_build(args.files_from_build))
+        print("%d file(s) taken out of %s" % (len(files), args.files_from_build))
     if args.files_from:
         folder = os.path.dirname(os.path.abspath(args.files_from))
         for line in open(args.files_from):
