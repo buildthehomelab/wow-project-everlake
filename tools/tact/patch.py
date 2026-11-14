@@ -255,7 +255,7 @@ def download_add(data, ekeys, template_ekey, priority=0):
     moment the map loads, so it must already be local (Blizzard lists Kalimdor's at priority 1). The new entries get
     the tags (platform, architecture, locale, region) of `template_ekey`'s entry. Version 1 layout: "DL", version,
     ekey size, has checksum, entry count (4), tag count (2); entries of ekey, size (5), priority (1); then per tag
-    a name, a type (2) and one bit per entry, highest bit first."""
+    a name, a type (2) and one bit per entry, highest bit first, the last byte filled up with ones."""
     if data[:2] != b"DL" or data[2] != 1 or data[3] != 16 or data[4] != 0:
         raise ValueError("download manifest layout not supported")
     count, tags = struct.unpack_from(">IH", data, 5)
@@ -285,7 +285,10 @@ def download_add(data, ekeys, template_ekey, priority=0):
         ours = ((1 << len(new)) - 1) if bit else 0
         total = len(new) + count
         value = (ours << count) | old
-        out_tags += name_type + (value << ((-total) % 8)).to_bytes((total + 7) // 8, "big")
+        # The bits left over in a mask's last byte are ones in Blizzard's manifests (seen in 1.60.1.70938, whose
+        # 2,208,764 entries leave four; 70790's count was a multiple of eight, so it had none).
+        pad = (-total) % 8
+        out_tags += name_type + ((value << pad) | ((1 << pad) - 1)).to_bytes((total + 7) // 8, "big")
     if at != len(data):
         raise ValueError("download manifest has data after its tags")
     return data[:5] + struct.pack(">IH", count + len(new), tags) + head + entries + out_tags

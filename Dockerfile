@@ -18,7 +18,8 @@ ARG UBUNTU_VERSION=24.04
 # with the 0.1.35 gaps #52, pet Move To / Stay #49 and pet water pathing #50, name lookups that keep the surname #51 #53,
 # Karrz v0.1.36 #54 with its gcc build fix 9a7fc384, and hunter pets on WoW Forever's rules #55 #56), the
 # same commit the PTR builds (docker-compose.ptr.yml), so the live app and the PTR app build one identical image.
-# Client 1.60.1.70862 (realms on 70862; bnetserver and the worldservers also let 70790, 70888 and 70938 in, docker/entrypoint.sh).
+# Client 1.60.1.70938 (realms on 70938, sql/everlake/2026_11_14_10; bnetserver and the worldservers also let 70790, 70862 and 70888 in,
+# docker/entrypoint.sh).
 ARG TC_COMMIT=b1ba6dfab5c93dad38bba1c7afffe88bf8589204
 # PLAYERBOTS=1: the WoW Forever Bots module (src/modules/PlayerbotV2; the core commit must have it, as the fork's
 # everlake branch does since PR #2). 0 builds the core without bots.
@@ -136,10 +137,11 @@ COPY --from=build /opt/trinitycore /opt/trinitycore
 # The updater looks for sql/ under the source directory baked in at build time
 COPY --from=build /src/TrinityCore/sql /src/TrinityCore/sql
 # Our login-database rows, applied by the updater on start like the fork's own custom files: the one ruleset card at
-# login (Forever), and the TACT keys live Forever sends that the core lacks (tools/live-hotfixes/tact_keys.py). Name
+# login (Forever), the realms' client build (1.60.1.70938), and the TACT keys live Forever sends that the core lacks (tools/live-hotfixes/tact_keys.py). Name
 # reservation's tables are the fork's own now (sql/custom/auth/2026_11_07_09 and 2026_11_09_00). The other
 # sql/everlake files are data and stay manual.
-COPY sql/everlake/2026_11_08_06_auth_one_ruleset.sql /src/TrinityCore/sql/custom/auth/
+COPY sql/everlake/2026_11_08_06_auth_one_ruleset.sql sql/everlake/2026_11_14_10_auth_realms_70938.sql \
+     /src/TrinityCore/sql/custom/auth/
 COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql sql/everlake/2026_11_08_08_hotfixes_live_tact_keys.sql \
      sql/everlake/2026_11_12_00_hotfixes_ruleset_cards.sql \
      /src/TrinityCore/sql/custom/hotfixes/
