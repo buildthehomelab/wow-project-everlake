@@ -251,6 +251,18 @@ the NPCs and pins of the site's maps):
 The site's turn-in texts are not used: it shows them with the recording player's name where the realm holds a
 placeholder.
 
+Since fork `b59ca703`, from reading the first card and the first side check on the whole world:
+
+- A drop players saw once is no longer taken, and an item fifteen or more different creatures drop is a world drop and
+  left out: the first card was nine tenths Waylaid Crates listed under every creature that happened to die when one
+  fell.
+- *Offered to the right side* only asks about a quest the realm keeps to one side. The first version compared the
+  side in players' reports with the races a quest is offered to and named about 300 quests wrongly: most quests are
+  offered to every race, and their giver's faction keeps the other side out.
+
+Press *Run again* after this image, and *Read the pack again* on the Imports page: the earlier card and the earlier
+side findings are replaced.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
