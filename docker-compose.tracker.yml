@@ -69,8 +69,8 @@ services:
   tracker:
     build:
       # the fork at a pinned commit (bump on purpose, like the core)
-      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-cebfb5c2c75199d3b27a3725023568d9f0e60b15}
-    image: forever-tracker:${TRACKER_COMMIT:-cebfb5c2c75199d3b27a3725023568d9f0e60b15}
+      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-e3b016b041cfc11b25dd0079d1c5d1b5acad6c58}
+    image: forever-tracker:${TRACKER_COMMIT:-e3b016b041cfc11b25dd0079d1c5d1b5acad6c58}
     networks: [everlake]
     restart: unless-stopped
     depends_on:
@@ -106,6 +106,9 @@ services:
       # TRACKER_ATLASLOOT_GUESS=0 leaves out its drops that have no measured chance instead of an even share
       FT_ATLASLOOT_EVERY_HOURS: ${TRACKER_ATLASLOOT_EVERY_HOURS:-6}
       FT_ATLASLOOT_GUESS: ${TRACKER_ATLASLOOT_GUESS:-1}
+      # release phases: empty = each phase opens on Forever's date (first raids 2026-12-09); a phase key, a number,
+      # all or none to run ahead of or behind it (read at each page load, no new analysis)
+      FT_PHASE: ${TRACKER_PHASE:-}
     ports:
       - "${TRACKER_PORT:-8090}:80"
     volumes:
