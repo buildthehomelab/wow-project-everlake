@@ -222,6 +222,15 @@ Since fork `668ae4da`:
 
 The first start of this image analyses again by itself.
 
+Since fork `167a4882`, from reading both lists on the whole world:
+
+- The quest refresh compares a quest's items, choices, currencies and reputations as a list: the same rewards in another
+  slot order are no change. *Import EG Link* again before applying a quest card made by an earlier image.
+- *Checks › Faction* no longer names a creature whose faction's reputation players earn (a Gelkis centaur is friendly to
+  whoever earned it), and *Vendor reputation* lists only vendors on a general faction.
+
+This image does not analyse again at its start: press *Run again* once to refresh the *Checks* list.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
