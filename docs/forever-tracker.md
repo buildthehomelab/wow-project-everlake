@@ -289,6 +289,11 @@ Season of Discovery item teaches are listed under *Internal / test*. What stays 
 teaches it. An achievement that rewards a Legacy Point needs no `achievement_reward` row: the core pays the point
 once the achievement is earned. The analysis runs again by itself after the redeploy.
 
+Since fork `8ea3e7be`: a recipe of the original game whose only teaching item is missing from the client stays on
+the list (the Naxxramas frost resistance sets, Onyxia Scale Cloak, quest recipes): the pattern was never used and
+the recipe is taught another way. A missing item files a spell under *Internal / test* only when the spell is a
+Season of Discovery addition.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
