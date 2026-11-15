@@ -334,6 +334,12 @@ that stands in the world here without a trainer list (the Triage doctors, Henry 
 1,000,000 plus the creature's number, the link to it and its recipes, and applying the card adds the trainer flags.
 Press *Read the pack again* under *Classic database* after the redeploy: the card made before it is out of date.
 
+Since fork `af342c41`: a recipe taught in a conversation counts as learnable. The analysis reads the realm's
+conversation menus and the SmartAI of a menu choice that casts a spell, on spawned NPCs and objects, and one core
+script known to teach on Forever (Gloom'rel's Smelt Dark Iron); the spell's page says "taught in a conversation".
+The engineering transporters' core script is left out: it checks a skill line the Forever client lacks and teaches
+nobody. The analysis runs again by itself after the redeploy.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
