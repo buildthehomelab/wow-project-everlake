@@ -299,6 +299,15 @@ data: the trainer that lists it and is not spawned (by creature ID), or the ques
 yet (by quest ID, a reward spell that teaches the recipe included). Only when neither exists does it name the item
 that teaches it.
 
+Since fork `4f517337`: the changelog goes back to the first beta. Every client check now also stores the builds that
+came before the newest one stored, each once: the list of builds is wago.tools', the files are read from Blizzard's
+CDN (WoW: Forever's beta shipped under the Classic beta's product name, `wow_classic_beta` 1.60.x). Each build then
+has its own changelog page, beta builds are tagged, and a build that changed the program alone says "no data change"
+(16 of the 30 builds up to 1.60.1.70938). The first check after this image starts reads the missing builds (about
+50 MB and a quarter of a minute each, plus 125 MB of shared indexes) and analyses again: about a quarter of an hour,
+once. They take about 15 MB each in the tracker's data volume. No new analysis at start by itself; **Check the client
+now** in the Forge does it at once.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
