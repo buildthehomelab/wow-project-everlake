@@ -328,6 +328,12 @@ original game (19 tables from wago.tools' public exports, about 13 MB) and analy
 changes out once more: a few minutes, once. **Check the client now** in the Forge does it at once. The tracker's
 tooltips also give bows, guns, thrown weapons and wands the stats the game gives them (they showed too much before).
 
+Since fork `44e42a6e`: the *Classic database* card asks only about recipes Forever kept (the old healing potions,
+which Forever replaced, are no longer proposed at every alchemy trainer). A creature the original game trained at,
+that stands in the world here without a trainer list (the Triage doctors, Henry Stern), gets one: a list numbered
+1,000,000 plus the creature's number, the link to it and its recipes, and applying the card adds the trainer flags.
+Press *Read the pack again* under *Classic database* after the redeploy: the card made before it is out of date.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
