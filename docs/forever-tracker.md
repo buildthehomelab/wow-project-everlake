@@ -339,6 +339,12 @@ conversation menus and the SmartAI of a menu choice that casts a spell, on spawn
 script known to teach on Forever (Gloom'rel's Smelt Dark Iron); the spell's page says "taught in a conversation".
 The engineering transporters' core script is left out: it checks a skill line the Forever client lacks and teaches
 nobody. The analysis runs again by itself after the redeploy.
+Since fork `f9b5cefd`: Blizzard's hotfixes are entries of their own. Every hotfix cache that differs from the one
+before is kept with its build (`data/builds/<build>/hotfixes/`, about 1 MB a day in the tracker's data volume), and
+each later day's hotfixes get a dashed "Hotfixes of <day>" card on the home timeline and their own changelog page
+(`/changes?build=70938&hotfix=1`). The history starts with the cache the tracker holds at the redeploy: earlier days
+are not on the mirror any more. The first analysis after the redeploy works every build out again once (a few
+minutes); the site reads the old analysis until it is done.
 
 ## The world build
 
