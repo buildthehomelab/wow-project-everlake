@@ -365,6 +365,12 @@ there is left out and counted. The card needs a pack of the new format: build it
 and upload it under *Classic database* after the redeploy.
 Since fork `cfdddc63`: a checkout takes the server's build from the realm list when config.ini does not say it, as the
 analysis does (Everlake's tracker sets no `[server] build`).
+Since fork `28431116`: **Wowhead pages** (The Forge › Imports). Wowhead refuses page requests from a script, so a
+crawler file the page hands out runs in a browser tab on wowhead.com/forever at a pace it learns from Wowhead's blocks,
+and `WHC.save()` downloads what it read (numbers only: drops, sellers, quest givers and enders). Sending that file
+merges it into the tracker's data volume and makes an import card, under the same rules as every source. The tracker
+itself asks Wowhead for nothing. The Imports page also says now that the *Classic database* card writes conversation
+lines.
 
 ## The world build
 
