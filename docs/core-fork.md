@@ -4,7 +4,13 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-15): the build pins `73c020e6`: the preceding pin plus core PR #57, the account character list. The
+Status (2026-11-15): the build pins `3129ec1d`: the preceding pin plus core PR #59, hunter pet attack speed and diet.
+Every hunter pet now swings at WoW Forever's 2.0 seconds plus its beast's own Faster or Slower Attack passive (104
+`classic_pet_tame_spell` rows, checked against Wowhead), swing damage follows the speed so damage per second is the same,
+and pet food types come from the client's item data (411 foods) instead of the 197 the world database knew. The check on
+the PTR: tame Mystmane on Zephras Isle (1.6 seconds in the pet window) and feed a bear ribs.
+
+The pin before that, `73c020e6`, added core PR #57, the account character list. The
 client asks for the account's characters when it enters the world and offers them in the mail window's To box; the core
 never answered. The answer's layout is the 12.1.0 one and its number for 70790 and later clients follows the rule of
 its neighbours; neither is confirmed by a recording of the game, so the check on the PTR is to type the first letters
