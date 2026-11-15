@@ -4,7 +4,14 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-15): the build pins `3129ec1d`: the preceding pin plus core PR #59, hunter pet attack speed and diet.
+Status (2026-11-15): the build pins `63bd6fb6`: the preceding pin plus core PR #58, the stat budget of ranged weapons.
+Bows, guns, crossbows, thrown weapons and wands now take their stats from the ranged column of `RandPropPoints` (the
+one relics use), as WoW: Forever does, instead of the two-hand column (wands: the one-hand column). These weapons gave more stats
+than the client's tooltip showed. The check on the PTR: equip a Ragefire Wand (+3 Intellect) or a Mithril Blunderbuss
+(+5 Agility) and compare the character sheet with the tooltip. The armory export command keeps the old ranged stats in
+`armory_item` until it is run again.
+
+The pin before that, `3129ec1d`, added core PR #59, hunter pet attack speed and diet.
 Every hunter pet now swings at WoW Forever's 2.0 seconds plus its beast's own Faster or Slower Attack passive (104
 `classic_pet_tame_spell` rows, checked against Wowhead), swing damage follows the speed so damage per second is the same,
 and pet food types come from the client's item data (411 foods) instead of the 197 the world database knew. The check on
