@@ -318,6 +318,16 @@ of a creature's conversation needs a script, not a row: it is counted on the car
 Since fork `e5f710f8`: on the Forge and on Spawns the page's title sits above the analysis card. Side by side, the
 card took the whole row whenever its lines were as wide as the page, and the heading was drawn under it.
 
+Since fork `385429dc`: the changelog starts at the original game. Patch 1.12, as Blizzard published it again in 2019
+(the client WoW Classic launched with, 1.13.2.31650), is stored once as the build before the first beta, and the
+first beta build has a page of what it added, changed and does not have against it. "Not in Forever" there is not
+"removed": most of it is content that is not released yet (the later raids' loot). Every analysis also replays the
+chain: the original game and every build's changes must give the newest build, resource for resource; the log says so
+in one line and the original game's page shows it by kind. The first client check after this image starts stores the
+original game (19 tables from wago.tools' public exports, about 13 MB) and analyses again, working every build's
+changes out once more: a few minutes, once. **Check the client now** in the Forge does it at once. The tracker's
+tooltips also give bows, guns, thrown weapons and wands the stats the game gives them (they showed too much before).
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
