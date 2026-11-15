@@ -308,6 +308,13 @@ has its own changelog page, beta builds are tagged, and a build that changed the
 once. They take about 15 MB each in the tracker's data volume. No new analysis at start by itself; **Check the client
 now** in the Forge does it at once.
 
+Since fork `51296471`: the original game's database (cmangos' classic-db, GPL-3.0) is a source, asked last and only
+about profession recipes nobody can learn on the realm. The tracker never downloads it: make a pack from the
+project's dump (`python tools/classicdb_pack.py ClassicDB_1_12_1_….sql.gz out.cdbpack`, about 150 kB) and send it on
+the Imports page, under *Classic database*. The card proposes trainer rows at the trainers the realm has for those
+creatures, and a reward spell for quests that cast nothing at the turn-in. A recipe Classic teaches through a line
+of a creature's conversation needs a script, not a row: it is counted on the card and not written.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
