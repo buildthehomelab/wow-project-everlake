@@ -355,6 +355,8 @@ folder. The same from a shell: `tracker.py checkout list` and `tracker.py checko
 `docs/CHECKOUT.md` says what a checkout cannot say. `world replay --at <step>` (or `--until <date>`) stops the world
 replay at that step's day, to pair with it. The first analysis after the redeploy works every build out again once
 (a few minutes), as the table reader changed.
+Since fork `cfdddc63`: a checkout takes the server's build from the realm list when config.ini does not say it, as the
+analysis does (Everlake's tracker sets no `[server] build`).
 
 ## The world build
 
