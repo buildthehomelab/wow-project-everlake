@@ -294,6 +294,11 @@ the list (the Naxxramas frost resistance sets, Onyxia Scale Cloak, quest recipes
 the recipe is taught another way. A missing item files a spell under *Internal / test* only when the spell is a
 Season of Discovery addition.
 
+Since fork `5cacbd34`: a spell or recipe that cannot be learned yet says what it waits for, from the realm's own
+data: the trainer that lists it and is not spawned (by creature ID), or the quest that rewards it and cannot be done
+yet (by quest ID, a reward spell that teaches the recipe included). Only when neither exists does it name the item
+that teaches it.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
