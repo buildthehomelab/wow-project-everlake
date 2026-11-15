@@ -345,6 +345,16 @@ each later day's hotfixes get a dashed "Hotfixes of <day>" card on the home time
 (`/changes?build=70938&hotfix=1`). The history starts with the cache the tracker holds at the redeploy: earlier days
 are not on the mirror any more. The first analysis after the redeploy works every build out again once (a few
 minutes); the site reads the old analysis until it is done.
+Since fork `434b83ef`: **checkout**. The Forge's new *Checkout* page writes the client's data at any step of the
+timeline (a build, or a build and a day's hotfixes) as an SQL file for a **test realm's** hotfixes database: every
+record that differs from the realm's own DB2 files (`DATA_DIR/dbc`), and what those have that the step does not, as
+one hotfix push. *Make* builds it in the background (a build stored for the changelog alone first reads its other
+tables from Blizzard's CDN, about 40 MB, once), then the page hands out the file. Loading it replaces the tables it
+names: load it into a test realm, never the live one, restart that worldserver and clear the game client's `Cache`
+folder. The same from a shell: `tracker.py checkout list` and `tracker.py checkout <step> --fetch`. The fork's
+`docs/CHECKOUT.md` says what a checkout cannot say. `world replay --at <step>` (or `--until <date>`) stops the world
+replay at that step's day, to pair with it. The first analysis after the redeploy works every build out again once
+(a few minutes), as the table reader changed.
 
 ## The world build
 
