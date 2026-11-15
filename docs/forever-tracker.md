@@ -315,6 +315,9 @@ the Imports page, under *Classic database*. The card proposes trainer rows at th
 creatures, and a reward spell for quests that cast nothing at the turn-in. A recipe Classic teaches through a line
 of a creature's conversation needs a script, not a row: it is counted on the card and not written.
 
+Since fork `e5f710f8`: on the Forge and on Spawns the page's title sits above the analysis card. Side by side, the
+card took the whole row whenever its lines were as wide as the page, and the heading was drawn under it.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
