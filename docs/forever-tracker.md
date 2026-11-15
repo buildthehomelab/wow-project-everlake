@@ -381,6 +381,13 @@ until removed by hand). The card also brings chest and node contents, quest-only
 every side, turn-in words, and the innkeeper / banker / flight master / spirit healer flags an NPC lacks; the locator
 places creatures Wowhead cannot from where players saw them. Also since `28431116`: Wowhead pages reads npc and
 object pages (#78) and the whole Forever and Classic crawl (#75). The fork's `docs/ICYVEINS.md` lists all Icy Veins holds.
+Since fork `ea62dc26`: the core's own Classic scripts that teach count as teachers: Master Craftsman Omarion's 13
+Naxxramas recipes and the Field Repair Bot 74A schematic (an object, used at Engineering 300). Knot Thimblejack's and
+the engineering transporters' scripts stay out until the core fork's fix (core PR 60) runs on the realm. On the
+*Classic database* card, Gloom'rel, who runs SmartAI here (his challenge), gets a SmartAI line teaching Smelt Dark
+Iron, and lines of a core-scripted teacher are counted as "the core teaches it" or "needs the core fix". The
+analysis runs again by itself after the redeploy (marker 18). Also: the Wowhead crawler reads an empty id range as
+empty instead of splitting it without end (#79).
 
 ## The world build
 
