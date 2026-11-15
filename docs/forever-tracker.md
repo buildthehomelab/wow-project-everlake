@@ -393,6 +393,11 @@ That is how Gloom'rel teaches Smelt Dark Iron on Everlake, so it counts as taugh
 pattern spells the Forever client lacks (all but Plans: Icebane Breastplate), so only that one recipe counts until
 core PR 60 is live. The analysis runs again by itself after the redeploy (marker 19). Also: the Imports page's Icy
 Veins text describes the whole mirror (#80).
+Since fork `fc4851a6`: a conversation choice also counts the SmartAI rows it links to (Gloom'rel's choice closes
+the window and links to the row that calls his teaching list), and only what a conversation's spell teaches counts as
+learned, not the buff or teleport it casts. On the world data the realm started from that makes 15 recipes and
+specializations taught by talking (Smelt Dark Iron, Wild Leather, the blacksmithing specializations, Goldthorn Tea,
+Troll's Blood Elixir, Fishing), where their NPCs stand. The analysis runs again by itself after the redeploy (marker 20).
 
 ## The world build
 
