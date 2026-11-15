@@ -282,6 +282,13 @@ when exactly one template has the name. Before, the reported place was kept and 
 what the realm's data says it needs, and nothing said so. *Read the pack again*, read the card, apply it, then *Run
 again* and *Locate*: those NPCs show as ready to place where players met them.
 
+Since fork `b1d38f76`: spells and achievements are judged by how the game hands them out. A spell a talent or perk
+tree grants, or one that comes with learning another spell (the new profession rank spells), counts as learnable. A
+spell nobody learns (the game data marks it as never learned, or another spell casts it) and a spell only a test or
+Season of Discovery item teaches are listed under *Internal / test*. What stays on the list names the item that
+teaches it. An achievement that rewards a Legacy Point needs no `achievement_reward` row: the core pays the point
+once the achievement is earned. The analysis runs again by itself after the redeploy.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
