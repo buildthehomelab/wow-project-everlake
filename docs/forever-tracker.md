@@ -363,6 +363,8 @@ teaches the recipe and closes the conversation; AIName and the gossip flag are f
 the core's own script name instead. An NPC run by another core script or AI, a shared conversation or a line already
 there is left out and counted. The card needs a pack of the new format: build it again (`tools/classicdb_pack.py`)
 and upload it under *Classic database* after the redeploy.
+Since fork `cfdddc63`: a checkout takes the server's build from the realm list when config.ini does not say it, as the
+analysis does (Everlake's tracker sets no `[server] build`).
 
 ## The world build
 
