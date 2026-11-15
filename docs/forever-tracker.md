@@ -388,6 +388,11 @@ the engineering transporters' scripts stay out until the core fork's fix (core P
 Iron, and lines of a core-scripted teacher are counted as "the core teaches it" or "needs the core fix". The
 analysis runs again by itself after the redeploy (marker 18). Also: the Wowhead crawler reads an empty id range as
 empty instead of splitting it without end (#79).
+Since fork `dc55eb9f`: a conversation choice that calls a SmartAI timed action list counts what that list casts.
+That is how Gloom'rel teaches Smelt Dark Iron on Everlake, so it counts as taught now. Omarion's core script casts
+pattern spells the Forever client lacks (all but Plans: Icebane Breastplate), so only that one recipe counts until
+core PR 60 is live. The analysis runs again by itself after the redeploy (marker 19). Also: the Imports page's Icy
+Veins text describes the whole mirror (#80).
 
 ## The world build
 
