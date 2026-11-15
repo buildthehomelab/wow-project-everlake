@@ -372,6 +372,16 @@ merges it into the tracker's data volume and makes an import card, under the sam
 itself asks Wowhead for nothing. The Imports page also says now that the *Classic database* card writes conversation
 lines.
 
+Since fork `7610863e`: **Icy Veins is mirrored whole.** *Import Icy Veins* keeps every NPC, object, quest, item,
+zone, flight path and map Icy Veins lists (about 67,000 answers, gzipped in the data volume under `icyveins/`), the
+gaps first: the first run takes about nine hours in the background, later runs only ask what is older than 14 days.
+`FT_ICYVEINS_MAX` defaults to 100,000. Skinned leather and hides now go to `skinning_loot_template` and pick-pocket
+loot to `pickpocketing_loot_template` (they used to be written as corpse loot; such rows an earlier card applied stay
+until removed by hand). The card also brings chest and node contents, quest-only drops, quest givers and enders from
+every side, turn-in words, and the innkeeper / banker / flight master / spirit healer flags an NPC lacks; the locator
+places creatures Wowhead cannot from where players saw them. Also since `28431116`: Wowhead pages reads npc and
+object pages (#78) and the whole Forever and Classic crawl (#75). The fork's `docs/ICYVEINS.md` lists all Icy Veins holds.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
