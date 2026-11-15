@@ -355,6 +355,14 @@ folder. The same from a shell: `tracker.py checkout list` and `tracker.py checko
 `docs/CHECKOUT.md` says what a checkout cannot say. `world replay --at <step>` (or `--until <date>`) stops the world
 replay at that step's day, to pair with it. The first analysis after the redeploy works every build out again once
 (a few minutes), as the table reader changed.
+Since fork `2d8e4190`: the *Classic database* card writes the conversation lines that taught a recipe in the original
+game and are missing here: the line (`gossip_menu_option`, in the conversation the NPC or object already opens, or a
+menu of its own numbered 1,000,000 plus a creature's number or 2,000,000 plus an object's), Classic's conditions on it
+and on the lines leading to it (`conditions`: skill, quest done, reputation, level, recipe known), and SmartAI that
+teaches the recipe and closes the conversation; AIName and the gossip flag are filled only where empty. Gloom'rel gets
+the core's own script name instead. An NPC run by another core script or AI, a shared conversation or a line already
+there is left out and counted. The card needs a pack of the new format: build it again (`tools/classicdb_pack.py`)
+and upload it under *Classic database* after the redeploy.
 Since fork `cfdddc63`: a checkout takes the server's build from the realm list when config.ini does not say it, as the
 analysis does (Everlake's tracker sets no `[server] build`).
 
