@@ -471,6 +471,9 @@ from it without asking the source again, and each downloaded source file kept on
 Since fork `066aba9e`: The Forge > Crawl is drawn in the site's layout, so its *Open Wowhead* button works (#106).
 Since fork `b6f587cb`: a Chrome extension runs the Wowhead crawl by itself (The Forge > Crawl > *Download the Chrome extension*: a pinned Wowhead tab, the crawler loaded after every load, pages sent with a key the tracker makes and keeps in its data folder, so no setting) (#108).
 Since fork `49c04b2e`: The Forge > Crawl also counts the list pages a whole crawl reads first and says when the last page came (#109).
+Since fork `b9cafd04`: the Noblegarden card makes the realm's missing event 9 on Forever's holiday 181 (7 days, from
+2027-03-29 10:00, yearly) and links the original game's Noblegarden objects to it. A core from `0d9a4b91` on follows
+the client's Easter date for each year; an older core keeps the yearly date (#107).
 Since fork `6cafc81f`: ForeverChanges is read from foreverchanges.pro itself (the site was rebuilt and the files the
 old pack was made from are gone): *Imports > Read the site* starts a visit in the background, and the container visits
 every `TRACKER_FOREVERCHANGES_EVERY_HOURS` (6; 0 = never). A visit reads up to 1,500 of the site's ~19,800 files, the
