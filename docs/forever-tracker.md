@@ -454,6 +454,11 @@ Elwynn Forest and 5 Mulgore, on Forever's holidays 263 and 264, whose dates the 
 **Stranglethorn Fishing Extravaganza** (the realm's events 14, 15 and 62). The world data export writes each holiday
 link with its spawn's number in the file. Restart the worldserver after applying: events are read at start.
 
+Since fork `b3931f8c`: one hotfix card a day (the container reads the mirror several times a day), windows named from
+their build's release to the day before the next build, Icy Veins' development notes shown with their build (#103).
+After the redeploy press *Run again*: the windows are re-named from the stored dating in seconds, then the changelog
+is worked out again (~15 min).
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
