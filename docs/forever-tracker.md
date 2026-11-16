@@ -412,6 +412,10 @@ profession's skill line, or class spells): one creature can open several lists a
 and an Icy Veins bandage had landed on a blacksmithing list. Also cards made from the database (#87:
 `source-import.php <source> --from-database`, seconds instead of hours) and the source store (#89).
 
+Since fork `56627204`: that check goes by the trainer list's type (`trainer`.Type 2 = a profession): a profession
+list takes recipes of its own profession (its rank spells do not count against it) and no class spell; other lists
+take class spells only.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
