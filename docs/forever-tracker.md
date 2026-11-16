@@ -530,6 +530,11 @@ Since fork `1ec0f477`: an import card with nothing left to add (applied whole, o
 rows) is marked done and folds into *Applied: nothing left to add*; the Imports badges count only open cards. Rolling
 back an import in the History opens its card again. Cards applied before this are marked at their next preview.
 
+Since fork `3c6764c3`: a card's values measured again (its `/* refresh */` drop chances) are weighed against who wrote
+each row when the card is applied, not only when it was made, and their source is kept: a card made before a Wowhead
+apply no longer puts its own numbers back. The sources of earlier refreshes are read back once from the History. No
+analysis needed after the redeploy.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
