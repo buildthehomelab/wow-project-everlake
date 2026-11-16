@@ -4,7 +4,23 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-16): the build pins `0d9a4b91`: the preceding pin plus core PR #61, holidays that follow the
+Status (2026-11-16): the build pins `13ff6e46`: the preceding pin plus core PRs #62-#70, the changes taken from the
+reviews of three other Forever servers (Trixx34, Sakhwoow, v1ptyoz), each checked and tested on its own:
+
+- #62: a closed connection gives back its place in the per-address connection limit.
+- #63: Ghost Wolf is spell 2645 again; trainers teach it and characters that had the other id move back.
+- #64: the record of the Sakhwoow review (docs only).
+- #65: scheduled restarts (`ServerAutoShutdown.*`), off unless set.
+- #66: the dynamic collision tree build no longer aborts or hangs the world server.
+- #67: macOS builds get 8 MB thread stacks and real process memory figures.
+- #68: config drop-ins without a section header are read, and secrets from the environment stay out of the log.
+- #69: a bigger A* node pool for navmesh paths on open-world maps, with a count of searches that run out of nodes.
+- #70: pool bot sessions drop the collection managers and the battle pet journal (`Playerbot.Perf.LeanBotSessions`).
+
+Not tried on a realm yet. The checks on the PTR: the world server starts and bots log in; `Playerbot.log` reports the
+out-of-node count; worldserver memory with the same number of bots, against the previous image, for #70.
+
+The pin before that, `0d9a4b91`, added core PR #61, holidays that follow the
 client's dates when it gives no duration. Forever's Noblegarden (holiday 181) lists a date for each year (Easter) but no
 duration, and the core turned such a holiday down ("Missing date or duration for holiday 181") and kept the event's
 fixed yearly start. Now a holiday needs only a date: each stage lasts as long as the client says, or as long as the
