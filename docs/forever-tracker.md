@@ -503,6 +503,12 @@ moved. The realm's holiday spawns come from VMaNGOS and the holiday cards from c
 yards off; matched at 3 yards, the cards had added second copies (Silas Darkmoon, Lunar Festival Elders). The world
 data export uses the same distances for a holiday's spawns.
 
+Since fork `541a4de0`: an AtlasLoot import keeps everything the addon holds as facts, not only the drops it ties to one
+creature (on 1.4.1 about 2,713 -> 8,700): trash lists, bosses or chests this server lacks, quest reward lists (matched
+to quests by title), Crafting, Factions, PvP and Collections lists, and `droprate.lua`. Only quest rewards make server
+rows: a matched quest that rewards no item at all gets AtlasLoot's list on the card. The first import after this pin
+shows most of them as New on The Forge > Imports.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
