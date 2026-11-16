@@ -4,7 +4,16 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-15): the build pins `f6bb68c6`: the preceding pin plus core PR #60, three Classic teachers that
+Status (2026-11-16): the build pins `0d9a4b91`: the preceding pin plus core PR #61, holidays that follow the
+client's dates when it gives no duration. Forever's Noblegarden (holiday 181) lists a date for each year (Easter) but no
+duration, and the core turned such a holiday down ("Missing date or duration for holiday 181") and kept the event's
+fixed yearly start. Now a holiday needs only a date: each stage lasts as long as the client says, or as long as the
+event's own row says where the client gives nothing. Holidays with durations (the Darkmoon Faire, Winter Veil, the
+battleground weekends) are unchanged. The check on the PTR: once the tracker's Noblegarden card has made event 9, the
+worldserver log no longer names holiday 181 at start, and `.event info 9` shows the next start from the client
+(2027-03-29 10:00) and a 7-day length.
+
+The pin before that, `f6bb68c6`, added core PR #60, three Classic teachers that
 taught nobody on WoW: Forever. Knot Thimblejack (Dire Maul) offers the Gordok Ogre Suit once quest 5518 is turned in
 (his script asked for it rewarded and complete at once, which a rewarded quest never is); Zap Farflinger and Jhordy
 Lapforge check Engineering 202 for the transporters (they checked line 2506, which the Forever client lacks); Master
