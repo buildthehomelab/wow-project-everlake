@@ -119,7 +119,7 @@ services:
       FT_CLIENT_EVERY_HOURS: ${TRACKER_CLIENT_EVERY_HOURS:-6}
       # foreverchanges.pro read by the tracker itself: every N hours a visit reads up to 1,500 files (the gaps first, one
       # request at a time, robots.txt obeyed) and makes an import card (0 = never). Needs the internet: foreverchanges.pro
-      FT_FOREVERCHANGES_EVERY_HOURS: ${TRACKER_FOREVERCHANGES_EVERY_HOURS:-24}
+      FT_FOREVERCHANGES_EVERY_HOURS: ${TRACKER_FOREVERCHANGES_EVERY_HOURS:-6}
       # Wowhead pages a script sends (the crawler's batch files, tools/wowhead-pages/push.sh): the key it must send.
       # Empty = closed. Set TRACKER_WOWHEAD_PUSH_TOKEN in .env to 16+ random characters (openssl rand -hex 24)
       FT_WOWHEAD_PUSH_TOKEN: ${TRACKER_WOWHEAD_PUSH_TOKEN:-}
