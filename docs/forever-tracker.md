@@ -447,6 +447,12 @@ Blizzard's blue posts (its forum's JSON), Icy Veins' hotfix articles and Forever
 "In the client data" or "Server side"; `tracker.py notes`, part of the client check. Also a Wowhead page without a
 *Dropped by* tab no longer stops the crawl (#99). The first check after the redeploy reads the notes (~3 min) and dates
 the hotfixes (~7 min) before the analysis.
+Since fork `374f6e3c`: **holiday spawns** from the Classic database pack (format 4: rebuild it with
+`tools/classicdb_pack.py` and send it after the redeploy; an older tracker refuses it). Under *Classic database*, a
+button per holiday makes a card of what the original game spawns while it runs: the **Darkmoon Faire** (new events 4
+Elwynn Forest and 5 Mulgore, on Forever's holidays 263 and 264, whose dates the core reads from the client) and the
+**Stranglethorn Fishing Extravaganza** (the realm's events 14, 15 and 62). The world data export writes each holiday
+link with its spawn's number in the file. Restart the worldserver after applying: events are read at start.
 
 ## The world build
 
