@@ -46,6 +46,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: keypatch.c builds without warnings (as everlake-client.sh builds it)
         run: clang -O2 -dynamiclib -arch arm64 -arch x86_64 -Wall -Wextra -Werror -o "$RUNNER_TEMP/keypatch.dylib" client/macos/keypatch.c
+      - name: the game copy is not signed for debugger attach (no get-task-allow)
+        run: "! grep -n get-task-allow client/macos/everlake-client.sh"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.9" # Apple's /usr/bin/python3 on the Mac mini
