@@ -512,6 +512,10 @@ shows most of them as New on The Forge > Imports.
 Since fork `d92d62b8`: a hotfix card's topics skip headings that only lay out a blue post (Change Log, Known Issues,
 New to this build, Bug Fixes, How to Join, bold sentences). Display only: no analysis run needed after the redeploy.
 
+Since fork `00a6b88a`: an unnamed quest the Classic Era client already had (IDs 60,000-90,000: Season of Discovery
+and hidden tracking flags, 952 of them) is filed under Internal / test instead of To add. After the redeploy press
+*Run again*: To add drops by about 950.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
