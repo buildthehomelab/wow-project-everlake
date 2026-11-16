@@ -422,7 +422,7 @@ live since 2026-11-15, fixed their scripts. The analysis runs again by itself af
 Since fork `1fc99a5a`: Icy Veins lists past its 10,000-row cap. Without an API key its list pages stop at row
 10,000 (HTTP 400 "narrow the filters or sort, or use an API key"), which stalled *Import Icy Veins* on the NPC list.
 Lists are now read from both ends (`dir=desc`): every kind is listed whole but items (20,000 of about 32,000), whose
-rest come from what the NPCs, objects and quests name. Also #91 (core teachers fixed), which redoes the analysis once.
+rest come from what the NPCs, objects and quests name.
 
 ## The world build
 
