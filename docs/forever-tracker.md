@@ -477,6 +477,11 @@ takes their drops; a Season currency gets a row per boss. Vendors are never take
 Since fork `b9cafd04`: the Noblegarden card makes the realm's missing event 9 on Forever's holiday 181 (7 days, from
 2027-03-29 10:00, yearly) and links the original game's Noblegarden objects to it. A core from `0d9a4b91` on follows
 the client's Easter date for each year; an older core keeps the yearly date (#107).
+Since fork `627e9fa9`: the realm's calendar is VMaNGOS's (core `sql/custom` 2026_10_17_50), so the Noblegarden card
+uses the realm's own Noblegarden, event 28, instead of making event 9: it links the eggs to 28 and sets 28's empty start
+and end, holiday 181 and stage 1 (each statement names the value it replaces; the row keeps its 2 days). New Year's
+Eve is the realm's 34 (its 6 is the midnight fireworks). The pack builder gives each egg cmangos picks at random one
+colour for good, so the card has all 544 eggs; send a pack made with it (#111, #112).
 Since fork `6cafc81f`: ForeverChanges is read from foreverchanges.pro itself (the site was rebuilt and the files the
 old pack was made from are gone): *Imports > Read the site* starts a visit in the background, and the container visits
 every `TRACKER_FOREVERCHANGES_EVERY_HOURS` (6; 0 = never). A visit reads up to 1,500 of the site's ~19,800 files, the
