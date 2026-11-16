@@ -535,6 +535,10 @@ each row when the card is applied, not only when it was made, and their source i
 apply no longer puts its own numbers back. The sources of earlier refreshes are read back once from the History. No
 analysis needed after the redeploy.
 
+Since fork `fe8c8e36`: the Wowhead crawl reads the items that only lack a source (and what their pages name) before
+the server's creatures and objects whose data is missing; the extension's running crawl re-sorts its queue once the
+next time it loads the crawler. No analysis needed after the redeploy.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
