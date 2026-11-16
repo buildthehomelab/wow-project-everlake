@@ -516,6 +516,10 @@ Since fork `00a6b88a`: an unnamed quest the Classic Era client already had (IDs 
 and hidden tracking flags, 952 of them) is filed under Internal / test instead of To add. After the redeploy press
 *Run again*: To add drops by about 950.
 
+Since fork `4d5fc38a`: a holiday card's spawn is matched only against a PTR spawn there while the holiday runs (all
+year, or brought in by the same event), and moves only a spawn its own event brings in. Midsummer and New Year's Eve
+both light fireworks over Booty Bay; matched across events, each took the other's for its own.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
