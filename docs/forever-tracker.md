@@ -419,6 +419,11 @@ Since fork `d5ace13d`: Knot Thimblejack (Gordok Ogre Suit), Zap Farflinger and J
 transporters) and Master Craftsman Omarion (13 Naxxramas recipes) count as teachers: core `f6bb68c6` (core fork PR 60),
 live since 2026-11-15, fixed their scripts. The analysis runs again by itself after the redeploy (marker 21).
 
+Since fork `1fc99a5a`: Icy Veins lists past its 10,000-row cap. Without an API key its list pages stop at row
+10,000 (HTTP 400 "narrow the filters or sort, or use an API key"), which stalled *Import Icy Veins* on the NPC list.
+Lists are now read from both ends (`dir=desc`): every kind is listed whole but items (20,000 of about 32,000), whose
+rest come from what the NPCs, objects and quests name.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
