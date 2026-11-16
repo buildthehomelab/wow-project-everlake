@@ -526,6 +526,10 @@ source just above the Classic database. Make its pack from the `db-….zip` of v
 holiday buttons use the realm's own event numbers; apply a holiday from one database only. No analysis needed after
 the redeploy; *Run again* after sending the pack lets the analysis read it too.
 
+Since fork `1ec0f477`: an import card with nothing left to add (applied whole, or a preview or apply that finds no
+rows) is marked done and folds into *Applied: nothing left to add*; the Imports badges count only open cards. Rolling
+back an import in the History opens its card again. Cards applied before this are marked at their next preview.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
