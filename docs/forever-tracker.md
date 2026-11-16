@@ -471,6 +471,9 @@ from it without asking the source again, and each downloaded source file kept on
 Since fork `066aba9e`: The Forge > Crawl is drawn in the site's layout, so its *Open Wowhead* button works (#106).
 Since fork `b6f587cb`: a Chrome extension runs the Wowhead crawl by itself (The Forge > Crawl > *Download the Chrome extension*: a pinned Wowhead tab, the crawler loaded after every load, pages sent with a key the tracker makes and keeps in its data folder, so no setting) (#108).
 Since fork `49c04b2e`: The Forge > Crawl also counts the list pages a whole crawl reads first and says when the last page came (#109).
+Since fork `3df7992d`: for the Season of Discovery items Forever kept (the Tarnished Undermine Real), the Wowhead
+crawl also reads their Wowhead Classic item page when the Forever page names no source, and the Wowhead Classic card
+takes their drops; a Season currency gets a row per boss. Vendors are never taken from Classic (#110).
 Since fork `b9cafd04`: the Noblegarden card makes the realm's missing event 9 on Forever's holiday 181 (7 days, from
 2027-03-29 10:00, yearly) and links the original game's Noblegarden objects to it. A core from `0d9a4b91` on follows
 the client's Easter date for each year; an older core keeps the yearly date (#107).
