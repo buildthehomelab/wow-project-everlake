@@ -509,6 +509,9 @@ to quests by title), Crafting, Factions, PvP and Collections lists, and `droprat
 rows: a matched quest that rewards no item at all gets AtlasLoot's list on the card. The first import after this pin
 shows most of them as New on The Forge > Imports.
 
+Since fork `d92d62b8`: a hotfix card's topics skip headings that only lay out a blue post (Change Log, Known Issues,
+New to this build, Bug Fixes, How to Join, bold sentences). Display only: no analysis run needed after the redeploy.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
