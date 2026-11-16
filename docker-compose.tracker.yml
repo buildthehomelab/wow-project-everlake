@@ -69,12 +69,12 @@ services:
   tracker:
     build:
       # the fork at a pinned commit (bump on purpose, like the core)
-      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-6d3b73182f7bcdf0165d2e087bbe323f84517fac}
+      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-8b090302bc6242e4ece87a2b812efb9547620261}
       # kept in the image and shown in the website's footer after the version: which commit is running can be read
       # off the page
       args:
-        FT_COMMIT: ${TRACKER_COMMIT:-6d3b73182f7bcdf0165d2e087bbe323f84517fac}
-    image: forever-tracker:${TRACKER_COMMIT:-6d3b73182f7bcdf0165d2e087bbe323f84517fac}
+        FT_COMMIT: ${TRACKER_COMMIT:-8b090302bc6242e4ece87a2b812efb9547620261}
+    image: forever-tracker:${TRACKER_COMMIT:-8b090302bc6242e4ece87a2b812efb9547620261}
     networks: [everlake]
     restart: unless-stopped
     depends_on:
@@ -117,6 +117,11 @@ services:
       # newer than the newest one stored (or a key of its hidden content was published), read from the CDN and
       # analysed (0 = never). Needs the internet: us.patch.battle.net:1119 and Blizzard's CDN hosts
       FT_CLIENT_EVERY_HOURS: ${TRACKER_CLIENT_EVERY_HOURS:-6}
+      # Wowhead pages a script sends (the crawler's batch files, tools/wowhead-pages/push.sh): the key it must send.
+      # Empty = closed. Set TRACKER_WOWHEAD_PUSH_TOKEN in .env to 16+ random characters (openssl rand -hex 24)
+      FT_WOWHEAD_PUSH_TOKEN: ${TRACKER_WOWHEAD_PUSH_TOKEN:-}
+      # pages that come (pushed, or from a linked crawl on The Forge > Crawl): the import cards made again this often
+      FT_WOWHEAD_CARD_MINUTES: ${TRACKER_WOWHEAD_CARD_MINUTES:-30}
     ports:
       - "${TRACKER_PORT:-8090}:80"
     volumes:

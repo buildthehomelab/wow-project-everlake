@@ -461,6 +461,13 @@ is worked out again (~15 min).
 Since fork `6d3b7318`: holiday cards for the yearly holidays too (Lunar Festival, Love is in the Air, Noblegarden,
 Children's Week, Midsummer, Harvest Festival, Hallow's End, Winter Veil, New Year's Eve), each under the realm's own
 event. A card's preview says how many of its spawns already stand on the realm.
+Since fork `8b090302`: Wowhead's pages reach the tracker as the crawl reads them (its docs/WOWHEAD-PAGES.md), most
+valuable first (the gaps, then creatures and chests with missing data). In a normal browser, The Forge > Crawl opens
+Wowhead linked to the tracker. From the Claude app's browser pane, the crawler saves batch files that
+`tools/wowhead-pages/push.sh` sends with `TRACKER_WOWHEAD_PUSH_TOKEN` (set it in `.env`, 16+ random characters; empty
+keeps the endpoint closed). The import cards are made again every `TRACKER_WOWHEAD_CARD_MINUTES` (30) as pages come;
+applying one stays a click. Also new: every source's evidence kept as snapshots in the tracker database, cards made
+from it without asking the source again, and each downloaded source file kept once.
 
 ## The world build
 
