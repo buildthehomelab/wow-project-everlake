@@ -415,6 +415,9 @@ and an Icy Veins bandage had landed on a blacksmithing list. Also cards made fro
 Since fork `56627204`: that check goes by the trainer list's type (`trainer`.Type 2 = a profession): a profession
 list takes recipes of its own profession (its rank spells do not count against it) and no class spell; other lists
 take class spells only.
+Since fork `d5ace13d`: Knot Thimblejack (Gordok Ogre Suit), Zap Farflinger and Jhordy Lapforge (the engineering
+transporters) and Master Craftsman Omarion (13 Naxxramas recipes) count as teachers: core `f6bb68c6` (core fork PR 60),
+live since 2026-11-15, fixed their scripts. The analysis runs again by itself after the redeploy (marker 21).
 
 ## The world build
 
