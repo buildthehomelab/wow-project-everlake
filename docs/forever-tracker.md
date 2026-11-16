@@ -539,6 +539,10 @@ Since fork `fe8c8e36`: the Wowhead crawl reads the items that only lack a source
 the server's creatures and objects whose data is missing; the extension's running crawl re-sorts its queue once the
 next time it loads the crawler. No analysis needed after the redeploy.
 
+Since fork `5ef9c886`: the Wowhead crawl's Chrome extension (1.1.0) reloads its tab for a new crawler once the one it
+runs is an hour old, so a crawl that runs for days follows the tracker's latest queue. Download it again from The
+Forge › Crawl, unzip it over the old folder and reload it in `chrome://extensions`. No analysis needed.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
