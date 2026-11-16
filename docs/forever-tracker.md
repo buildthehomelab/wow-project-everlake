@@ -434,6 +434,8 @@ The *Classic database* card proposes those drops and vendors for items players c
 analysis lists original items the original game never gave out, and the spells only they teach, under *Internal /
 test*. It reads the pack: after the redeploy send the new pack under Imports › Classic database, then run the
 analysis again (marker 23).
+Since fork `3995a9c6`: the Imports page loads again once a source has kept a snapshot (it stopped at the *What the
+sources said* table), and the Wowhead pages crawler reads the most valuable pages first (#96).
 
 ## The world build
 
