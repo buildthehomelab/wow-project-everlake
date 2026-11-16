@@ -468,6 +468,7 @@ Wowhead linked to the tracker. From the Claude app's browser pane, the crawler s
 keeps the endpoint closed). The import cards are made again every `TRACKER_WOWHEAD_CARD_MINUTES` (30) as pages come;
 applying one stays a click. Also new: every source's evidence kept as snapshots in the tracker database, cards made
 from it without asking the source again, and each downloaded source file kept once.
+Since fork `066aba9e`: The Forge > Crawl is drawn in the site's layout, so its *Open Wowhead* button works (#106).
 
 ## The world build
 
