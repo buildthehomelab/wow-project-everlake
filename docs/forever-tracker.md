@@ -436,6 +436,10 @@ test*. It reads the pack: after the redeploy send the new pack under Imports ›
 analysis again (marker 23).
 Since fork `3995a9c6`: the Imports page loads again once a source has kept a snapshot (it stopped at the *What the
 sources said* table), and the Wowhead pages crawler reads the most valuable pages first (#96).
+Since fork `70566e32`: the list of what the core's scripts bring in is read again from the core the realms run
+(`f6bb68c6`) and in more shapes: a script's own summon helper, an array a summon picks from, an instance's entry swap.
+570 to 623 creatures, among them Grizzle (Ring of Law), Solakar Flamewreath (rookery) and Bannok Grimaxe, whose
+plans and schematic become obtainable. The analysis runs again by itself after the redeploy (marker 24).
 
 ## The world build
 
