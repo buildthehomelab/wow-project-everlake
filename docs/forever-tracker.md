@@ -497,6 +497,12 @@ them). This compose sets no remote console (`FT_RA_HOST`), so the tracker cannot
 spawn rows are never applied on their own and stay on the card for its Apply button, which asks to confirm the
 worldserver is stopped.
 
+Since fork `eee77811`: a holiday card's spawn (one it links to a game event) counts as already standing when the PTR
+has one of its kind within 30 yards (an object within 10), and the PTR's copy stays where it is rather than being
+moved. The realm's holiday spawns come from VMaNGOS and the holiday cards from cmangos, which places the same NPC a few
+yards off; matched at 3 yards, the cards had added second copies (Silas Darkmoon, Lunar Festival Elders). The world
+data export uses the same distances for a holiday's spawns.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
