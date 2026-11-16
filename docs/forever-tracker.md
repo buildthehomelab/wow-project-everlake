@@ -407,6 +407,11 @@ Since fork `3898aeaf`: *Import Icy Veins* writes the profession recipes trainers
 each needs (Icy Veins records them now); a trainer keeps only its own profession's recipes. Also source snapshots
 (#86: each import keeps what its source said, to show what changed) and Wowhead pages keeps every number (#84).
 
+Since fork `1674b9dd`: a trainer card's spell goes only to a trainer list that already teaches its kind (the same
+profession's skill line, or class spells): one creature can open several lists and one list serve several creatures,
+and an Icy Veins bandage had landed on a blacksmithing list. Also cards made from the database (#87:
+`source-import.php <source> --from-database`, seconds instead of hours) and the source store (#89).
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
