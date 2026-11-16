@@ -469,6 +469,11 @@ keeps the endpoint closed). The import cards are made again every `TRACKER_WOWHE
 applying one stays a click. Also new: every source's evidence kept as snapshots in the tracker database, cards made
 from it without asking the source again, and each downloaded source file kept once.
 Since fork `066aba9e`: The Forge > Crawl is drawn in the site's layout, so its *Open Wowhead* button works (#106).
+Since fork `6cafc81f`: ForeverChanges is read from foreverchanges.pro itself (the site was rebuilt and the files the
+old pack was made from are gone): *Imports > Read the site* starts a visit in the background, and the container visits
+every `TRACKER_FOREVERCHANGES_EVERY_HOURS` (24; 0 = never). A visit reads up to 1,500 of the site's ~19,800 files, the
+gaps first, one request at a time; everything read stays in the tracker's data volume. New rows: the quest givers its map
+names by id, from what its players saw. The `.fcpack` upload is gone (#105).
 
 ## The world build
 
