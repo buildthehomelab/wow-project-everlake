@@ -4,7 +4,16 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-15): the build pins `63bd6fb6`: the preceding pin plus core PR #58, the stat budget of ranged weapons.
+Status (2026-11-15): the build pins `f6bb68c6`: the preceding pin plus core PR #60, three Classic teachers that
+taught nobody on WoW: Forever. Knot Thimblejack (Dire Maul) offers the Gordok Ogre Suit once quest 5518 is turned in
+(his script asked for it rewarded and complete at once, which a rewarded quest never is); Zap Farflinger and Jhordy
+Lapforge check Engineering 202 for the transporters (they checked line 2506, which the Forever client lacks); Master
+Craftsman Omarion (Naxxramas) casts Classic's learn spells 28251-28263 (his script cast pattern spells the client
+lacks, all but Icebane Breastplate). The check on the PTR: a tailor or leatherworker at 275 with quest 5518 done sees
+Knot's line; a Goblin or Gnomish engineer at 260 sees Zap's or Jhordy's; a crafter at 300 with Argent Dawn Revered
+learns Omarion's recipes (a GM visit: Naxxramas is not open).
+
+The pin before that, `63bd6fb6`, added core PR #58, the stat budget of ranged weapons.
 Bows, guns, crossbows, thrown weapons and wands now take their stats from the ranged column of `RandPropPoints` (the
 one relics use), as WoW: Forever does, instead of the two-hand column (wands: the one-hand column). These weapons gave more stats
 than the client's tooltip showed. The check on the PTR: equip a Ragefire Wand (+3 Intellect) or a Mithril Blunderbuss
