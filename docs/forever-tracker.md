@@ -488,6 +488,15 @@ every `TRACKER_FOREVERCHANGES_EVERY_HOURS` (6; 0 = never). A visit reads up to 1
 gaps first, one request at a time; everything read stays in the tracker's data volume. New rows: the quest givers its map
 names by id, from what its players saw. The `.fcpack` upload is gone (#105).
 
+Since fork `4d206e1b`: an import card is applied as soon as it is made (`FT_IMPORTS_AUTO_APPLY`, 1), so pressing
+Import is enough for the next analysis to count it. An applied card also replaces values of rows the PTR already has
+(every column it gives) and moves a spawn of the same kind within 40 yards to where the card places it
+(`FT_IMPORTS_SPAWN_MOVE_YARDS`), unless a more trusted source wrote that row (`[sources] trust`; the new `ft_row_origin`
+table remembers who wrote what). The core's own rows rank below every source (`FT_SOURCES_CHANGE_CORE=0` protects
+them). This compose sets no remote console (`FT_RA_HOST`), so the tracker cannot tell whether the worldserver runs:
+spawn rows are never applied on their own and stay on the card for its Apply button, which asks to confirm the
+worldserver is stopped.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
