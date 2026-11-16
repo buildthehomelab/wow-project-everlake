@@ -441,6 +441,13 @@ Since fork `70566e32`: the list of what the core's scripts bring in is read agai
 570 to 623 creatures, among them Grizzle (Ring of Law), Solakar Flamewreath (rookery) and Bannok Grimaxe, whose
 plans and schematic become obtainable. The analysis runs again by itself after the redeploy (marker 24).
 
+Since fork `1400cb23`: Blizzard's hotfixes back to the beta, dated from the stored builds (each row by the first build
+that carries it), one timeline entry per build window instead of one for all (#100); notes for every day from
+Blizzard's blue posts (its forum's JSON), Icy Veins' hotfix articles and ForeverChanges' patch notes, each line marked
+"In the client data" or "Server side"; `tracker.py notes`, part of the client check. Also a Wowhead page without a
+*Dropped by* tab no longer stops the crawl (#99). The first check after the redeploy reads the notes (~3 min) and dates
+the hotfixes (~7 min) before the analysis.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
