@@ -428,6 +428,12 @@ Incomplete: Season of Discovery spells nothing or only Season items teach, origi
 original game taught nowhere either (read from the Classic database pack under Imports; procs, passives, old talent
 ranks), and the "Test Profession [DNT]" line. Incomplete spells should go from 646 to about 340. The analysis runs
 again by itself after the redeploy (marker 22), and the first run re-reads every client build once (a few minutes).
+Since fork `5a6fb589`: the Classic database pack (format 3, rebuild it with `tools/classicdb_pack.py`) also carries
+Classic's drops and vendors of recipes and items learned on use, and the items the original game gave out nowhere.
+The *Classic database* card proposes those drops and vendors for items players cannot get (world drops left out); the
+analysis lists original items the original game never gave out, and the spells only they teach, under *Internal /
+test*. It reads the pack: after the redeploy send the new pack under Imports › Classic database, then run the
+analysis again (marker 23).
 
 ## The world build
 
