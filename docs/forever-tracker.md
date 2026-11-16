@@ -520,6 +520,12 @@ Since fork `4d5fc38a`: a holiday card's spawn is matched only against a PTR spaw
 year, or brought in by the same event), and moves only a spawn its own event brings in. Midsummer and New Year's Eve
 both light fireworks over Booty Bay; matched across events, each took the other's for its own.
 
+Since fork `1e419858`: the fishing contest card links its crew to the realm's event 40 (not 62), and VMaNGOS is a
+source just above the Classic database. Make its pack from the `db-….zip` of vmangos/core's `db_latest` release
+(`python tools/vmangos_pack.py db-….zip vmangos.cdbpack`) and send it on Imports: its card is made at once. Its
+holiday buttons use the realm's own event numbers; apply a holiday from one database only. No analysis needed after
+the redeploy; *Run again* after sending the pack lets the analysis read it too.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
