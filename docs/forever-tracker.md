@@ -399,6 +399,10 @@ learned, not the buff or teleport it casts. On the world data the realm started 
 specializations taught by talking (Smelt Dark Iron, Wild Leather, the blacksmithing specializations, Goldthorn Tea,
 Troll's Blood Elixir, Fishing), where their NPCs stand. The analysis runs again by itself after the redeploy (marker 20).
 
+Since fork `61ddffa0`: *Import Icy Veins* makes an **early card** ("Icy Veins <date> (gaps)") as soon as the items,
+quests and trainers the server lacks are all asked, a few minutes into a run that goes on from its mirror; the full
+card at the end replaces it unless something was applied from it. Also Wowhead pages reads Classic pages (#82).
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
