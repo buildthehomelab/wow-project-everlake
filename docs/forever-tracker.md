@@ -423,6 +423,11 @@ Since fork `1fc99a5a`: Icy Veins lists past its 10,000-row cap. Without an API k
 10,000 (HTTP 400 "narrow the filters or sort, or use an API key"), which stalled *Import Icy Veins* on the NPC list.
 Lists are now read from both ends (`dir=desc`): every kind is listed whole but items (20,000 of about 32,000), whose
 rest come from what the NPCs, objects and quests name.
+Since fork `eb7d62c6`: spells that aren't WoW Forever content are listed under *Internal / test* instead of
+Incomplete: Season of Discovery spells nothing or only Season items teach, original spells nothing teaches that the
+original game taught nowhere either (read from the Classic database pack under Imports; procs, passives, old talent
+ranks), and the "Test Profession [DNT]" line. Incomplete spells should go from 646 to about 340. The analysis runs
+again by itself after the redeploy (marker 22), and the first run re-reads every client build once (a few minutes).
 
 ## The world build
 
