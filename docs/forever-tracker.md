@@ -458,6 +458,9 @@ Since fork `b3931f8c`: one hotfix card a day (the container reads the mirror sev
 their build's release to the day before the next build, Icy Veins' development notes shown with their build (#103).
 After the redeploy press *Run again*: the windows are re-named from the stored dating in seconds, then the changelog
 is worked out again (~15 min).
+Since fork `6d3b7318`: holiday cards for the yearly holidays too (Lunar Festival, Love is in the Air, Noblegarden,
+Children's Week, Midsummer, Harvest Festival, Hallow's End, Winter Veil, New Year's Eve), each under the realm's own
+event. A card's preview says how many of its spawns already stand on the realm.
 
 ## The world build
 
