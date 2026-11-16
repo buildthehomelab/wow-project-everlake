@@ -403,6 +403,10 @@ Since fork `61ddffa0`: *Import Icy Veins* makes an **early card** ("Icy Veins <d
 quests and trainers the server lacks are all asked, a few minutes into a run that goes on from its mirror; the full
 card at the end replaces it unless something was applied from it. Also Wowhead pages reads Classic pages (#82).
 
+Since fork `3898aeaf`: *Import Icy Veins* writes the profession recipes trainers teach, with the skill and rank
+each needs (Icy Veins records them now); a trainer keeps only its own profession's recipes. Also source snapshots
+(#86: each import keeps what its source said, to show what changed) and Wowhead pages keeps every number (#84).
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
