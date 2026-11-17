@@ -4,7 +4,19 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-17): the build pins `deee5f53`: `3b34ee54` (below) plus core PR #79, the paladin community audit:
+Status (2026-11-17): the build pins `61be14e9`: `deee5f53` (below) plus core PR #76, the warrior community audit
+(white-swing and damage-taken rage on WoW Forever's formulas, creature parry 5.5/6/14%, Flurry charges spent per swing,
+`sql/custom/world/2026_11_16_40_world_forever_warrior_flurry_charges.sql`), and core PR #75, the warlock community audit:
+Life Tap, Demonic Sacrifice and Demonic Brand fixes; 416189 Warlock Pet Scaling filled in from wowsims/forever (2 health
+per warlock Stamina, 35% of its armor at the summon, 10% of its spell damage as spell damage and 17% as attack power,
+Intellect as mana regen, spell hit); and the demons' own base stats as shares of the creature values (Imp, Voidwalker
+and Sayaad health in `pet_levelstats`, Voidwalker and Sayaad weapons and attack power 3 x level + 6, the Voidwalker's
+melee halved). The Imp has less health than before below level 38. Its three SQL files (`2026_11_16_60`, `_61` and
+`2026_11_17_10`) apply themselves at the first start. The check on the PTR:
+`SELECT * FROM spell_script_names WHERE spell_id = 416189` and `SELECT level, hp FROM pet_levelstats WHERE creature_entry = 416 AND level IN (10, 30, 60)`
+(75, 446, 1567).
+
+`deee5f53` was `3b34ee54` (below) plus core PR #79, the paladin community audit:
 Holy Shield's 20% extra threat on every rank and charges spent on blocks only, Redoubt rolling on avoided swings too,
 Judgement of Fury's taunt after its damage, Judgement of Command at half damage on targets that are not stunned, Lay
 on Hands draining the paladin's mana, and Illumination refunding 50% of the base cost (Holy Shock and Light's Vigil
