@@ -4,7 +4,14 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-16): the build pins `21f9576f`: the preceding pin plus core PR #71. When the client asks for a TACT key
+Status (2026-11-16): the build pins `9bc37dfe`: the preceding pin plus core PRs #72 and #73. #72 never sends the
+answer to the account character list request: the 70938 client crashed (ERROR #132) a few seconds into the world after
+it. #73 brings two WoW Forever warlock pet changes: the Voidwalker's base health +15% (10 November class tuning, on top
+of the +40 of 6 November), and 416189 Warlock Pet Scaling gives every demon 2 health per point of the warlock's Stamina
+(3 November; the client's amounts are all 0). The check on the PTR: log in on a 70938 client and reach the world; summon
+a Voidwalker, its health = base (92 at level 1, 3978 at 60) + 2 x your Stamina, and it moves when you change gear.
+
+The pin before that, `21f9576f`, added core PR #71. When the client asks for a TACT key
 the server doesn't hold, the answer is now "not public" (status 4, no data), as live answers every key Blizzard hasn't
 released, instead of "invalid". A 1.60.1.70938 client with an empty hotfix cache asks for about 55 such keys while
 entering the world and crashed (ERROR #132, null read) two seconds after the invalid answers. Launcher v0.1.2-alpha.2
