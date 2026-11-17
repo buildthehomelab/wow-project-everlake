@@ -96,7 +96,7 @@ applied by itself. Drops with no measured chance (AtlasLoot's own or a live reco
 boss's list, at most 33 % (`TRACKER_ATLASLOOT_GUESS=0`: left out). Its boss tables also count as a second source for
 NorgannonDB's drops. Rules in the fork's `docs/SOURCES.md`.
 
-Since fork `a14329f6` (locator fixed in `599fc353`): Forge › Imports also imports **QuestieDB's drops** (GPL-3.0), ranked right after Wowhead and
+Since fork `a14329f6` (locator fixed in `599fc353`, QuestieDB snapshot and labels in `5955cc4e`): Forge › Imports also imports **QuestieDB's drops** (GPL-3.0), ranked right after Wowhead and
 needing no second source: its Forever item database, hand fixes and over a million players' QuestieTrace sessions,
 about 8,800 items. It fills every creature or chest missing an item; a row takes the server's chance for that item
 elsewhere, else a quest item takes `TRACKER_QUESTIE_QUEST_CHANCE` (40), quest-only. The container checks for a new
