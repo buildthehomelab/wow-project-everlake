@@ -549,6 +549,10 @@ only when Wowhead, ForeverDB.net or EG Link states the same thing, and a visit o
 gaps' pages. `python tools/tracker.py world facts foreverdb` reads ForeverDB.net into the world facts as a second
 witness. No analysis needed after the redeploy.
 
+Since fork `247f3b5f`: on The Forge › Imports, an earlier card of a source with nothing left to add folds under
+*Applied* with the others; *Earlier cards of sources that have a newer one* keeps only cards with something not
+applied, which the source's newest card offers. Display only, no analysis needed.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
