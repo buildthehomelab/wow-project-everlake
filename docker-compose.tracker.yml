@@ -69,12 +69,12 @@ services:
   tracker:
     build:
       # the fork at a pinned commit (bump on purpose, like the core)
-      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-247f3b5ffe69c362ed71aec71c18beda75969ab4}
+      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-a14329f60f7680a7d6f0c517fa09103d0a894427}
       # kept in the image and shown in the website's footer after the version: which commit is running can be read
       # off the page
       args:
-        FT_COMMIT: ${TRACKER_COMMIT:-247f3b5ffe69c362ed71aec71c18beda75969ab4}
-    image: forever-tracker:${TRACKER_COMMIT:-247f3b5ffe69c362ed71aec71c18beda75969ab4}
+        FT_COMMIT: ${TRACKER_COMMIT:-a14329f60f7680a7d6f0c517fa09103d0a894427}
+    image: forever-tracker:${TRACKER_COMMIT:-a14329f60f7680a7d6f0c517fa09103d0a894427}
     networks: [everlake]
     restart: unless-stopped
     depends_on:
@@ -110,6 +110,10 @@ services:
       # TRACKER_ATLASLOOT_GUESS=0 leaves out its drops that have no measured chance instead of an even share
       FT_ATLASLOOT_EVERY_HOURS: ${TRACKER_ATLASLOOT_EVERY_HOURS:-6}
       FT_ATLASLOOT_GUESS: ${TRACKER_ATLASLOOT_GUESS:-1}
+      # QuestieDB's drops: its newest release checked every N hours, a new one becomes an import card (0 = never); a
+      # quest item the server drops nowhere yet gets this chance
+      FT_QUESTIE_EVERY_HOURS: ${TRACKER_QUESTIE_EVERY_HOURS:-6}
+      FT_QUESTIE_QUEST_CHANCE: ${TRACKER_QUESTIE_QUEST_CHANCE:-40}
       # release phases: empty = each phase opens on Forever's date (first raids 2026-12-09); a phase key, a number,
       # all or none to run ahead of or behind it (read at each page load, no new analysis)
       FT_PHASE: ${TRACKER_PHASE:-}
