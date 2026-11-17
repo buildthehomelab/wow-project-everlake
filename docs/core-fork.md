@@ -4,7 +4,14 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-16): the build pins `13ff6e46`: the preceding pin plus core PRs #62-#70, the changes taken from the
+Status (2026-11-16): the build pins `21f9576f`: the preceding pin plus core PR #71. When the client asks for a TACT key
+the server doesn't hold, the answer is now "not public" (status 4, no data), as live answers every key Blizzard hasn't
+released, instead of "invalid". A 1.60.1.70938 client with an empty hotfix cache asks for about 55 such keys while
+entering the world and crashed (ERROR #132, null read) two seconds after the invalid answers. Launcher v0.1.2-alpha.2
+empties that cache before every Play, so every player would have hit it. Not tried on a realm yet. The check on the PTR:
+delete `_forever_\Cache`, log in, and the character reaches the world.
+
+The pin before that, `13ff6e46`, added core PRs #62-#70, the changes taken from the
 reviews of three other Forever servers (Trixx34, Sakhwoow, v1ptyoz), each checked and tested on its own:
 
 - #62: a closed connection gives back its place in the per-address connection limit.
