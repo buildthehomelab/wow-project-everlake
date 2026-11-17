@@ -39,7 +39,7 @@ Status: **spike**. Nothing here is playable yet. The first job is to prove these
 
 | What | Value |
 |---|---|
-| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `1f05b894` (fork `everlake`: advocaite's `forever` 2ae1313e + forever-bots + the reviewed advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-K, Karrz v0.1.33 world data and scripts, Karrz v0.1.34 world data, the Ring of Law arena and the bot module at 0.1.34, bot dual names, the Wintergrasp condition fix, Karrz v0.1.35 with his whole core catch-up, the Zephras Isle scene NPC fix, Karrz's 37 git commits after 0.1.35 with the 0.1.35 gaps, pet Move To / Stay and water pathing, name lookups that keep the surname, Karrz v0.1.36, hunter pets on WoW Forever's rules, the account character list for the mail window's To box, hunter pet attack speeds and pet food from the client, ranged weapons on the ranged stat budget column, the Classic teachers that taught nobody on Forever, holidays on the client's dates when it gives no duration, the Trixx34/Sakhwoow/v1ptyoz review batch: connection places given back, Ghost Wolf 2645, scheduled restarts, the dynamic collision build fix, macOS thread stacks, config drop-ins, a bigger navmesh node pool, leaner bot sessions, missing TACT keys answered "not public", no account character list answer, warlock pet health from Forever and the shorter open-world leash), bots on. The live app and the PTR app build the same commit, so either one makes the same image |
+| Core | [buildthehomelab/wow-trinitycore-everlake](https://github.com/buildthehomelab/wow-trinitycore-everlake) @ `3b34ee54` (fork `everlake`: advocaite's `forever` 2ae1313e + forever-bots + the reviewed advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-K, Karrz v0.1.33 world data and scripts, Karrz v0.1.34 world data, the Ring of Law arena and the bot module at 0.1.34, bot dual names, the Wintergrasp condition fix, Karrz v0.1.35 with his whole core catch-up, the Zephras Isle scene NPC fix, Karrz's 37 git commits after 0.1.35 with the 0.1.35 gaps, pet Move To / Stay and water pathing, name lookups that keep the surname, Karrz v0.1.36, hunter pets on WoW Forever's rules, the account character list for the mail window's To box, hunter pet attack speeds and pet food from the client, ranged weapons on the ranged stat budget column, the Classic teachers that taught nobody on Forever, holidays on the client's dates when it gives no duration, the Trixx34/Sakhwoow/v1ptyoz review batch: connection places given back, Ghost Wolf 2645, scheduled restarts, the dynamic collision build fix, macOS thread stacks, config drop-ins, a bigger navmesh node pool, leaner bot sessions, missing TACT keys answered "not public", no account character list answer, warlock pet health from Forever, the shorter open-world leash and Karrz 0.1.37), bots on. The live app and the PTR app build the same commit, so either one makes the same image |
 | Client | WoW Forever **1.60.1.70938**, the build the launcher installs; 1.60.1.70790, 70862 and 70888 clients are also let in (`Realm.AlsoAcceptBuilds`) |
 | World DB | `forever-tdb-2026-10-14` release of the same repository |
 | ForeverTracker | [buildthehomelab/wow-forever-tracker](https://github.com/buildthehomelab/wow-forever-tracker) @ `247f3b5f` (`docker-compose.tracker.yml`) |
@@ -108,12 +108,13 @@ The bots need three things the server didn't before:
 The first start with bots creates the bots' accounts and characters in the background, which takes a while; bot log
 lines go to `logs/Playerbot.log`.
 
-**Dynamic respawns.** With hundreds of bots, quest mobs and herb/ore nodes would be camped empty. Every realm runs
-`Respawn.DynamicMode = 1`, and `sql/everlake/2026_11_09_00_world_dynamic_respawn.sql` (in the image, applied by
-worldserver) puts 56,330 quest creatures, 9,250 quest objects and 20,789 herb and ore nodes into the core's dynamic
-spawn groups (2 and 4). Up to 40 players in a zone (bots count), nothing changes; at 80, they respawn twice as fast; at
-200, five times as fast, never under 60 s for mobs and 120 s for herbs, ore and quest objects (`RESPAWN_*` in `.env`,
-set as the core's `Respawn.Dynamic*` keys by the compose files; a restart applies them).
+**Dynamic respawns.** With hundreds of bots, mobs would be camped empty. Every realm runs `Respawn.DynamicMode = 1`,
+and the core's world updates (Karrz 0.1.37, SIN's `2026_11_16_66` / `_67`) put the normal outdoor combat creatures of
+maps 0, 1 and 2991, quest targets included, into dynamic spawn groups 901035 and 901036. The core's `2026_11_16_65` empties
+the groups 2 and 4 this repository used to fill (quest targets, herb and ore nodes), so herbs, ore and quest objects keep
+their normal timers. Up to 40 players in a zone (bots count), nothing changes; at 80, mobs respawn twice as fast; at 200,
+five times as fast, never under 60 s (`RESPAWN_*` in `.env`, set as the core's `Respawn.Dynamic*` keys by the compose
+files; a restart applies them).
 
 ### PTR
 

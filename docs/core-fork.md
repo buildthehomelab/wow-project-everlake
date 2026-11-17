@@ -4,7 +4,18 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-16): the build pins `1f05b894`: `9bc37dfe` (below) plus core PR #74, a shorter open-world leash. Stock
+Status (2026-11-17): the build pins `3b34ee54`: `1f05b894` (below) plus core PR #82, Karrz's git up to release
+0.1.37.2 (`forever-bots` 9e7e4694f5, 453 commits): the day and night cycle (`Forever.DayCycle.Speed`, `.time`), a bot
+tank that leads dungeon runs, trading with bots, Nefarian and the world buffs, dungeon and quest fixes, and SIN's
+open-world dynamic respawns. The merge decisions are in the core's `docs/upstream-prs/karrz-0137.md` (Karrz's pet
+attack speed change e29b5b1438 left out; it clashed with ours). With it this repository's own dynamic respawn files
+(`sql/everlake/2026_11_09_00` .. `2026_11_14_00`, spawn groups 2 and 4) are gone: the core's `2026_11_16_65` empties
+those groups and SIN's files put the open-world combat creatures of maps 0, 1 and 2991 into groups 901035/901036. Herb,
+ore and quest object timers go back to normal. The rates stay ours (40 players, floors 60 s / 120 s). The check on the
+PTR: `SELECT groupId, COUNT(*) FROM spawn_group GROUP BY groupId` shows nothing in 2 and 4 and rows in 901035 and 901036;
+`.time night` turns night; a crowded zone's mobs come back faster.
+
+`1f05b894` was `9bc37dfe` plus core PR #74, a shorter open-world leash. Stock
 TrinityCore let a mob chase to the visibility range (about 100 yards from home) and skipped the distance check entirely
 while it had been damaged or taunted in the last 10 seconds, so a ticking DoT dragged it anywhere; `ThreatRadius` was
 loaded but never read. Now a mob gives up at `ThreatRadius` (60 yards) or its aggro radius, whichever is larger; a mob
