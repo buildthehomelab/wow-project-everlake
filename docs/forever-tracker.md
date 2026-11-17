@@ -543,6 +543,12 @@ Since fork `5ef9c886`: the Wowhead crawl's Chrome extension (1.1.0) reloads its 
 runs is an hour old, so a crawl that runs for days follows the tracker's latest queue. Download it again from The
 Forge › Crawl, unzip it over the old folder and reload it in `chrome://extensions`. No analysis needed.
 
+Since fork `86bb0529`: The Forge's Crawl and Imports pages count the Wowhead Classic item pages beside its npc and
+object pages, and *Import Classic pages* is offered when only item pages were read. ForeverChanges rows go on a card
+only when Wowhead, ForeverDB.net or EG Link states the same thing, and a visit of foreverchanges.pro reads only the
+gaps' pages. `python tools/tracker.py world facts foreverdb` reads ForeverDB.net into the world facts as a second
+witness. No analysis needed after the redeploy.
+
 ## The world build
 
 The fork is becoming the tool that builds the realm's world data (its `docs/WORLD-BUILD.md`). The part that exists
