@@ -618,3 +618,10 @@ A MySQL server that writes a binary log lets only an administrator create trigge
   no game client to read its notes from.
 - The `.forge` core module and the remote console (spawning on the running server): the PTR has neither; the Forge's
   database spawn mode works, then restart the PTR.
+
+Since fork `a3e795ab`: the locator no longer marks a creature *Ready* when VMaNGOS never spawns it (a script, spell or
+event summons it, like the Abyssal Council at the Wind Stones) or spawns it only during a world event (the Scourge
+Invasion). Those get the new state *Summoned or event* on Forge › Spawns, with a note saying why, and the Forge never
+offers them. This needs a VMaNGOS pack of format 5: make it again with the fork's `tools/vmangos_pack.py` from
+VMaNGOS' `db-<commit>.zip`, upload it on Forge › Imports, then run the locator again. With an older pack the locator
+works as before.
