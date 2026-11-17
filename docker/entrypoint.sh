@@ -135,7 +135,7 @@ configure_worldserver() {
     setkey "$f" Classic.GuildFinder 1
     setkey "$f" Classic.Shop.Enabled 1
     setkey "$f" AccountInstancesPerHour 5
-    # Dynamic respawns: quest targets and herb/ore nodes (spawn groups 2 and 4, sql/everlake/2026_11_09_00) come back
+    # Dynamic respawns: open-world mobs, quest targets and herb/ore nodes (spawn groups 2 and 4, sql/everlake) come back
     # faster when a zone holds more players, bots included (rates and floors: RESPAWN_* in .env, set by the compose files).
     setkey "$f" Respawn.DynamicMode 1
     setkey "$f" PlayerSave.Stats.MinLevel 1

@@ -154,11 +154,13 @@ COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql sql/everlake/2026_11_0
      /src/TrinityCore/sql/custom/hotfixes/
 # Our world rules as update files: dynamic respawn groups (quest targets, herb and ore nodes), and the same rule run
 # again after Karrz 0.1.35 added and removed spawns, and once more after the live captures of core pin b5c98f7a added 82 spawns.
-# Karrz 0.1.36 needs another pass, dated after its 2026_11_13_91 world file.
+# Karrz 0.1.36 needs another pass, dated after its 2026_11_13_91 world file. 2026_11_16_00 adds every other open-world
+# mob, chest and fishing pool on maps 0 and 1 (Evermore's AzerothCore rule: not quest givers, rares or boss mobs).
 # (a new file runs on every realm; an older one runs again only when the updater applies it again).
 COPY sql/everlake/2026_11_09_00_world_dynamic_respawn.sql sql/everlake/2026_11_13_00_world_dynamic_respawn_again.sql \
      sql/everlake/2026_11_13_01_world_dynamic_respawn_after_b5c98f7.sql \
      sql/everlake/2026_11_14_00_world_dynamic_respawn_after_karrz_0136.sql \
+     sql/everlake/2026_11_16_00_world_dynamic_respawn_open_world.sql \
      /src/TrinityCore/sql/custom/world/
 # The world import's update files (empty unless WORLD_DATA_COMMIT is set; see the worlddata stage). Each name must be
 # new to the image: the fork names some of its own files world_everlake_* too, and a plain COPY would overwrite them.
