@@ -4,7 +4,14 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-17): the build pins `3b34ee54`: `1f05b894` (below) plus core PR #82, Karrz's git up to release
+Status (2026-11-17): the build pins `deee5f53`: `3b34ee54` (below) plus core PR #79, the paladin community audit:
+Holy Shield's 20% extra threat on every rank and charges spent on blocks only, Redoubt rolling on avoided swings too,
+Judgement of Fury's taunt after its damage, Judgement of Command at half damage on targets that are not stunned, Lay
+on Hands draining the paladin's mana, and Illumination refunding 50% of the base cost (Holy Shock and Light's Vigil
+included). Its two SQL files (`sql/custom/world/2026_11_16_40` and `_41`) apply themselves at the first start. The
+check on the PTR: `SELECT * FROM spell_proc WHERE SpellId IN (20127, 20128, 20210, 1239570)` shows the new rows.
+
+`3b34ee54` was `1f05b894` plus core PR #82, Karrz's git up to release
 0.1.37.2 (`forever-bots` 9e7e4694f5, 453 commits): the day and night cycle (`Forever.DayCycle.Speed`, `.time`), a bot
 tank that leads dungeon runs, trading with bots, Nefarian and the world buffs, dungeon and quest fixes, and SIN's
 open-world dynamic respawns. The merge decisions are in the core's `docs/upstream-prs/karrz-0137.md` (Karrz's pet
