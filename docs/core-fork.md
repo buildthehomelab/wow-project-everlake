@@ -4,7 +4,17 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-17): the build pins `61be14e9`: `deee5f53` (below) plus core PR #76, the warrior community audit
+Status (2026-11-17): the build pins `20facc87`: `61be14e9` (below) plus core PR #84 (Wind Stones and the Ghost Magnet,
+`2026_11_17_10_world_classic_wind_stones` and `2026_11_17_11_world_classic_ghost_magnet`), and the community audits for
+hunter #78, shaman #80 (`2026_11_16_40_world_classic_shaman_community_audit`), mage #77 (Heating Up / Missile Barrage
+and Mage Armor chill, `2026_11_16_40` and `2026_11_17_11`) and the cross-class forever-bugs tracker #83: Revelation and
+Dark Inspiration made to work, Bear Form armor, Thorns, Feral Charge, Renewed Hope, Nature's Grace, Faerie Fire ranks no
+longer stacking, the Feralheart 4-piece, the Classic racial base stats, Legacy perks unlearned at class trainers for
+gold (new characters table `character_legacy_reset`) and `Classic.ForeverKillXp` on by default (lower mobs give kill XP
+from their own level, as live). Its SQL files (world `2026_11_16_40`-`_42`, `2026_11_17_00`, `_10`, `_43`-`_46`,
+characters `2026_11_17_46`, hotfixes `2026_11_17_40`) apply themselves at the first start.
+
+`61be14e9` was `deee5f53` (below) plus core PR #76, the warrior community audit
 (white-swing and damage-taken rage on WoW Forever's formulas, creature parry 5.5/6/14%, Flurry charges spent per swing,
 `sql/custom/world/2026_11_16_40_world_forever_warrior_flurry_charges.sql`), and core PR #75, the warlock community audit:
 Life Tap, Demonic Sacrifice and Demonic Brand fixes; 416189 Warlock Pet Scaling filled in from wowsims/forever (2 health
