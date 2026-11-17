@@ -4,7 +4,15 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-16): the build pins `9bc37dfe`: the preceding pin plus core PRs #72 and #73. #72 never sends the
+Status (2026-11-16): the build pins `1f05b894`: `9bc37dfe` (below) plus core PR #74, a shorter open-world leash. Stock
+TrinityCore let a mob chase to the visibility range (about 100 yards from home) and skipped the distance check entirely
+while it had been damaged or taunted in the last 10 seconds, so a ticking DoT dragged it anywhere; `ThreatRadius` was
+loaded but never read. Now a mob gives up at `ThreatRadius` (60 yards) or its aggro radius, whichever is larger; a mob
+damaged or taunted in the last 10 seconds, and world bosses, keep the old ~100-yard leash. Dungeons and pets are
+unchanged. The check on the PTR: pull a mob and run without hitting it, it turns back at about 60 yards; DoT-kite one,
+it gives up at about 100.
+
+`9bc37dfe` was the preceding pin plus core PRs #72 and #73. #72 never sends the
 answer to the account character list request: the 70938 client crashed (ERROR #132) a few seconds into the world after
 it. #73 brings two WoW Forever warlock pet changes: the Voidwalker's base health +15% (10 November class tuning, on top
 of the +40 of 6 November), and 416189 Warlock Pet Scaling gives every demon 2 health per point of the warlock's Stamina
