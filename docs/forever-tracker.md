@@ -96,6 +96,13 @@ applied by itself. Drops with no measured chance (AtlasLoot's own or a live reco
 boss's list, at most 33 % (`TRACKER_ATLASLOOT_GUESS=0`: left out). Its boss tables also count as a second source for
 NorgannonDB's drops. Rules in the fork's `docs/SOURCES.md`.
 
+Since fork `a14329f6`: Forge › Imports also imports **QuestieDB's drops** (GPL-3.0), ranked right after Wowhead and
+needing no second source: its Forever item database, hand fixes and over a million players' QuestieTrace sessions,
+about 8,800 items. It fills every creature or chest missing an item; a row takes the server's chance for that item
+elsewhere, else a quest item takes `TRACKER_QUESTIE_QUEST_CHANCE` (40), quest-only. The container checks for a new
+QuestieDB release every `TRACKER_QUESTIE_EVERY_HOURS` (6). The locator also places unspawned creatures where
+QuestieDB's players recorded them, before Wowhead's maps.
+
 Since fork `12d3faf1`: the first two steps of [the world build](#the-world-build): `tracker.py world layers` and
 `world pin` (the layers of sources a world is built from, and the newest version of each), and `world replay` and
 `world why` (which file wrote each row of the realm's world). Nothing changes on the website, and the analysis is not
