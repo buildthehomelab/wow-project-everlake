@@ -4,7 +4,13 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-17): the build pins `20facc87`: `61be14e9` (below) plus core PR #84 (Wind Stones and the Ghost Magnet,
+Status (2026-11-17): the build pins `f934a724`: `20facc87` (below) plus core PR #88 (Auto Shot's hidden 500 ms retry
+timer), #89 (hunter trap and Serpent Sting ticks crit with the higher of ranged and melee crit; Skyborne Attuned /
+Charged removed on entering a raid) and #85 (the world script audit tool in `contrib/world-audit` and
+`2026_11_17_20_world_classic_event_spawn_paths`: 51 VMaNGOS paths for 55 event spawns that stood still). Its SQL
+file applies itself at the first start.
+
+`20facc87` was `61be14e9` (below) plus core PR #84 (Wind Stones and the Ghost Magnet,
 `2026_11_17_10_world_classic_wind_stones` and `2026_11_17_11_world_classic_ghost_magnet`), and the community audits for
 hunter #78, shaman #80 (`2026_11_16_40_world_classic_shaman_community_audit`), mage #77 (Heating Up / Missile Barrage
 and Mage Armor chill, `2026_11_16_40` and `2026_11_17_11`) and the cross-class forever-bugs tracker #83: Revelation and
