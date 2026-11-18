@@ -619,6 +619,9 @@ A MySQL server that writes a binary log lets only an administrator create trigge
 - The `.forge` core module and the remote console (spawning on the running server): the PTR has neither; the Forge's
   database spawn mode works, then restart the PTR.
 
+Since fork `2b8810d8`: a release phase can list spells by id; the phase *Not out yet* holds four spells nothing teaches
+on live WoW Forever (Teleport: Dalaran, Lacerate 4, Voice of Truth, Improved Seal of Fury), so they show as *Later*.
+
 Since fork `c9acdcc6`: a zone map picture that wago.tools is slow to draw (first ask) is waited for 90 s and retried
 after 10 minutes if it still fails; square maps (Zephras Isle) keep their shape.
 
