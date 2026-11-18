@@ -619,6 +619,11 @@ A MySQL server that writes a binary log lets only an administrator create trigge
 - The `.forge` core module and the remote console (spawning on the running server): the PTR has neither; the Forge's
   database spawn mode works, then restart the PTR.
 
+Since fork `5a3567a4`: Forge › Spawns has a map button beside *Where* that shows a creature's positions on the
+official zone map (the client's UiMap tables, written to `data/ui-maps.json` by the analysis and the locator; the
+picture from wago.tools, downloaded once per build into `data/maps`). Rows found before show a map after the next
+analysis. The client check also takes decryption keys from wago.tools (every region's hotfixes), next to TACTKeys.
+
 Since fork `87d51a0d`: the locator gives every *Ready* point its height from the server's maps and vmaps (the
 mounted data folder), buildings and bridges included, with the nearest existing spawn's height as the hint for the
 floor. The Forge's database spawn mode then writes those points too, not only the ones with an existing spawn within
