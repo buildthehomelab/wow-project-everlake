@@ -60,15 +60,14 @@ jobs:
         run: for f in client/macos/*.py; do python -I -c 'import ast, sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])' "$f" || exit 1; done
 
   patches:
-    # docker/patches must apply to the cores we build. Bump "bots" when the forever-bots core is updated.
+    # docker/patches must apply to the cores we build. The live app and the PTR both build the fork commit pinned in the
+    # Dockerfile; the old advocaite forever-bots core (5206a727, docs/era-data.md) is no longer built, so it is not checked.
     strategy:
       fail-fast: false
       matrix:
         include:
           - core: pinned (Dockerfile TC_COMMIT)
             commit: ""
-          - core: forever-bots
-            commit: 5206a7275f03dd2f6f2217fab9f67a4b232269fa # docs/era-data.md
     name: patches (${{ matrix.core }})
     runs-on: ubuntu-24.04
     steps:
