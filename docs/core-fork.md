@@ -4,12 +4,20 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-18): the build pins `35b18768`: `f934a724` (below) plus core PR #86 (the Ruins of Lordaeron Captain and
+Status (2026-11-18): the build pins `812d88e6`: `35b18768` (below) plus core PR #91, Karrz's git up to release
+0.1.37.6 (`forever-bots` 4d331615c3; 0.1.37.3 to .5 changed only his launcher): the `build_info` row for client
+1.60.1.70959 (`sql/custom/auth/2026_11_17_70`), which this repository's `ALSO_ACCEPT_BUILDS` now lets in, and Blizzard's
+live hotfix pushes 114103-114163 shipped with it (`2026_11_17_75`), plus our `2026_11_18_50` with the 825 live records
+of pushes 114103-114196 that neither file held (Curve and CurvePoint of push 114125, Light, AreaTable, ContentTuning,
+quests 2756, 8271, 8272, items 2848 and 7994). The review and the CDN comparison of 70938 and 70959 are in the core's
+`docs/upstream-prs/karrz-0137-6.md`. The check on the PTR: `SELECT * FROM auth.build_info WHERE build = 70959` has a row;
+a 70959 client joins the realm (restart bnetserver once, it reads build_info only at start).
+
+`35b18768` was `f934a724` (below) plus core PR #86 (the Ruins of Lordaeron Captain and
 Viktor the Vile, `2026_11_17_00_world_forever_ruins_of_lordaeron_captain_viktor`), #81 (the wowsims/forever audit: druid,
 priest and rogue mechanics, spell resists from wowsims EV-0142, item and weapon proc rates measured in Forever logs,
 Spirit regen and channel hold, crit per Agility and Intellect, caster weapon DPS and armor quality modifiers, hunter pet
-swing damage; `2026_11_16_80` to `2026_11_18_14`, 39 files) and #90 (CI only: superseded builds cancel). Its SQL files
-apply themselves at the first start.
+swing damage; `2026_11_16_80` to `2026_11_18_14`, 39 files) and #90 (CI only: superseded builds cancel).
 
 `f934a724` was `20facc87` (below) plus core PR #88 (Auto Shot's hidden 500 ms retry
 timer), #89 (hunter trap and Serpent Sting ticks crit with the higher of ranged and melee crit; Skyborne Attuned /

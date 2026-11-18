@@ -10,7 +10,7 @@
 ARG UBUNTU_VERSION=24.04
 # The core commit and the bots switch, declared here so the build stage uses them and the runtime stage records them
 # (/opt/trinitycore/image-build.env, checked by the entrypoint against the image tag it was started as).
-# The live realms: our fork's everlake branch with the bots (35b18768: forever 2ae1313e + forever-bots + the 92 reviewed
+# The live realms: our fork's everlake branch with the bots (812d88e6: forever 2ae1313e + forever-bots + the 92 reviewed
 # advocaite pull requests, fork PRs #4-#19, TrinityCore master batches A-K #23 #24 #26 #28-#35, Karrz v0.1.33 data #22 and
 # scripts #25, build fix #27, Karrz v0.1.34 data #36, Ring of Law arena #37, bot module #38, bot dual names #39,
 # the Wintergrasp condition fix #42 and greyed-out ruleset cards for offline realms #43, Karrz v0.1.35 with his whole core
@@ -27,11 +27,12 @@ ARG UBUNTU_VERSION=24.04
 # pet health from Forever #73, the shorter open-world leash #74, Karrz 0.1.37 #82, the paladin audit #79, the warrior audit #76, the warlock audit #75, the Wind Stones
 # and Ghost Magnet #84, the hunter audit #78, the shaman audit #80, the mage audit #77, the forever-bugs audit #83,
 # the Auto Shot retry timer #88, the hunter audit follow-ups #89 and the event spawn paths from the world script audit #85,
-# the Ruins of Lordaeron Captain and Viktor the Vile #86 and the wowsims audit #81), the
+# the Ruins of Lordaeron Captain and Viktor the Vile #86, the wowsims audit #81 and Karrz 0.1.37.6 with client 70959
+# and its live hotfixes #91), the
 # same commit the PTR builds (docker-compose.ptr.yml), so the live app and the PTR app build one identical image.
-# Client 1.60.1.70938 (realms on 70938, sql/everlake/2026_11_14_10; bnetserver and the worldservers also let 70790, 70862 and 70888 in,
+# Client 1.60.1.70938 (realms on 70938, sql/everlake/2026_11_14_10; bnetserver and the worldservers also let 70790, 70862, 70888 and 70959 in,
 # docker/entrypoint.sh).
-ARG TC_COMMIT=35b18768960a9c0e80d93b62e5f19bcea966f253
+ARG TC_COMMIT=812d88e6e0c466f99906d9bdc1876ba377841c57
 # PLAYERBOTS=1: the WoW Forever Bots module (src/modules/PlayerbotV2; the core commit must have it, as the fork's
 # everlake branch does since PR #2). 0 builds the core without bots.
 ARG PLAYERBOTS=1
