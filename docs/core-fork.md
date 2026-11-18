@@ -4,7 +4,14 @@ Goal: Everlake runs a core we have read, tested and can stand behind. We take up
 both upstreams (advocaite's `forever` fork and TrinityCore itself), but only after checking each change does what it
 says, and every fix we take or make gets a test, so the core gets steadier with each change instead of less sure.
 
-Status (2026-11-17): the build pins `f934a724`: `20facc87` (below) plus core PR #88 (Auto Shot's hidden 500 ms retry
+Status (2026-11-18): the build pins `35b18768`: `f934a724` (below) plus core PR #86 (the Ruins of Lordaeron Captain and
+Viktor the Vile, `2026_11_17_00_world_forever_ruins_of_lordaeron_captain_viktor`), #81 (the wowsims/forever audit: druid,
+priest and rogue mechanics, spell resists from wowsims EV-0142, item and weapon proc rates measured in Forever logs,
+Spirit regen and channel hold, crit per Agility and Intellect, caster weapon DPS and armor quality modifiers, hunter pet
+swing damage; `2026_11_16_80` to `2026_11_18_14`, 39 files) and #90 (CI only: superseded builds cancel). Its SQL files
+apply themselves at the first start.
+
+`f934a724` was `20facc87` (below) plus core PR #88 (Auto Shot's hidden 500 ms retry
 timer), #89 (hunter trap and Serpent Sting ticks crit with the higher of ranged and melee crit; Skyborne Attuned /
 Charged removed on entering a raid) and #85 (the world script audit tool in `contrib/world-audit` and
 `2026_11_17_20_world_classic_event_spawn_paths`: 51 VMaNGOS paths for 55 event spawns that stood still). Its SQL

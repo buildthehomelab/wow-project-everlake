@@ -1,29 +1,29 @@
 diff --git a/src/server/game/Entities/Player/Player.cpp b/src/server/game/Entities/Player/Player.cpp
-index a3bbcba..a5de1a9 100644
+index c8856d88ed..45fe8bd767 100644
 --- a/src/server/game/Entities/Player/Player.cpp
 +++ b/src/server/game/Entities/Player/Player.cpp
-@@ -5422,12 +5422,14 @@ static float ClassicAgilityRate(Player const* player, bool dodge)
+@@ -5514,12 +5514,14 @@ static float ClassicAgilityRate(Player const* player, bool dodge)
      float level1, level60;
      switch (player->GetClass())
      {
--        case CLASS_ROGUE:   level1 = dodge ? 1.1f : 2.2f;  level60 = dodge ? 14.5f : 29.0f; break;
+-        case CLASS_ROGUE:   level1 = dodge ? 1.1f : 2.2f;  level60 = (dodge ? 0.5f : 1.0f) / 0.0345f; break;
 +        case CLASS_ROGUE:
-+        case CLASS_MONK:    level1 = dodge ? 1.1f : 2.2f;  level60 = dodge ? 14.5f : 29.0f; break;  // Everlake Test 1: Monk as Rogue
-         case CLASS_HUNTER:  level1 = dodge ? 1.8f : 3.5f;  level60 = dodge ? 26.5f : 53.0f; break;
-         case CLASS_MAGE:    level1 = 12.9f; level60 = 20.0f; break;
++        case CLASS_MONK:    level1 = dodge ? 1.1f : 2.2f;  level60 = (dodge ? 0.5f : 1.0f) / 0.0345f; break;  // Everlake Test 1: Monk as Rogue
+         case CLASS_HUNTER:  level1 = dodge ? 1.8f : 3.5f;  level60 = (dodge ? 0.5f : 1.0f) / 0.0189f; break;
+         case CLASS_MAGE:    level1 = 12.9f; level60 = 1.0f / 0.0514f; break;
          case CLASS_PRIEST:  level1 = 11.0f; level60 = 20.0f; break;
          case CLASS_WARLOCK: level1 = 8.4f;  level60 = 20.0f; break;
 -        case CLASS_WARRIOR: level1 = 3.9f;  level60 = 20.0f; break;
 +        case CLASS_WARRIOR:
 +        case CLASS_DEATH_KNIGHT: level1 = 3.9f; level60 = 20.0f; break;  // Everlake Test 1: Death Knight as Warrior
-         default:            level1 = 4.6f;  level60 = 20.0f; break;  // paladin, shaman, druid
-     }
-     float level = float(std::min<uint8>(player->GetLevel(), 60));
+         case CLASS_PALADIN: level1 = 4.6f;  level60 = 1.0f / 0.0506f; break;
+         case CLASS_SHAMAN:  level1 = 4.6f;  level60 = 1.0f / 0.0508f; break;
+         default:            level1 = 4.6f;  level60 = 20.0f; break;  // druid
 diff --git a/src/server/game/Entities/Unit/StatSystem.cpp b/src/server/game/Entities/Unit/StatSystem.cpp
-index 49377fc..7dd5064 100644
+index 104c13c0b7..352b3907f2 100644
 --- a/src/server/game/Entities/Unit/StatSystem.cpp
 +++ b/src/server/game/Entities/Unit/StatSystem.cpp
-@@ -421,10 +421,12 @@ float Player::OCTRegenHPPerSpirit() const
+@@ -458,10 +458,12 @@ float Player::OCTRegenHPPerSpirit() const
          case CLASS_HUNTER:  regen = spirit * 0.43f - 5.5f; break;
          case CLASS_PALADIN: regen = spirit * 0.25f; break;
          case CLASS_PRIEST:  regen = spirit * 0.15f + 1.4f; break;
@@ -38,7 +38,7 @@ index 49377fc..7dd5064 100644
          default:            regen = 0.0f; break;
      }
      return std::max(0.0f, regen);
-@@ -448,10 +450,12 @@ void Player::UpdateAttackPowerAndDamage(bool ranged)
+@@ -485,10 +487,12 @@ void Player::UpdateAttackPowerAndDamage(bool ranged)
              {
                  case CLASS_WARRIOR:
                  case CLASS_PALADIN:
@@ -51,7 +51,7 @@ index 49377fc..7dd5064 100644
                      val2 = level * 2.0f + strength + agility - 20.0f;
                      break;
                  case CLASS_SHAMAN:
-@@ -476,6 +480,8 @@ void Player::UpdateAttackPowerAndDamage(bool ranged)
+@@ -515,6 +519,8 @@ void Player::UpdateAttackPowerAndDamage(bool ranged)
                      break;
                  case CLASS_ROGUE:
                  case CLASS_WARRIOR:
