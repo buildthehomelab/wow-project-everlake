@@ -619,6 +619,12 @@ A MySQL server that writes a binary log lets only an administrator create trigge
 - The `.forge` core module and the remote console (spawning on the running server): the PTR has neither; the Forge's
   database spawn mode works, then restart the PTR.
 
+Since fork `87d51a0d`: the locator gives every *Ready* point its height from the server's maps and vmaps (the
+mounted data folder), buildings and bridges included, with the nearest existing spawn's height as the hint for the
+floor. The Forge's database spawn mode then writes those points too, not only the ones with an existing spawn within
+15 yards. Run the locator again to give the points found before their heights. For hand-written spawns,
+`tools/height.py` in the fork answers the height of points without the game (its docs/SPAWNS.md, section 5).
+
 Since fork `a3e795ab`: the locator no longer marks a creature *Ready* when VMaNGOS never spawns it (a script, spell or
 event summons it, like the Abyssal Council at the Wind Stones) or spawns it only during a world event (the Scourge
 Invasion). Those get the new state *Summoned or event* on Forge › Spawns, with a note saying why, and the Forge never
