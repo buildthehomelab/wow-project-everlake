@@ -41,7 +41,7 @@ services:
       - ./sql/everlake:/ptr/sql:ro   # the ruleset cards (ptr-setup.sh cards)
 
   ptr-mmaps:
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-35b18768960a9c0e80d93b62e5f19bcea966f253}-${PTR_WORLD_DATA_COMMIT:-fc2f2ad33370f3106d55bf953a1c7e2c2d8d5cfb}-fabc769c
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-35b18768960a9c0e80d93b62e5f19bcea966f253}-${PTR_WORLD_DATA_COMMIT:-fc2f2ad33370f3106d55bf953a1c7e2c2d8d5cfb}-2917b908
     pull_policy: never   # built by worldserver-ptr
     restart: "no"
     entrypoint: ["/usr/local/bin/extract.sh"]
@@ -64,9 +64,9 @@ services:
         WORLD_DATA_COMMIT: ${PTR_WORLD_DATA_COMMIT:-fc2f2ad33370f3106d55bf953a1c7e2c2d8d5cfb}
         PLAYERBOTS: "1"
         # this repository's own files in the image (tools/ci/image-rev.sh --write keeps it and the tags in step)
-        IMAGE_REV: "fabc769c"
+        IMAGE_REV: "2917b908"
         BUILD_JOBS: ${PTR_BUILD_JOBS:-32}
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-35b18768960a9c0e80d93b62e5f19bcea966f253}-${PTR_WORLD_DATA_COMMIT:-fc2f2ad33370f3106d55bf953a1c7e2c2d8d5cfb}-fabc769c
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-35b18768960a9c0e80d93b62e5f19bcea966f253}-${PTR_WORLD_DATA_COMMIT:-fc2f2ad33370f3106d55bf953a1c7e2c2d8d5cfb}-2917b908
     command: ["worldserver"]
     networks: [everlake]
     restart: unless-stopped
@@ -82,7 +82,7 @@ services:
       DB_USER: ${DB_USER:-trinity}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       MMAP_PATHFINDING: "1"   # the bots walk on the navigation meshes
-      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-35b18768960a9c0e80d93b62e5f19bcea966f253}-${PTR_WORLD_DATA_COMMIT:-fc2f2ad33370f3106d55bf953a1c7e2c2d8d5cfb}-fabc769c
+      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-35b18768960a9c0e80d93b62e5f19bcea966f253}-${PTR_WORLD_DATA_COMMIT:-fc2f2ad33370f3106d55bf953a1c7e2c2d8d5cfb}-2917b908
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PLAYERBOT_DB: playerbot_ptr   # the entrypoint loads the bots' schema into it on the first start
       TC_REALM_ID: "73"
