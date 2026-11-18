@@ -51,13 +51,15 @@ so freeze it before testing, and check the CDN build before extracting:
 curl -s http://us.patch.battle.net:1119/wowf/versions | grep '^us|'
 ```
 
-70790, 70862 and 70938 have the same table layouts and the same map files; only table contents differ. Between
+70790, 70862, 70938 and 70959 have the same table layouts and the same map files; only table contents differ. Between
 70862 and 70938, 112 of 1,245,658 files changed: 79 tables, 28 interface files and 5 programs, and no map, model or
-texture file (compared file by file on Blizzard's CDN on 2026-11-14). All 370 tables the server loads have, in 70938,
-the layout the pinned core expects. 35 of them hold sections locked by three keys Blizzard has not published
-(`0DA4670DB36FB2A9`, `DA0E7785727A0A65`, `3146BA4C4ECDBFAB`); those sections are the same size in 70862 and 70938,
-so new tables lose nothing the server could read before. Data extracted from 70790 or 70862 still loads.
-To bring the tables up to 70938 without redoing maps, vmaps and mmaps: `DBC_ONLY=1 docker compose run --rm extractor`.
+texture file (compared file by file on Blizzard's CDN on 2026-11-14). Between 70938 and 70959, 62 of 1,245,659 files
+changed: 41 tables, 16 interface files (one new) and 5 programs, again no map, model or texture file (2026-11-18). All
+370 tables the server loads have, in 70938 and in 70959, the layout the pinned core expects. 35 of them hold sections
+locked by three keys Blizzard has not published (`0DA4670DB36FB2A9`, `DA0E7785727A0A65`, `3146BA4C4ECDBFAB`); those
+sections are the same size in 70862, 70938 and 70959, so new tables lose nothing the server could read before. Data
+extracted from 70790, 70862 or 70938 still loads.
+To bring the tables up to a newer build (70959 now) without redoing maps, vmaps and mmaps: `DBC_ONLY=1 docker compose run --rm extractor`.
 The live realm and the PTR read the same data folder, so copy `dbc` and `gt` aside first; a worldserver reads the
 tables only when it starts, so the running realm is not touched until its next restart.
 
