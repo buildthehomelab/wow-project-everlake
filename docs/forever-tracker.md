@@ -668,3 +668,5 @@ Invasion). Those get the new state *Summoned or event* on Forge › Spawns, with
 offers them. This needs a VMaNGOS pack of format 5: make it again with the fork's `tools/vmangos_pack.py` from
 VMaNGOS' `db-<commit>.zip`, upload it on Forge › Imports, then run the locator again. With an older pack the locator
 works as before.
+
+Since fork `5ab93605`: original quests nothing ever gave (VMaNGOS has no giver, start item or starting object: A Strategic Alliance, Stonesplinter Trogg Disguise, Waskily Wabbits! and eight more) are filed under Internal / test. Takes effect on the next analysis.
