@@ -52,6 +52,8 @@ changelog compares the two.
 Later runs: *Run again* in the Forge. A new fork commit: change the pin in `docker-compose.tracker.yml` (or
 `TRACKER_COMMIT` in `.env`) and restart the app.
 
+Since fork `1f401575`: an item the server gives in no way, whose Wowhead Forever page was read and names no source, waits in *Not out yet* (live WoW Forever does not hand it out yet) with what only it gives; its page stays in the crawl queue and comes back among the gaps once it names a source. After deploy press *Import Wowhead* (Forge › Imports) so the card is made again with #148's new rows. Re-analyses once (`analysis=30`).
+
 Since fork `3547cfb2`: a dungeon entered through a server area trigger or a script's teleport counts as having an entrance (the six Forever dungeons the fork built); the Wowhead import also writes skinning, pick-pocket and container loot, quest-reward slots and currency-cost vendors; administrators can ask the crawler for pages first (`wowhead_wanted`, `data/wowhead-wanted.json`) and read kept pages back (`wowhead_pages_get`), and creature pages keep their model. Re-analyses once (`analysis=29`).
 
 Since fork `4c40f245`: the 8 unnamed original-game recipes (named `#id`) whose spell the client dropped are internal too. Re-analyses once (`analysis=27`).
