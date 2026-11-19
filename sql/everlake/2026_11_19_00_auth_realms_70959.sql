@@ -1,0 +1,21 @@
+-- The realms move to WoW Forever client 1.60.1.70959 (Battle.net's update of 2026-11-17), the build the launcher
+-- installs from wow-everlake-launcher #44 on. Until now they were on 70938 (2026_11_14_10) and let 70959 clients in
+-- as an extra build. Now 70959 is the realms' own build, and the builds before it are the extra ones: 70790, 70862,
+-- 70888 and 70938 (docker/entrypoint.sh, ALSO_ACCEPT_BUILDS).
+--
+-- 70959 carries the same game data as 70938 (same table layouts and map files; README.md), so the server's extracted
+-- data stays as it is. The Forever tracker reads the server's build from this column and stops reporting the server
+-- as behind the official client.
+--
+-- Only rows on a Forever build are moved, so a realm row of another product keeps its build. build_info already has
+-- 70959 (the core's sql/custom/auth/2026_11_17_70 file, applied before this one). No auth key is known for 70959, as
+-- for every Forever build: the worldservers keep Network.SkipBuildAuthKeyCheck = 1. The client's message numbers are
+-- chosen per connection from the client's own build, not the realm's, so nothing else changes with this.
+--
+-- The login database is shared by the live realms and the PTR: the first worldserver that starts with this file moves
+-- every realm. The servers read the realm list again every 10 seconds (RealmsStateUpdateDelay), so no restart is
+-- needed for it. An image without 70938 in ALSO_ACCEPT_BUILDS would turn 70938 clients away from then on; every image
+-- with this file has it.
+-- Applied by the worldserver's updater on start (the Dockerfile copies it to sql/custom/auth). Safe to run again.
+-- Undo: UPDATE `realmlist` SET `gamebuild` = 70938 WHERE `gamebuild` = 70959;
+UPDATE `realmlist` SET `gamebuild` = 70959 WHERE `gamebuild` IN (70790, 70840, 70862, 70888, 70938);

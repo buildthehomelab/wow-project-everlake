@@ -19,15 +19,15 @@ OVERRIDES="$ROOT/overrides"
 : "${REALM_LOCAL_SUBNET_MASK:=255.255.255.0}"
 : "${REALM_NAME:=Forever}"
 : "${REALM_ID:=70}"
-# The realms are on 1.60.1.70938 (Battle.net's 2026-11-13 update, the build the launcher installs;
-# sql/everlake/2026_11_14_10_auth_realms_70938.sql). Clients on the builds before it keep seeing and joining them:
-# 70790 (what the launcher installed before, a frozen test copy, a player who hasn't updated), 70862 (Battle.net's
-# 2026-11-07 update) and 70888 (2026-11-10), and the one after it: 70959 (2026-11-17; its build_info row is the core's
-# auth update 2026_11_17_70, from Karrz 0.1.37.6). They use the same table layouts and map files, and message
+# The realms are on 1.60.1.70959 (Battle.net's 2026-11-17 update, the build the launcher installs; its build_info row
+# is the core's auth update 2026_11_17_70, from Karrz 0.1.37.6; sql/everlake/2026_11_19_00_auth_realms_70959.sql).
+# Clients on the builds before it keep seeing and joining them: 70790 (what the launcher installed first, a frozen test
+# copy, a player who hasn't updated), 70862 (Battle.net's 2026-11-07 update), 70888 (2026-11-10) and 70938
+# (2026-11-13, the realms' build before). They use the same table layouts and map files, and message
 # numbers are chosen per connection from the client's build. bnetserver and every worldserver accept these builds
-# too (Realm.AlsoAcceptBuilds, comma-separated). An image without 70862 in this list turns 70862 clients away once
+# too (Realm.AlsoAcceptBuilds, comma-separated). An image without 70938 in this list turns 70938 clients away once
 # the realms have moved, until it is replaced.
-ALSO_ACCEPT_BUILDS="70790,70862,70888,70959"
+ALSO_ACCEPT_BUILDS="70790,70862,70888,70938"
 # Realm 1's world port. 8085 by default; another one when the host already runs a server on 8085 (e.g. beside Evermore)
 : "${WORLD_PORT:=8085}"
 : "${LOGIN_HOSTNAME:=trinity.actual.battle.net}"
@@ -108,7 +108,7 @@ configure_worldserver() {
     setkey "$f" LogsDir "\"$ROOT/logs\""
     setkey "$f" SourceDirectory '"/src/TrinityCore"'
     setkey "$f" MySQLExecutable '"/usr/bin/mysql"'
-    # no auth key is known for the Forever builds (70790 to 70938): the core skips only the digest check
+    # no auth key is known for the Forever builds (70790 to 70959): the core skips only the digest check
     setkey "$f" Network.SkipBuildAuthKeyCheck 1
     setkey "$f" Network.EnterEncryptedModeRegionGroup 8
     setkey "$f" Realm.CfgContentSetID 137
