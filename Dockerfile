@@ -30,7 +30,7 @@ ARG UBUNTU_VERSION=24.04
 # the Ruins of Lordaeron Captain and Viktor the Vile #86, the wowsims audit #81 and Karrz 0.1.37.6 with client 70959
 # and its live hotfixes #91), the
 # same commit the PTR builds (docker-compose.ptr.yml), so the live app and the PTR app build one identical image.
-# Client 1.60.1.70938 (realms on 70938, sql/everlake/2026_11_14_10; bnetserver and the worldservers also let 70790, 70862, 70888 and 70959 in,
+# Client 1.60.1.70959 (realms on 70959, sql/everlake/2026_11_19_00; bnetserver and the worldservers also let 70790, 70862, 70888 and 70938 in,
 # docker/entrypoint.sh).
 ARG TC_COMMIT=812d88e6e0c466f99906d9bdc1876ba377841c57
 # PLAYERBOTS=1: the WoW Forever Bots module (src/modules/PlayerbotV2; the core commit must have it, as the fork's
@@ -149,10 +149,11 @@ COPY --from=build /opt/trinitycore /opt/trinitycore
 # The updater looks for sql/ under the source directory baked in at build time
 COPY --from=build /src/TrinityCore/sql /src/TrinityCore/sql
 # Our login-database rows, applied by the updater on start like the fork's own custom files: the one ruleset card at
-# login (Forever), the realms' client build (1.60.1.70938), and the TACT keys live Forever sends that the core lacks (tools/live-hotfixes/tact_keys.py). Name
+# login (Forever), the realms' client build (1.60.1.70959, after 70938's file), and the TACT keys live Forever sends that the core lacks (tools/live-hotfixes/tact_keys.py). Name
 # reservation's tables are the fork's own now (sql/custom/auth/2026_11_07_09 and 2026_11_09_00). The other
 # sql/everlake files are data and stay manual.
 COPY sql/everlake/2026_11_08_06_auth_one_ruleset.sql sql/everlake/2026_11_14_10_auth_realms_70938.sql \
+     sql/everlake/2026_11_19_00_auth_realms_70959.sql \
      /src/TrinityCore/sql/custom/auth/
 COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql sql/everlake/2026_11_08_08_hotfixes_live_tact_keys.sql \
      sql/everlake/2026_11_12_00_hotfixes_ruleset_cards.sql \
