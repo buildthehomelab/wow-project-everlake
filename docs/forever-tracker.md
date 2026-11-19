@@ -52,6 +52,8 @@ changelog compares the two.
 Later runs: *Run again* in the Forge. A new fork commit: change the pin in `docker-compose.tracker.yml` (or
 `TRACKER_COMMIT` in `.env`) and restart the app.
 
+Since fork `130a26d6`: a recipe follows its spell to *Internal / test* (Season of Discovery additions, recipes nothing taught even in the original game, recipes only out-of-game items teach); unnamed original-game recipes whose spell the client dropped are internal; 33 encrypted new recipes wait in *Not out yet*. Re-analyses once (`analysis=26`).
+
 Since fork `a77090dc`, *New in Forever* means not in the Classic Era client (Season of Discovery rows no longer count),
 the work list shows each fix once, and the analysis asks Wowhead for the names of new quests the server lacks
 (`FT_WOWHEAD`, on by default; quests Wowhead does not know are hidden tracking quests). The first start of that image
