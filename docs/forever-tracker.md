@@ -54,6 +54,8 @@ Later runs: *Run again* in the Forge. A new fork commit: change the pin in `dock
 
 Since fork `1f0b3f01`: pages asked for by hand stay at the head of the crawl while a whole crawl splits its list pages. No re-analysis.
 
+Since fork `c5d9e8b5`: a zone's terrain counts when the map has vmaps but no ground tiles (Deeprun Tram); a zone's quest count leaves out quests whose title reads as internal (`<UNUSED>`); an item a conversation makes the player cast is obtainable (source "Given in a conversation"). Takes effect on the next analysis.
+
 Since fork `b99c0875`: pages asked for by hand (`wowhead_wanted`) are read before a whole crawl's list pages. No re-analysis.
 
 Since fork `a8c848b0`: the imports measure again only corpse and chest loot; skinning, pick pocketing and container tables get new rows for missing items but their existing chances are left alone (a Wowhead card of 2026-11-18 set 5,458 of them, rolled back on the PTR). Wanted creature pages read before models were kept are read again. After deploy press *Import Wowhead* again. No re-analysis needed.
