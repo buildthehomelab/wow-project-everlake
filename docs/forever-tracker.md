@@ -619,6 +619,8 @@ A MySQL server that writes a binary log lets only an administrator create trigge
 - The `.forge` core module and the remote console (spawning on the running server): the PTR has neither; the Forge's
   database spawn mode works, then restart the PTR.
 
+Since fork `fcb5cf17`: the analysis counts every quest the server has as an item source, not only the client's QuestV2 list (Lunar Festival patterns, Excitable Slime); 157 spell-teaching items with no source on live WoW Forever wait in *Not out yet* and 12 promotion-only ones in a new *Promotions* phase; the Wowhead import writes a drop seen once on ten or more loots when nothing else gives the item. The container re-analyses once on start (`analysis=25`).
+
 Since fork `2b8810d8`: a release phase can list spells by id; the phase *Not out yet* holds four spells nothing teaches
 on live WoW Forever (Teleport: Dalaran, Lacerate 4, Voice of Truth, Improved Seal of Fury), so they show as *Later*.
 
