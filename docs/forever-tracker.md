@@ -52,6 +52,8 @@ changelog compares the two.
 Later runs: *Run again* in the Forge. A new fork commit: change the pin in `docker-compose.tracker.yml` (or
 `TRACKER_COMMIT` in `.env`) and restart the app.
 
+Since fork `4c40f245`: the 8 unnamed original-game recipes (named `#id`) whose spell the client dropped are internal too. Re-analyses once (`analysis=27`).
+
 Since fork `130a26d6`: a recipe follows its spell to *Internal / test* (Season of Discovery additions, recipes nothing taught even in the original game, recipes only out-of-game items teach); unnamed original-game recipes whose spell the client dropped are internal; 33 encrypted new recipes wait in *Not out yet*. Re-analyses once (`analysis=26`).
 
 Since fork `a77090dc`, *New in Forever* means not in the Classic Era client (Season of Discovery rows no longer count),
