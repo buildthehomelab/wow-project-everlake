@@ -54,6 +54,8 @@ Later runs: *Run again* in the Forge. A new fork commit: change the pin in `dock
 
 Since fork `4c40f245`: the 8 unnamed original-game recipes (named `#id`) whose spell the client dropped are internal too. Re-analyses once (`analysis=27`).
 
+Since fork `02f2805c`: quests. The locator offers unspawned chests and quest-drop creatures/objects holding a missing item; an item made by using an item, an objective credit a held item's spell gives, and kill credits the core's C++ scripts give (Arathi Basin's bases) count; quests the server disables with no giver, `REUSE`/`DND` titles, superseded same-title copies and quests started only by an `<UNUSED>` item are internal; collector's edition vouchers, AQ war effort, two Naxxramas quests, Quel'Serrar and the Scourge Invasion quests wait in their release phase. Re-analyses once (`analysis=28`).
+
 Since fork `130a26d6`: a recipe follows its spell to *Internal / test* (Season of Discovery additions, recipes nothing taught even in the original game, recipes only out-of-game items teach); unnamed original-game recipes whose spell the client dropped are internal; 33 encrypted new recipes wait in *Not out yet*. Re-analyses once (`analysis=26`).
 
 Since fork `a77090dc`, *New in Forever* means not in the Classic Era client (Season of Discovery rows no longer count),
