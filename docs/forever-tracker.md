@@ -52,6 +52,8 @@ changelog compares the two.
 Later runs: *Run again* in the Forge. A new fork commit: change the pin in `docker-compose.tracker.yml` (or
 `TRACKER_COMMIT` in `.env`) and restart the app.
 
+Since fork `1f0b3f01`: pages asked for by hand stay at the head of the crawl while a whole crawl splits its list pages. No re-analysis.
+
 Since fork `b99c0875`: pages asked for by hand (`wowhead_wanted`) are read before a whole crawl's list pages. No re-analysis.
 
 Since fork `a8c848b0`: the imports measure again only corpse and chest loot; skinning, pick pocketing and container tables get new rows for missing items but their existing chances are left alone (a Wowhead card of 2026-11-18 set 5,458 of them, rolled back on the PTR). Wanted creature pages read before models were kept are read again. After deploy press *Import Wowhead* again. No re-analysis needed.
