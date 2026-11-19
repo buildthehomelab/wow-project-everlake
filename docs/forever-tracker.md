@@ -52,6 +52,8 @@ changelog compares the two.
 Later runs: *Run again* in the Forge. A new fork commit: change the pin in `docker-compose.tracker.yml` (or
 `TRACKER_COMMIT` in `.env`) and restart the app.
 
+Since fork `3547cfb2`: a dungeon entered through a server area trigger or a script's teleport counts as having an entrance (the six Forever dungeons the fork built); the Wowhead import also writes skinning, pick-pocket and container loot, quest-reward slots and currency-cost vendors; administrators can ask the crawler for pages first (`wowhead_wanted`, `data/wowhead-wanted.json`) and read kept pages back (`wowhead_pages_get`), and creature pages keep their model. Re-analyses once (`analysis=29`).
+
 Since fork `4c40f245`: the 8 unnamed original-game recipes (named `#id`) whose spell the client dropped are internal too. Re-analyses once (`analysis=27`).
 
 Since fork `02f2805c`: quests. The locator offers unspawned chests and quest-drop creatures/objects holding a missing item; an item made by using an item, an objective credit a held item's spell gives, and kill credits the core's C++ scripts give (Arathi Basin's bases) count; quests the server disables with no giver, `REUSE`/`DND` titles, superseded same-title copies and quests started only by an `<UNUSED>` item are internal; collector's edition vouchers, AQ war effort, two Naxxramas quests, Quel'Serrar and the Scourge Invasion quests wait in their release phase. Re-analyses once (`analysis=28`).
