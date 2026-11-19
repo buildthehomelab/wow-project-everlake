@@ -52,6 +52,8 @@ changelog compares the two.
 Later runs: *Run again* in the Forge. A new fork commit: change the pin in `docker-compose.tracker.yml` (or
 `TRACKER_COMMIT` in `.env`) and restart the app.
 
+Since fork `f3bb98fd`: the Changelog page opens on the newest entry with changes, a hotfix update included (it opened on the newest build that changed something itself, 70938 while 70959 has the same game data). No re-analysis.
+
 Since fork `1f0b3f01`: pages asked for by hand stay at the head of the crawl while a whole crawl splits its list pages. No re-analysis.
 
 Since fork `c5d9e8b5`: a zone's terrain counts when the map has vmaps but no ground tiles (Deeprun Tram); a zone's quest count leaves out quests whose title reads as internal (`<UNUSED>`); an item a conversation makes the player cast is obtainable (source "Given in a conversation"). Takes effect on the next analysis.
