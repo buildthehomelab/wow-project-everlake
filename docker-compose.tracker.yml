@@ -69,12 +69,12 @@ services:
   tracker:
     build:
       # the fork at a pinned commit (bump on purpose, like the core)
-      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-b99c0875017fdb667af4e80c65f2669b59bb3f73}
+      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-1f0b3f018e0eebb90b72df0e2c78f7bbb1034a6e}
       # kept in the image and shown in the website's footer after the version: which commit is running can be read
       # off the page
       args:
-        FT_COMMIT: ${TRACKER_COMMIT:-b99c0875017fdb667af4e80c65f2669b59bb3f73}
-    image: forever-tracker:${TRACKER_COMMIT:-b99c0875017fdb667af4e80c65f2669b59bb3f73}
+        FT_COMMIT: ${TRACKER_COMMIT:-1f0b3f018e0eebb90b72df0e2c78f7bbb1034a6e}
+    image: forever-tracker:${TRACKER_COMMIT:-1f0b3f018e0eebb90b72df0e2c78f7bbb1034a6e}
     networks: [everlake]
     restart: unless-stopped
     depends_on:
