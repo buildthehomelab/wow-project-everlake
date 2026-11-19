@@ -670,3 +670,10 @@ VMaNGOS' `db-<commit>.zip`, upload it on Forge › Imports, then run the locator
 works as before.
 
 Since fork `5ab93605`: original quests nothing ever gave (VMaNGOS has no giver, start item or starting object: A Strategic Alliance, Stonesplinter Trogg Disguise, Waskily Wabbits! and eight more) are filed under Internal / test. Takes effect on the next analysis.
+
+Since fork `dcf074fc`: the Incomplete items list leaves out what is no gap. The healthstones count as made by the core's
+warlock script; a craft that only internal items teach, and the client's own system items (transmog's Hidden pieces,
+the WoW Token), are filed under Internal / test. Holiday items wait in dated phases (Winter Veil 2026-12-16, Love is in
+the Air 2027-02-11, Midsummer 2027-06-21, Hallow's End 2027-10-18): no holiday has run since launch. The iCoke and
+trading card items go under Promotions, and the Ahn'Qiraj war effort's field duty under Later raids. The image analyses
+again on its first start (analysis=31).
