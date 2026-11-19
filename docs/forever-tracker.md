@@ -619,6 +619,8 @@ A MySQL server that writes a binary log lets only an administrator create trigge
 - The `.forge` core module and the remote console (spawning on the running server): the PTR has neither; the Forge's
   database spawn mode works, then restart the PTR.
 
+Since fork `ac4b6fb3`: a mount or pet counts as obtainable the same ways its spell does (quest reward, automatic, talent or perk tree, conversation, another spell), so the paladin's and warlock's class mounts leave the work list; a mount or pet whose spell line is internal (never handed out in the original game, Season of Discovery) is internal too; 24 mounts nobody can get on live WoW Forever wait in *Not out yet*. No re-analysis marker: press *Run again* after the redeploy.
+
 Since fork `fcb5cf17`: the analysis counts every quest the server has as an item source, not only the client's QuestV2 list (Lunar Festival patterns, Excitable Slime); 157 spell-teaching items with no source on live WoW Forever wait in *Not out yet* and 12 promotion-only ones in a new *Promotions* phase; the Wowhead import writes a drop seen once on ten or more loots when nothing else gives the item. The container re-analyses once on start (`analysis=25`).
 
 Since fork `2b8810d8`: a release phase can list spells by id; the phase *Not out yet* holds four spells nothing teaches
