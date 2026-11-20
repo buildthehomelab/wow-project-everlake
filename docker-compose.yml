@@ -101,10 +101,13 @@ services:
       TC_RESPAWN_DYNAMIC_MINIMUM_CREATURE: ${RESPAWN_MIN_CREATURE:-60}
       TC_RESPAWN_DYNAMIC_RATE_GAME_OBJECT: ${RESPAWN_RATE_OBJECT:-40}
       TC_RESPAWN_DYNAMIC_MINIMUM_GAME_OBJECT: ${RESPAWN_MIN_OBJECT:-120}
+      # A stop or restart first counts down in game for this many seconds (players are warned), then the core stops and
+      # saves everyone; a second stop signal skips the countdown. stop_grace_period must cover this plus the saves.
+      TC_SIGNAL_SHUTDOWN_DELAY: ${SHUTDOWN_DELAY:-60}
     # interactive console: docker compose attach worldserver  (leave with Ctrl+P, Ctrl+Q)
     stdin_open: true
     tty: true
-    stop_grace_period: 2m
+    stop_grace_period: 4m
     ports:
       - "${WORLD_PORT:-8085}:${WORLD_PORT:-8085}"
     volumes:
