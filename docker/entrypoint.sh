@@ -135,6 +135,9 @@ configure_worldserver() {
     # same gameplay settings as the repack
     setkey "$f" Classic.GuildFinder 1
     setkey "$f" Classic.Shop.Enabled 1
+    # Adventure Guide (Shift-J) open: dungeon and raid bosses and loot. Live Forever closes it (game rule 42,
+    # EncounterJournalDisabled = 1), and the client then leaves the button off the micro menu; Everlake opens it on purpose.
+    setkey "$f" Classic.AdventureGuide 1
     setkey "$f" AccountInstancesPerHour 5
     # Dynamic respawns: open-world combat creatures (the core's spawn groups 901035/901036, Karrz 0.1.37) come back
     # faster when a zone holds more players, bots included (rates and floors: RESPAWN_* in .env, set by the compose files).
