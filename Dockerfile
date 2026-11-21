@@ -42,7 +42,7 @@ FROM ubuntu:${UBUNTU_VERSION} AS build
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates git cmake make gcc g++ clang \
+        ca-certificates git cmake make gcc g++ clang ccache \
         libmysqlclient-dev libssl-dev libbz2-dev libreadline-dev libncurses-dev libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -65,19 +65,34 @@ ARG BUILD_JOBS=4
 ARG PLAYERBOTS
 # TOOLS=1: also build mapextractor / vmap4extractor / vmap4assembler / mmaps_generator
 ARG TOOLS=1
+# Compiler cache. A new TC_COMMIT starts this stage over from the fetch above, so without a cache every pin bump compiled
+# the whole core (1.5-2 hours), even one that only adds SQL. ccache keeps every object in a BuildKit cache mount that
+# outlives the image build (id everlake-ccache, on the machine that builds; `docker builder prune` empties it): a
+# commit that changes a few files compiles those files only. Same paths every build (/src/TrinityCore), so hits carry
+# over. Precompiled headers are off: ccache cannot reuse objects built against a precompiled header that was made
+# again, so with them every file would miss; the first build without a cache takes somewhat longer for it.
+ENV CCACHE_DIR=/ccache CCACHE_MAXSIZE=8G CCACHE_COMPRESS=1
 WORKDIR /src/TrinityCore/build
-RUN cmake .. \
+RUN --mount=type=cache,id=everlake-ccache,target=/ccache \
+    cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/opt/trinitycore \
         -DTOOLS=${TOOLS} \
         -DBUILD_PLAYERBOT_V2=${PLAYERBOTS} \
         -DWITH_WARNINGS=0 \
+        -DUSE_COREPCH=0 \
+        -DUSE_SCRIPTPCH=0 \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+    && ccache --zero-stats \
     && make -j"${BUILD_JOBS}" \
-    && make install
+    && make install \
+    && ccache --show-stats
 
 # CascLib opens every CASC file O_RDWR on Linux, which fails (EROFS) on the read-only client mount used by the
 # extractor service. Fall back to O_RDONLY: the extractors only read. (Separate layer: incremental rebuild only.)
-RUN sed -i 's|handle = open(szFileName, oflag \| O_LARGEFILE);|handle = open(szFileName, oflag \| O_LARGEFILE);\n        if(handle == -1 \&\& oflag == O_RDWR \&\& (errno == EROFS \|\| errno == EACCES))\n            handle = open(szFileName, O_RDONLY \| O_LARGEFILE);|' \
+RUN --mount=type=cache,id=everlake-ccache,target=/ccache \
+    sed -i 's|handle = open(szFileName, oflag \| O_LARGEFILE);|handle = open(szFileName, oflag \| O_LARGEFILE);\n        if(handle == -1 \&\& oflag == O_RDWR \&\& (errno == EROFS \|\| errno == EACCES))\n            handle = open(szFileName, O_RDONLY \| O_LARGEFILE);|' \
         /src/TrinityCore/dep/CascLib/src/common/FileStream.cpp \
     && grep -q "errno == EROFS" /src/TrinityCore/dep/CascLib/src/common/FileStream.cpp \
     && make -j"${BUILD_JOBS}" \

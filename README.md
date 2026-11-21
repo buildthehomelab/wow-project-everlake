@@ -130,7 +130,10 @@ but `git pull`.
 The image's tag is `ptr-<core commit>-<world data commit>-<revision>`. The revision is made from this repository's own
 files in the image: the Dockerfile and what it copies (`docker/patches`, the entrypoint and extract scripts, the
 `sql/everlake` files it names). A change to any of the three parts is a tag that doesn't exist yet, so the PTR builds
-it on its next start; with the same core commit Docker reuses the compiled layers and the build is short. After
+it on its next start; with the same core commit Docker reuses the compiled layers and the build is short. A new core
+commit compiles through ccache, whose objects stay in a BuildKit cache on the machine that builds (`everlake-ccache`):
+only the files that commit changed are compiled again, so a commit that only adds SQL builds in minutes. The first
+build after this cache was added (or after `docker builder prune`) still compiles everything. After
 changing one of those files, run `tools/ci/image-rev.sh --write` (CI fails until `docker-compose.ptr.yml` carries the
 new revision).
 
