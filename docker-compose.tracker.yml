@@ -91,6 +91,9 @@ services:
       FT_DB_WORLD: ${TRACKER_WORLD_DB:-world_ptr}
       FT_DB_HOTFIXES: ${TRACKER_HOTFIXES_DB:-hotfixes_ptr}
       FT_DB_AUTH: auth
+      # the Forge's Query page: read-only SQL as tracker_query (SELECT only, made by tracker-setup.sh; its password
+      # comes from TRACKER_DB_PASSWORD in the tracker's entrypoint)
+      FT_DB_QUERY_USER: tracker_query
       # the world build's own account and scratch database (tracker-init makes the user when the password is set;
       # without it there is no build user, and the replay refuses the tracker's normal account)
       FT_BUILD_DB: ${TRACKER_BUILD_DB:-ft_world_build}

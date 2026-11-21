@@ -20,6 +20,11 @@
 # user stays locked with no rights, and "tracker" gets no read right from the world build. A role given to
 # tracker_build by hand is not taken away: the replay refuses such a user.
 #
+# The Forge's Query page (read-only SQL) has a user of its own, "tracker_query", made on every start: all its rights
+# taken away, then SELECT given back on TRACKER_WORLD_DB, TRACKER_HOTFIXES_DB and forever_tracker, nothing else. The
+# tracker reads its grants before every query and runs nothing if it may do more. Its password is the first 64
+# characters of sha256("query:" + TRACKER_DB_PASSWORD), as the tracker's entrypoint makes it: no second secret.
+#
 # MYSQL_HOST, MYSQL_ROOT_PASSWORD, TRACKER_DB_PASSWORD: required. TRACKER_WORLD_DB, TRACKER_HOTFIXES_DB,
 # TRACKER_BUILD_DB, TRACKER_BUILD_DB_PASSWORD: optional.
 set -euo pipefail
@@ -84,6 +89,14 @@ GRANT ALL PRIVILEGES ON \`${BUILD_DB//_/\\_}\`.* TO 'tracker_build'@'%';
 GRANT SELECT ON \`${BUILD_DB//_/\\_}\`.* TO 'tracker'@'%';"
     fi
 fi
+# The Query page's user: reads, never writes, and only what the analysis reads
+QUERY_PASSWORD="$(printf 'query:%s' "$TRACKER_DB_PASSWORD" | sha256sum | cut -c1-64)"
+query="CREATE USER IF NOT EXISTS 'tracker_query'@'%' IDENTIFIED WITH mysql_native_password BY '$QUERY_PASSWORD';
+ALTER USER 'tracker_query'@'%' IDENTIFIED WITH mysql_native_password BY '$QUERY_PASSWORD' ACCOUNT UNLOCK;
+REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'tracker_query'@'%';
+GRANT SELECT ON \`${WORLD_DB//_/\\_}\`.* TO 'tracker_query'@'%';
+GRANT SELECT ON \`${HOTFIXES_DB//_/\\_}\`.* TO 'tracker_query'@'%';
+GRANT SELECT ON \`forever\\_tracker\`.* TO 'tracker_query'@'%';"
 # SELECT on the live world and hotfixes lets TRACKER_WORLD_DB=world (a read-only report of live) work as it is
 root_sql <<SQL
 CREATE DATABASE IF NOT EXISTS forever_tracker DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -99,12 +112,15 @@ GRANT SELECT ON auth.account TO 'tracker'@'%';
 GRANT SELECT ON auth.account_access TO 'tracker'@'%';
 $writes
 $build
+$query
 FLUSH PRIVILEGES;
 SQL
 reads="world, hotfixes and auth"
 [ -z "$build" ] || reads="world, hotfixes, auth and the world build's $BUILD_DB"
 echo "[tracker] user tracker: reads $reads; analysis on $WORLD_DB + $HOTFIXES_DB"
 root_sql -N -e "SHOW GRANTS FOR 'tracker'@'%'" | sed 's/^/[tracker]   /'
+echo "[tracker] user tracker_query: reads $WORLD_DB, $HOTFIXES_DB and forever_tracker, nothing else (the Forge's Query page)"
+root_sql -N -e "SHOW GRANTS FOR 'tracker_query'@'%'" | sed 's/^/[tracker]   /'
 if [ -n "$build" ]; then
     echo "[tracker] user tracker_build: the world build's scratch database $BUILD_DB, nothing else"
     root_sql -N -e "SHOW GRANTS FOR 'tracker_build'@'%'" | sed 's/^/[tracker]   /'
