@@ -149,11 +149,11 @@ COPY --from=build /opt/trinitycore /opt/trinitycore
 # The updater looks for sql/ under the source directory baked in at build time
 COPY --from=build /src/TrinityCore/sql /src/TrinityCore/sql
 # Our login-database rows, applied by the updater on start like the fork's own custom files: the one ruleset card at
-# login (Forever), the realms' client build (1.60.1.70959, after 70938's file), and the TACT keys live Forever sends that the core lacks (tools/live-hotfixes/tact_keys.py). Name
+# login (Forever), the realms' client build (1.60.1.70959, after 70938's file), .gps for players, and the TACT keys live Forever sends that the core lacks (tools/live-hotfixes/tact_keys.py). Name
 # reservation's tables are the fork's own now (sql/custom/auth/2026_11_07_09 and 2026_11_09_00). The other
 # sql/everlake files are data and stay manual.
 COPY sql/everlake/2026_11_08_06_auth_one_ruleset.sql sql/everlake/2026_11_14_10_auth_realms_70938.sql \
-     sql/everlake/2026_11_19_00_auth_realms_70959.sql \
+     sql/everlake/2026_11_19_00_auth_realms_70959.sql sql/everlake/2026_11_20_00_auth_player_gps.sql \
      /src/TrinityCore/sql/custom/auth/
 COPY sql/everlake/2026_11_08_07_hotfixes_forever_card.sql sql/everlake/2026_11_08_08_hotfixes_live_tact_keys.sql \
      sql/everlake/2026_11_12_00_hotfixes_ruleset_cards.sql \
