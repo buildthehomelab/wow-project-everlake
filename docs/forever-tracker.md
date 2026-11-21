@@ -516,6 +516,11 @@ old pack was made from are gone): *Imports > Read the site* starts a visit in th
 every `TRACKER_FOREVERCHANGES_EVERY_HOURS` (6; 0 = never). A visit reads up to 1,500 of the site's ~19,800 files, the
 gaps first, one request at a time; everything read stays in the tracker's data volume. New rows: the quest givers its map
 names by id, from what its players saw. The `.fcpack` upload is gone (#105).
+Since fork `997fff57`: a visit goes on past the gaps through the whole site (every quest page, item page and map's
+data files), up to 3,000 files a visit, the never-read first, then the oldest read; a new gap is still read first.
+Everything read reaches the pack, `ft_source_facts` (source `foreverchanges`) and `ft_source_answers`, so it can be
+queried; the card still lists only gap rows. A first full pass takes two to three days at the site's pace.
+`[foreverchanges] whole = 0` reads the gaps alone (#183).
 
 Since fork `4d206e1b`: an import card is applied as soon as it is made (`FT_IMPORTS_AUTO_APPLY`, 1), so pressing
 Import is enough for the next analysis to count it. An applied card also replaces values of rows the PTR already has
