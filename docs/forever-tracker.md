@@ -524,6 +524,9 @@ queried; the card still lists only gap rows. A first full pass takes two to thre
 Since fork `92a383a4`: a ForeverChanges visit writes its pack every 500 files, and a visit a restart cut short has
 its card, snapshot and answers made at the start of the next visit, so a redeploy no longer loses what a visit read
 (#185).
+Since fork `a133466d`: a creature a core script brings in through a helper of its own (`SpawnAtRune(5, NPC_UROK_DOOMHOWL)`)
+counts as summoned, so its loot, vendor and quests count as present: Urok Doomhowl, his ogres, Nerub'enkan's adds
+(#186; the summoned list now read from the core at `01783245fb`).
 
 Since fork `4d206e1b`: an import card is applied as soon as it is made (`FT_IMPORTS_AUTO_APPLY`, 1), so pressing
 Import is enough for the next analysis to count it. An applied card also replaces values of rows the PTR already has
