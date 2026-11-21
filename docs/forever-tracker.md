@@ -521,6 +521,9 @@ data files), up to 3,000 files a visit, the never-read first, then the oldest re
 Everything read reaches the pack, `ft_source_facts` (source `foreverchanges`) and `ft_source_answers`, so it can be
 queried; the card still lists only gap rows. A first full pass takes two to three days at the site's pace.
 `[foreverchanges] whole = 0` reads the gaps alone (#183).
+Since fork `92a383a4`: a ForeverChanges visit writes its pack every 500 files, and a visit a restart cut short has
+its card, snapshot and answers made at the start of the next visit, so a redeploy no longer loses what a visit read
+(#185).
 
 Since fork `4d206e1b`: an import card is applied as soon as it is made (`FT_IMPORTS_AUTO_APPLY`, 1), so pressing
 Import is enough for the next analysis to count it. An applied card also replaces values of rows the PTR already has
