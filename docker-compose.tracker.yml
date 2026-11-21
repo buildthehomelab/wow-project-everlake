@@ -69,12 +69,12 @@ services:
   tracker:
     build:
       # the fork at a pinned commit (bump on purpose, like the core)
-      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-5083123f0809f27946f5648c42fc8f89d088fe2d}
+      context: https://github.com/buildthehomelab/wow-forever-tracker.git#${TRACKER_COMMIT:-997fff577bae09b811e6d6a10632adfba9717646}
       # kept in the image and shown in the website's footer after the version: which commit is running can be read
       # off the page
       args:
-        FT_COMMIT: ${TRACKER_COMMIT:-5083123f0809f27946f5648c42fc8f89d088fe2d}
-    image: forever-tracker:${TRACKER_COMMIT:-5083123f0809f27946f5648c42fc8f89d088fe2d}
+        FT_COMMIT: ${TRACKER_COMMIT:-997fff577bae09b811e6d6a10632adfba9717646}
+    image: forever-tracker:${TRACKER_COMMIT:-997fff577bae09b811e6d6a10632adfba9717646}
     networks: [everlake]
     restart: unless-stopped
     depends_on:
@@ -124,8 +124,9 @@ services:
       # newer than the newest one stored (or a key of its hidden content was published), read from the CDN and
       # analysed (0 = never). Needs the internet: us.patch.battle.net:1119 and Blizzard's CDN hosts
       FT_CLIENT_EVERY_HOURS: ${TRACKER_CLIENT_EVERY_HOURS:-6}
-      # foreverchanges.pro read by the tracker itself: every N hours a visit reads up to 1,500 files (the gaps first, one
-      # request at a time, robots.txt obeyed) and makes an import card (0 = never). Needs the internet: foreverchanges.pro
+      # foreverchanges.pro read by the tracker itself: every N hours a visit reads up to 3,000 files (the gaps first, then
+      # the rest of the site, about 20,000 files: a first pass takes two to three days; one request at a time, robots.txt
+      # obeyed) and makes an import card (0 = never). Needs the internet: foreverchanges.pro
       FT_FOREVERCHANGES_EVERY_HOURS: ${TRACKER_FOREVERCHANGES_EVERY_HOURS:-6}
       # Wowhead pages a script sends (the crawler's batch files, tools/wowhead-pages/push.sh): the key it must send.
       # Empty = closed. Set TRACKER_WOWHEAD_PUSH_TOKEN in .env to 16+ random characters (openssl rand -hex 24)
