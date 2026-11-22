@@ -688,3 +688,7 @@ the WoW Token), are filed under Internal / test. Holiday items wait in dated pha
 the Air 2027-02-11, Midsummer 2027-06-21, Hallow's End 2027-10-18): no holiday has run since launch. The iCoke and
 trading card items go under Promotions, and the Ahn'Qiraj war effort's field duty under Later raids. The image analyses
 again on its first start (analysis=31).
+
+Since fork `af8a2f3a`: a ForeverChanges page the site refuses (401, 403, 451) still stops the visit, but is noted
+first, so the next visit begins past it instead of stopping on the same page again; it is asked again after two weeks
+(#192). On 2026-11-22 one item page answered 403 and every visit after it stopped there.
