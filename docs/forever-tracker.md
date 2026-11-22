@@ -692,3 +692,7 @@ again on its first start (analysis=31).
 Since fork `af8a2f3a`: a ForeverChanges page the site refuses (401, 403, 451) still stops the visit, but is noted
 first, so the next visit begins past it instead of stopping on the same page again; it is asked again after two weeks
 (#192). On 2026-11-22 one item page answered 403 and every visit after it stopped there.
+
+Since fork `46111543`: a ForeverChanges visit never asks for the client's transmog placeholder item pages
+(`/item/<id>/transmog-ui-…`): the site refuses them (403), and each one stopped a visit of its own (#193). Any other
+refusal still stops the visit.
