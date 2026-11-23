@@ -366,10 +366,20 @@ show_last_sql_errors() {
     tail -n 15 "$f" | cut -c1-400 | sed 's/^/[entrypoint]   /'
 }
 
+# worldserver overwrites Server.log at every start, which lost the log of the stop before it: whether the players were
+# saved ("Shutdown: N players saved") and where a stop that failed got to. The run before stays as Server.previous.log.
+keep_previous_server_log() {
+    local f="$ROOT/logs/Server.log"
+    [ -s "$f" ] || return 0
+    mv -f "$f" "$ROOT/logs/Server.previous.log" 2>/dev/null \
+        || echo "[entrypoint] could not keep the last run's Server.log as Server.previous.log"
+}
+
 case "${1:-worldserver}" in
     worldserver)
         shift || true
         show_last_sql_errors
+        keep_previous_server_log
         check_image_build
         configure_worldserver
         write_client_build_override
