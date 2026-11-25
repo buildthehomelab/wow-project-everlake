@@ -139,6 +139,9 @@ configure_worldserver() {
     # EncounterJournalDisabled = 1), and the client then leaves the button off the micro menu; Everlake opens it on purpose.
     setkey "$f" Classic.AdventureGuide 1
     setkey "$f" AccountInstancesPerHour 5
+    # Every primary profession on one character (live Forever allows 2; Everlake exception, 11). Characters already
+    # in the world get the extra points at their next login (InitPrimaryProfessions reads this key on load).
+    setkey "$f" MaxPrimaryTradeSkill 11
     # Dynamic respawns: open-world combat creatures (the core's spawn groups 901035/901036, Karrz 0.1.37) come back
     # faster when a zone holds more players, bots included (rates and floors: RESPAWN_* in .env, set by the compose files).
     setkey "$f" Respawn.DynamicMode 1
