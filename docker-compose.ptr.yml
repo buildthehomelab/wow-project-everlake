@@ -101,6 +101,7 @@ services:
       TC_PLAYERBOT_WORLD_ZONE_BOTS: "15"
       TC_PLAYERBOT_WORLD_START_ZONE_BOTS: "10"
       TC_PLAYERBOT_WORLD_POOL_MAX: "120"
+      TC_PLAYERBOT_HIRE_MODE: "2"          # hired bots, each player chooses (same as the live realm)
       # Dynamic respawns as live (docker-compose.yml)
       TC_RESPAWN_DYNAMIC_RATE_CREATURE: ${RESPAWN_RATE_CREATURE:-40}
       TC_RESPAWN_DYNAMIC_MINIMUM_CREATURE: ${RESPAWN_MIN_CREATURE:-60}
