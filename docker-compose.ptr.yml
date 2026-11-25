@@ -41,7 +41,7 @@ services:
       - ./sql/everlake:/ptr/sql:ro   # the ruleset cards (ptr-setup.sh cards)
 
   ptr-mmaps:
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-afb3210a3c50c59f08bd3679dc993c2ce9a8913f}-${PTR_WORLD_DATA_COMMIT:-3fe885d13199b247b2258c7368ef235424d8c06d}-174ae281
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-afb3210a3c50c59f08bd3679dc993c2ce9a8913f}-${PTR_WORLD_DATA_COMMIT:-cd7cb5817748deb37913e841a6550892ae41d72d}-174ae281
     pull_policy: never   # built by worldserver-ptr
     restart: "no"
     entrypoint: ["/usr/local/bin/extract.sh"]
@@ -61,12 +61,12 @@ services:
         TC_COMMIT: ${PTR_TC_COMMIT:-afb3210a3c50c59f08bd3679dc993c2ce9a8913f}
         # the world import to try next (wow-everlake-world-data). Its own variable: .env's WORLD_DATA_COMMIT is the live
         # realm's and must not hold the PTR back. promote.sh then takes this image, world data included, live.
-        WORLD_DATA_COMMIT: ${PTR_WORLD_DATA_COMMIT:-3fe885d13199b247b2258c7368ef235424d8c06d}
+        WORLD_DATA_COMMIT: ${PTR_WORLD_DATA_COMMIT:-cd7cb5817748deb37913e841a6550892ae41d72d}
         PLAYERBOTS: "1"
         # this repository's own files in the image (tools/ci/image-rev.sh --write keeps it and the tags in step)
         IMAGE_REV: "174ae281"
         BUILD_JOBS: ${PTR_BUILD_JOBS:-32}
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-afb3210a3c50c59f08bd3679dc993c2ce9a8913f}-${PTR_WORLD_DATA_COMMIT:-3fe885d13199b247b2258c7368ef235424d8c06d}-174ae281
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-afb3210a3c50c59f08bd3679dc993c2ce9a8913f}-${PTR_WORLD_DATA_COMMIT:-cd7cb5817748deb37913e841a6550892ae41d72d}-174ae281
     command: ["worldserver"]
     networks: [everlake]
     restart: unless-stopped
@@ -82,7 +82,7 @@ services:
       DB_USER: ${DB_USER:-trinity}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       MMAP_PATHFINDING: "1"   # the bots walk on the navigation meshes
-      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-afb3210a3c50c59f08bd3679dc993c2ce9a8913f}-${PTR_WORLD_DATA_COMMIT:-3fe885d13199b247b2258c7368ef235424d8c06d}-174ae281
+      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-afb3210a3c50c59f08bd3679dc993c2ce9a8913f}-${PTR_WORLD_DATA_COMMIT:-cd7cb5817748deb37913e841a6550892ae41d72d}-174ae281
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PLAYERBOT_DB: playerbot_ptr   # the entrypoint loads the bots' schema into it on the first start
       TC_REALM_ID: "73"
