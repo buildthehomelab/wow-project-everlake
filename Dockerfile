@@ -30,7 +30,7 @@ ARG UBUNTU_VERSION=24.04
 # the Ruins of Lordaeron Captain and Viktor the Vile #86, the wowsims audit #81 and Karrz 0.1.37.6 with client 70959
 # and its live hotfixes #91), the
 # same commit the PTR builds (docker-compose.ptr.yml), so the live app and the PTR app build one identical image.
-# Client 1.60.1.71091 (realms on 71091, sql/everlake/2026_11_24_92; bnetserver and the worldservers also let 70790, 70862, 70888, 70938, 70959 and 71037 in,
+# Client 1.60.1.71091 (realms on 71091, sql/everlake/2026_11_24_92; bnetserver and the worldservers also let 70790, 70862, 70888, 70938, 70959, 71037 and 71139 in,
 # docker/entrypoint.sh).
 ARG TC_COMMIT=812d88e6e0c466f99906d9bdc1876ba377841c57
 # PLAYERBOTS=1: the WoW Forever Bots module (src/modules/PlayerbotV2; the core commit must have it, as the fork's

@@ -23,11 +23,14 @@ OVERRIDES="$ROOT/overrides"
 # is the core's auth update 2026_11_24_91; sql/everlake/2026_11_24_92_auth_realms_71091.sql). Clients on the builds
 # before it keep seeing and joining them: 70790 (what the launcher installed first, a frozen test copy, a player who
 # hasn't updated), 70862 (Battle.net's 2026-11-07 update), 70888 (2026-11-10), 70938 (2026-11-13), 70959 (2026-11-17,
-# the realms' build before) and 71037 (2026-11-20; build_info: core auth update 2026_11_20_70). They use the same
+# the realms' build before) and 71037 (2026-11-20; build_info: core auth update 2026_11_20_70). The build after it is let
+# in too: 71139 (2026-11-25, its files differ from 71091 by two item records the core's hotfix file 2026_11_26_00
+# carries; build_info: core auth update 2026_11_26_01). The realms stay on 71091 until every image in use lets 71091 in
+# (a realm move moves every realm of the shared login database). They use the same
 # table layouts and map files, and message numbers are chosen per connection from the client's build. bnetserver and
 # every worldserver accept these builds too (Realm.AlsoAcceptBuilds, comma-separated). An image without 70959 in this
 # list turns 70959 clients away once the realms have moved, until it is replaced.
-ALSO_ACCEPT_BUILDS="70790,70862,70888,70938,70959,71037"
+ALSO_ACCEPT_BUILDS="70790,70862,70888,70938,70959,71037,71139"
 # Realm 1's world port. 8085 by default; another one when the host already runs a server on 8085 (e.g. beside Evermore)
 : "${WORLD_PORT:=8085}"
 : "${LOGIN_HOSTNAME:=trinity.actual.battle.net}"
@@ -108,7 +111,7 @@ configure_worldserver() {
     setkey "$f" LogsDir "\"$ROOT/logs\""
     setkey "$f" SourceDirectory '"/src/TrinityCore"'
     setkey "$f" MySQLExecutable '"/usr/bin/mysql"'
-    # no auth key is known for the Forever builds (70790 to 71091): the core skips only the digest check
+    # no auth key is known for the Forever builds (70790 to 71139): the core skips only the digest check
     setkey "$f" Network.SkipBuildAuthKeyCheck 1
     setkey "$f" Network.EnterEncryptedModeRegionGroup 8
     setkey "$f" Realm.CfgContentSetID 137
