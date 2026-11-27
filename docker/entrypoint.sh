@@ -374,6 +374,38 @@ show_last_sql_errors() {
 
 # worldserver overwrites Server.log at every start, which lost the log of the stop before it: whether the players were
 # saved ("Shutdown: N players saved") and where a stop that failed got to. The run before stays as Server.previous.log.
+# Auction house bot prices: TradeSkillMaster's public WoW Forever data (region-wide market values, updated daily) into
+# world.auctionhousebot_market_price, which the bot reads when the worldserver starts (AuctionHouseBot.Vanilla.MarketPrices
+# in the core's zz-forever-bots.conf). TSM's terms: each server fetches it itself, at most once per update (the script asks
+# only for a newer file than its cache, kept in the ahbot-cache volume), and the data is never committed or republished.
+# AHBOT_TSM_REGION: us (default) or eu; off skips it. Any failure (no network, TSM down, an old image) only logs a line:
+# the bot then uses the prices the table already has, or its value curve.
+import_tsm_prices() {
+    local region="${AHBOT_TSM_REGION:-us}" script="$ROOT/contrib/ahbot/tsm_market_prices.py" cache="$ROOT/ahbot-cache"
+    local db=world sql
+    [ "$region" = off ] && return 0
+    [ "${TC_AUCTION_HOUSE_BOT_SELLER_ENABLED:-1}" = 0 ] && return 0
+    if [ ! -f "$script" ] || ! command -v python3 >/dev/null; then
+        echo "[entrypoint] TSM auction prices: no import script or python3 in this image, skipped"
+        return 0
+    fi
+    # the PTR names its own world database (TC_WORLD_DATABASE_INFO "host;port;user;password;world_ptr")
+    [ -n "${TC_WORLD_DATABASE_INFO:-}" ] && db="${TC_WORLD_DATABASE_INFO##*;}"
+    if [ "$(mysql_q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$db' AND table_name='auctionhousebot_market_price'" 2>/dev/null)" != 1 ]; then
+        echo "[entrypoint] TSM auction prices: $db has no auctionhousebot_market_price table yet (the next start fills it)"
+        return 0
+    fi
+    mkdir -p "$cache"
+    sql="$(mktemp)"
+    if timeout 180 python3 -I "$script" --region "$region" --cache "$cache/tsm-forever-$region-items.csv" > "$sql" \
+        && MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" "$db" < "$sql"; then
+        echo "[entrypoint] TSM auction prices: $db.auctionhousebot_market_price updated ($region)"
+    else
+        echo "[entrypoint] TSM auction prices: import failed, the auction house bot keeps the prices it has"
+    fi
+    rm -f "$sql"
+}
+
 keep_previous_server_log() {
     local f="$ROOT/logs/Server.log"
     [ -s "$f" ] || return 0
@@ -392,6 +424,7 @@ case "${1:-worldserver}" in
         check_data
         wait_for_mysql
         prepare_playerbot_db
+        import_tsm_prices
         # worldserver looks for its config folder in the working directory (bin/worldserver.conf.d), not beside
         # worldserver.conf, so without this the bots' settings were never read (World.Enable=0 at start)
         conf_d=()
