@@ -87,6 +87,7 @@ services:
       IMAGE_TAG: ${EVERLAKE_IMAGE_TAG:-live}   # the entrypoint checks a PTR tag against what the image was built from
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PACKET_LOG: ${PACKET_LOG:-0}   # 1 = packet log (diagnostics, holds chat)
+      AHBOT_TSM_REGION: ${AHBOT_TSM_REGION:-us}   # auction house bot prices from TSM's WoW Forever data: us, eu or off
       # Bots (images built with them; an image without the bots ignores these). The module's defaults are sized for a
       # home PC: 250 bots and a 6,000 MB memory cap, which stopped live at ~50 bots (worldserver ~4.5 GB + ~31 MB a bot).
       # Live: 500 bots and room for them, a lived-in world that doesn't crowd you: GlobalFill puts the bots no player
@@ -125,6 +126,7 @@ services:
       - ${DATA_DIR:-./data}:/opt/trinitycore/data:ro
       - ./overrides:/opt/trinitycore/overrides:ro
       - logs:/opt/trinitycore/logs
+      - ahbot-cache:/opt/trinitycore/ahbot-cache   # TSM price file (docker/entrypoint.sh, import_tsm_prices)
 
   bnetserver:
     image: everlake-trinitycore:${EVERLAKE_IMAGE_TAG:-live}
@@ -231,5 +233,6 @@ networks:
 volumes:
   mysql-data:
   logs:
+  ahbot-cache:
   casc-cache:
   cdn-cache:

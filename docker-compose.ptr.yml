@@ -41,7 +41,7 @@ services:
       - ./sql/everlake:/ptr/sql:ro   # the ruleset cards (ptr-setup.sh cards)
 
   ptr-mmaps:
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-f91355417243a6490f0a7c91a43be2fd4c2cd464}-${PTR_WORLD_DATA_COMMIT:-c21749fb545a784bc8b34a8e6c3111d185158ea8}-cbc3f45b
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-f91355417243a6490f0a7c91a43be2fd4c2cd464}-${PTR_WORLD_DATA_COMMIT:-c21749fb545a784bc8b34a8e6c3111d185158ea8}-5fdf8017
     pull_policy: never   # built by worldserver-ptr
     restart: "no"
     entrypoint: ["/usr/local/bin/extract.sh"]
@@ -64,9 +64,9 @@ services:
         WORLD_DATA_COMMIT: ${PTR_WORLD_DATA_COMMIT:-c21749fb545a784bc8b34a8e6c3111d185158ea8}
         PLAYERBOTS: "1"
         # this repository's own files in the image (tools/ci/image-rev.sh --write keeps it and the tags in step)
-        IMAGE_REV: "cbc3f45b"
+        IMAGE_REV: "5fdf8017"
         BUILD_JOBS: ${PTR_BUILD_JOBS:-32}
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-f91355417243a6490f0a7c91a43be2fd4c2cd464}-${PTR_WORLD_DATA_COMMIT:-c21749fb545a784bc8b34a8e6c3111d185158ea8}-cbc3f45b
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-f91355417243a6490f0a7c91a43be2fd4c2cd464}-${PTR_WORLD_DATA_COMMIT:-c21749fb545a784bc8b34a8e6c3111d185158ea8}-5fdf8017
     command: ["worldserver"]
     networks: [everlake]
     restart: unless-stopped
@@ -82,9 +82,10 @@ services:
       DB_USER: ${DB_USER:-trinity}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       MMAP_PATHFINDING: "1"   # the bots walk on the navigation meshes
-      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-f91355417243a6490f0a7c91a43be2fd4c2cd464}-${PTR_WORLD_DATA_COMMIT:-c21749fb545a784bc8b34a8e6c3111d185158ea8}-cbc3f45b
+      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-f91355417243a6490f0a7c91a43be2fd4c2cd464}-${PTR_WORLD_DATA_COMMIT:-c21749fb545a784bc8b34a8e6c3111d185158ea8}-5fdf8017
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PLAYERBOT_DB: playerbot_ptr   # the entrypoint loads the bots' schema into it on the first start
+      AHBOT_TSM_REGION: ${AHBOT_TSM_REGION:-us}   # auction house bot prices from TSM's WoW Forever data (docker-compose.yml)
       TC_REALM_ID: "73"
       TC_WORLD_SERVER_PORT: "8097"
       TC_REALM_CFG_CONTENT_SET_ID: "140"
@@ -122,6 +123,7 @@ services:
       - ${DATA_DIR:-./data}:/opt/trinitycore/data:ro
       - ./overrides:/opt/trinitycore/overrides:ro
       - logs-ptr:/opt/trinitycore/logs
+      - ahbot-cache-ptr:/opt/trinitycore/ahbot-cache   # TSM price file (docker/entrypoint.sh, import_tsm_prices)
       # the repo's entrypoint, so its changes reach the PTR with git pull and a restart, without a rebuild
       - ./docker/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
 
@@ -132,3 +134,4 @@ networks:
 
 volumes:
   logs-ptr:
+  ahbot-cache-ptr:

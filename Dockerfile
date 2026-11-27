@@ -98,6 +98,10 @@ RUN --mount=type=cache,id=everlake-ccache,target=/ccache \
     && make -j"${BUILD_JOBS}" \
     && make install
 
+# The auction house bot's price import (TradeSkillMaster's public WoW Forever data, run by the entrypoint at start). Cores
+# from before 2026-11-25 don't have it; the entrypoint then skips the import.
+RUN if [ -d /src/TrinityCore/contrib/ahbot ]; then mkdir -p /opt/trinitycore/contrib && cp -r /src/TrinityCore/contrib/ahbot /opt/trinitycore/contrib/; fi
+
 ############################ database release ############################
 FROM ubuntu:${UBUNTU_VERSION} AS tdb
 
@@ -152,9 +156,10 @@ RUN mkdir -p /world-data \
 FROM ubuntu:${UBUNTU_VERSION}
 
 ARG DEBIAN_FRONTEND=noninteractive
-# mysql-client is required: the TrinityCore DB updater shells out to the `mysql` binary
+# mysql-client is required: the TrinityCore DB updater shells out to the `mysql` binary; python3 runs the auction house
+# bot's price import (contrib/ahbot/tsm_market_prices.py)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates tzdata mysql-client \
+        ca-certificates tzdata mysql-client python3 \
         libmysqlclient21 libssl3t64 libbz2-1.0 libreadline8t64 libncurses6 \
         libboost-filesystem1.83.0 libboost-program-options1.83.0 libboost-regex1.83.0 \
         libboost-locale1.83.0 libboost-thread1.83.0 libboost-iostreams1.83.0 \
