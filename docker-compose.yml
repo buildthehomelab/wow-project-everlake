@@ -21,7 +21,14 @@ services:
     command:
       - --max-allowed-packet=1G
       - --skip-log-bin
-      - --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-512M}
+      - --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-4G}
+      # Live froze 11-26 23:47 UTC: the 100 MB default redo log filled ("Threads are unable to reserve space in redo log
+      # ... log_checkpointer still lagging behind"), every write waited for the checkpoint, a save on the world thread
+      # blocked past MaxCoreStuckTime and the freeze detector crashed the server. One MySQL serves live, PTR, realm 2 and
+      # the tracker: a 2 GB redo log, and flushing sized for an NVMe drive (the default io capacity 200 is for disks).
+      - --innodb-redo-log-capacity=${MYSQL_REDO_LOG:-2G}
+      - --innodb-io-capacity=${MYSQL_IO_CAPACITY:-2000}
+      - --innodb-io-capacity-max=${MYSQL_IO_CAPACITY_MAX:-4000}
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     volumes:
