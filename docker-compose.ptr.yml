@@ -41,7 +41,7 @@ services:
       - ./sql/everlake:/ptr/sql:ro   # the ruleset cards (ptr-setup.sh cards)
 
   ptr-mmaps:
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-da60e06d207317a10f2cfbdbfdb7525ebfb29b04}-${PTR_WORLD_DATA_COMMIT:-dfe84b06ba4f15656faf80e7e0a155035ab52433}-5fdf8017
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-90331f74faf70f055b221f7b0fa3749b1ca6ad0c}-${PTR_WORLD_DATA_COMMIT:-be94565d6e47f17c4148dfa7a9b3f482d4182a78}-5fdf8017
     pull_policy: never   # built by worldserver-ptr
     restart: "no"
     entrypoint: ["/usr/local/bin/extract.sh"]
@@ -58,15 +58,15 @@ services:
       context: .
       args:
         # core fork commit: everlake (forever + forever-bots + Playerbot.AccountPrefix, PR #4 merged)
-        TC_COMMIT: ${PTR_TC_COMMIT:-da60e06d207317a10f2cfbdbfdb7525ebfb29b04}
+        TC_COMMIT: ${PTR_TC_COMMIT:-90331f74faf70f055b221f7b0fa3749b1ca6ad0c}
         # the world import to try next (wow-everlake-world-data). Its own variable: .env's WORLD_DATA_COMMIT is the live
         # realm's and must not hold the PTR back. promote.sh then takes this image, world data included, live.
-        WORLD_DATA_COMMIT: ${PTR_WORLD_DATA_COMMIT:-dfe84b06ba4f15656faf80e7e0a155035ab52433}
+        WORLD_DATA_COMMIT: ${PTR_WORLD_DATA_COMMIT:-be94565d6e47f17c4148dfa7a9b3f482d4182a78}
         PLAYERBOTS: "1"
         # this repository's own files in the image (tools/ci/image-rev.sh --write keeps it and the tags in step)
         IMAGE_REV: "5fdf8017"
         BUILD_JOBS: ${PTR_BUILD_JOBS:-32}
-    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-da60e06d207317a10f2cfbdbfdb7525ebfb29b04}-${PTR_WORLD_DATA_COMMIT:-dfe84b06ba4f15656faf80e7e0a155035ab52433}-5fdf8017
+    image: everlake-trinitycore:ptr-${PTR_TC_COMMIT:-90331f74faf70f055b221f7b0fa3749b1ca6ad0c}-${PTR_WORLD_DATA_COMMIT:-be94565d6e47f17c4148dfa7a9b3f482d4182a78}-5fdf8017
     command: ["worldserver"]
     networks: [everlake]
     restart: unless-stopped
@@ -82,7 +82,7 @@ services:
       DB_USER: ${DB_USER:-trinity}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       MMAP_PATHFINDING: "1"   # the bots walk on the navigation meshes
-      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-da60e06d207317a10f2cfbdbfdb7525ebfb29b04}-${PTR_WORLD_DATA_COMMIT:-dfe84b06ba4f15656faf80e7e0a155035ab52433}-5fdf8017
+      IMAGE_TAG: ptr-${PTR_TC_COMMIT:-90331f74faf70f055b221f7b0fa3749b1ca6ad0c}-${PTR_WORLD_DATA_COMMIT:-be94565d6e47f17c4148dfa7a9b3f482d4182a78}-5fdf8017
       CLIENT_BUILD: ${CLIENT_BUILD:-}
       PLAYERBOT_DB: playerbot_ptr   # the entrypoint loads the bots' schema into it on the first start
       AHBOT_TSM_REGION: ${AHBOT_TSM_REGION:-us}   # auction house bot prices from TSM's WoW Forever data (docker-compose.yml)
